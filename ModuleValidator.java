@@ -34,6 +34,10 @@ final class ModuleValidator {
                         genericFunctions.get(name),
                         "Module '" + module.id + "': generic function '" + name
                                 + "' cannot be FFI-bridged"
+                                + ". A generic function has no single concrete"
+                                + " C++ signature for a bridge to define. Make"
+                                + " the function non-generic or remove it from"
+                                + " the module's function list."
                 ));
                 continue;
             }
@@ -88,6 +92,10 @@ final class ModuleValidator {
             diagnostics.add(Diagnostic.error(
                     "Module '" + module.id + "': duplicate " + kind
                             + " descriptor for '" + name + "'"
+                            + ". Duplicate entries make the FFI surface"
+                            + " ambiguous and can define the same symbol twice."
+                            + " Remove one of the duplicate entries from the"
+                            + " module manifest."
             ));
         }
     }
@@ -103,6 +111,9 @@ final class ModuleValidator {
             diagnostics.add(Diagnostic.error(
                     "Module '" + module.id + "': " + kind + " '" + name
                             + "' is not declared in " + module.sourcePath
+                            + ". The manifest may only expose functions the"
+                            + " module actually declares. Add the function to"
+                            + " the source file or remove the manifest entry."
             ));
         }
     }

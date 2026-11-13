@@ -72,7 +72,10 @@ public final class ArrayLowerer {
                 && call.hasNamedArguments()) {
             ctx.error("Named arguments are not supported for array intrinsic '"
                     + mac.name
-                    + "'");
+                    + "'. Array intrinsics are compiler-recognized calls that "
+                    + "lower directly to fixed runtime argument positions. "
+                    + "Pass the arguments positionally in the order documented "
+                    + "for this intrinsic.");
         }
 
         if ("init".equals(mac.name)) {
@@ -139,7 +142,10 @@ public final class ArrayLowerer {
                     + "' expects "
                     + kind.arityDescription()
                     + " arguments, got "
-                    + call.args.size());
+                    + call.args.size()
+                    + ". This intrinsic has a fixed argument list that is "
+                    + "validated by position. Pass the number of arguments "
+                    + "shown above in the documented order.");
             return null;
         }
 
@@ -190,7 +196,9 @@ public final class ArrayLowerer {
         if (call.args.size() != 1) {
             ctx.error("Array intrinsic '"
                     + kind.runtimeName
-                    + "' expects exactly 1 argument");
+                    + "' expects exactly 1 argument. Allocation and resize "
+                    + "take one element count that determines the new dynamic "
+                    + "array length. Pass a single uint32 size expression.");
             return null;
         }
 
@@ -221,7 +229,10 @@ public final class ArrayLowerer {
             AstNode mac
     ) {
         if (!call.args.isEmpty()) {
-            ctx.error("Array intrinsic 'uninit' expects exactly 0 arguments");
+            ctx.error("Array intrinsic 'uninit' expects exactly 0 arguments. "
+                    + "The 'uninit' intrinsic only frees the receiver's element "
+                    + "storage and resets its length, so it takes no parameters. "
+                    + "Remove the arguments and call it as 'array.uninit()'.");
             return null;
         }
 
@@ -249,7 +260,11 @@ public final class ArrayLowerer {
             AstNode mac
     ) {
         if (call.args.size() != 1 && call.args.size() != 3) {
-            ctx.error("Array intrinsic 'memset' expects either 1 or 3 arguments");
+            ctx.error("Array intrinsic 'memset' expects either 1 or 3 arguments. "
+                    + "The one-argument form fills the whole array, while the "
+                    + "three-argument form fills a value/start/count range. "
+                    + "Pass either just the fill value or the fill value "
+                    + "followed by start and count.");
             return null;
         }
 
@@ -295,7 +310,11 @@ public final class ArrayLowerer {
             AstNode mac
     ) {
         if (call.args.size() != 1 && call.args.size() != 4) {
-            ctx.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments");
+            ctx.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments. "
+                    + "The one-argument form copies from a source pointer, "
+                    + "while the four-argument form copies a destination-start/"
+                    + "source-start/count range. Pass either just the source or "
+                    + "the source followed by dst_start, src_start, and count.");
             return null;
         }
 
@@ -365,7 +384,11 @@ public final class ArrayLowerer {
             AstNode mac
     ) {
         if (call.args.size() != 3) {
-            ctx.error("Array intrinsic 'memmove' expects exactly 3 arguments");
+            ctx.error("Array intrinsic 'memmove' expects exactly 3 arguments. "
+                    + "Overlapping moves need explicit destination start, "
+                    + "source start, and count instead of a source pointer. "
+                    + "Pass dst_start, src_start, and count as uint32 "
+                    + "expressions.");
             return null;
         }
 
@@ -406,7 +429,10 @@ public final class ArrayLowerer {
             AstNode mac
     ) {
         if (!call.args.isEmpty()) {
-            ctx.error("Array intrinsic 'length' expects exactly 0 arguments");
+            ctx.error("Array intrinsic 'length' expects exactly 0 arguments. "
+                    + "The 'length' intrinsic reads the array's stored element "
+                    + "count and takes no parameters. Remove the arguments and "
+                    + "call it as 'array.length()'.");
             return null;
         }
 

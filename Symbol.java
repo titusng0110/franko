@@ -29,6 +29,8 @@ final class Symbol {
     final int index;
 
     InlineMode inlineMode = InlineMode.DEFAULT;
+    String genericGroup;
+    String genericHash;
 
     BigInteger compileTimeConstantValue;
     List<BigInteger> literalBytes;
@@ -270,7 +272,13 @@ final class Symbol {
                     + Mangler.hashHex(type.signatureKey());
         }
 
-        return "FUNC_" + name + "_" + Mangler.hashHex(type.signatureKey());
+        String signatureHash = Mangler.hashHex(type.signatureKey());
+
+        if (genericHash != null) {
+            return "GEN_" + genericHash + "_FUNC_" + name + "_" + signatureHash;
+        }
+
+        return "FUNC_" + name + "_" + signatureHash;
     }
 
     String emittedLocalName() {
@@ -360,6 +368,9 @@ class StructSymbol {
     final String namespace;
 
     final boolean isTuple;
+
+    String genericHash;
+    String genericBaseName;
 
     final Map<String, List<Symbol>> methods = new LinkedHashMap<>();
 

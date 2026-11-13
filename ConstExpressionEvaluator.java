@@ -12,7 +12,10 @@ public final class ConstExpressionEvaluator {
         BigInteger parsed = parseIntegerLiteralPure(val);
 
         if (parsed == null) {
-            ctx.error("Invalid integer literal format: " + val);
+            ctx.error("Invalid integer literal format: " + val
+                    + ". Integer literals must be decimal digits or a 0x/0b "
+                    + "prefix followed by digits valid for that base. Correct "
+                    + "the prefix or digits in the literal.");
             return BigInteger.ZERO;
         }
 
@@ -33,14 +36,23 @@ public final class ConstExpressionEvaluator {
         }
 
         if (("/".equals(op) || "%".equals(op)) && right.signum() == 0) {
-            ctx.error("Division by zero in constant expression");
+            ctx.error("Division by zero in constant expression. Constant "
+                    + "folding cannot produce a value for division or remainder "
+                    + "by zero. Use a nonzero divisor in the constant "
+                    + "expression or compute the value at runtime.");
             return null;
         }
 
         try {
             return tryFoldBinary(op, left, right);
         } catch (ArithmeticException e) {
-            ctx.error("Arithmetic error during constant folding: " + e.getMessage());
+            ctx.error("Arithmetic error during constant folding: "
+                    + e.getMessage()
+                    + ". The constant evaluator could not represent an "
+                    + "intermediate value, usually because a shift count or "
+                    + "operand exceeded its supported integer range. Rewrite "
+                    + "the expression with smaller operands or compute it at "
+                    + "runtime.");
             return null;
         }
     }
@@ -163,7 +175,11 @@ public final class ConstExpressionEvaluator {
             BigInteger right = evaluatePure(expr.right);
 
             if (("/".equals(expr.text) || "%".equals(expr.text)) && right.signum() == 0) {
-                throw new UnevaluableConstant("Division by zero in constant expression");
+                throw new UnevaluableConstant("Division by zero in constant "
+                    + "expression. Constant folding cannot produce a value for "
+                    + "division or remainder by zero. Use a nonzero divisor in "
+                    + "the constant expression or compute the value at "
+                    + "runtime.");
             }
 
             try {
@@ -176,7 +192,13 @@ public final class ConstExpressionEvaluator {
                 return folded;
             } catch (ArithmeticException e) {
                 throw new UnevaluableConstant(
-                    "Arithmetic error during constant folding: " + e.getMessage()
+                    "Arithmetic error during constant folding: "
+                    + e.getMessage()
+                    + ". The constant evaluator could not represent an "
+                    + "intermediate value, usually because a shift count or "
+                    + "operand exceeded its supported integer range. Rewrite "
+                    + "the expression with smaller operands or compute it at "
+                    + "runtime."
                 );
             }
         }

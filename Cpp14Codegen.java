@@ -1383,6 +1383,13 @@ public class Cpp14Codegen {
     }
 
     private static String emittedStructTypeName(StructSymbol symbol) {
+        if (symbol.genericHash != null) {
+            return "GEN_"
+                    + symbol.genericHash
+                    + "_STRUCT_"
+                    + symbol.genericBaseName;
+        }
+
         return symbol.isTuple ? symbol.name : "STRUCT_" + symbol.name;
     }
 

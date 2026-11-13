@@ -1,1 +1,1 @@
-Possible use of uninitialized dynamic array 'p'
+Possible: Use of uninitialized dynamic array 'p' before init

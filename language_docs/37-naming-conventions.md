@@ -113,7 +113,7 @@ Operator methods are the other fixed-name exception: `OPERATOR_EQ`,
 `OPERATOR_MOV`, and the other reserved `OPERATOR_*` names are exact,
 uppercase, and not renamed to snake case. They are reserved for struct
 operator methods and rejected on free functions. See
-[Operator Methods](28-methods.md#2710-operator-methods).
+[Operator Methods](28-methods.md#2810-operator-methods).
 
 ## 37.4 Variables and Fields
 

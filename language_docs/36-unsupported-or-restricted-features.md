@@ -86,7 +86,7 @@ at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
 outermost tracked array, global dynamic-array lifecycle, allocation failure
 status, or all runtime bounds properties. See
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 
 ## 36.10 Pointer Lifetime Is Not Fully Tracked
 
@@ -102,7 +102,7 @@ original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
 Escapes through very deep or recursive call chains may be missed. See
-[Dangling-Pointer Checking](32-memory-safety-checking.md#299-dangling-pointer-checking).
+[Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
 ## 36.11 Output Is a Library Function
 
@@ -174,13 +174,13 @@ call returns. Forwarding the borrowed view to a callee that stores it is
 also rejected. Ordinary non-operator methods with `view<T>` parameters are
 checked the same way when their arguments are forwarded to a function that
 stores them. See
-[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)
+[Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)
 and [Operators](13-operators.md#1310-struct-operator-overloading).
 
 ## 36.18 Tuple Restrictions
 
 Tuple restrictions are documented in
-[Tuples](29-tuples.md#2810-restrictions).
+[Tuples](29-tuples.md#2910-restrictions).
 
 ## 36.19 Enum Restrictions
 
@@ -210,7 +210,7 @@ pointers in direct variables, parameters, and globals, or use the pool
 allocator in `franko/pool` for linked or node-like data. For an array of
 arrays, use a nested array such as `[[T]]`; the outer array owns the inner
 arrays and manages their lifetime. See
-[Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 ## 36.21 Generic Restrictions
 
@@ -223,9 +223,6 @@ are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- generic template overloading (one generic function template per name per
-  namespace, and no generic struct name collision with a concrete struct or
-  enum);
 - independent generic methods (methods with their own `#generic` parameter
   list);
 - runtime generic representation, type erasure, vtables, or generic function

@@ -119,6 +119,14 @@ aborts at runtime instead of failing at compile time.
 
 ## 12.5 Constant Casts
 
+The target of an integer cast is an inference context: a constant operand
+is first inferred as the target type, then validated against it.
+
+```franko
+uint8 a = cast<uint8>(200);   // valid: 200 is inferred as uint8
+uint8 b = cast<uint8>(300);   // invalid: 300 does not fit uint8
+```
+
 A conversion of a folded constant expression is validated at compile
 time: the value must fit the target type or compilation fails. There is
 no wraparound, at compile time or at run time.

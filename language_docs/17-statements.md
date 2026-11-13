@@ -157,34 +157,11 @@ A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 17.7 Output (`franko/stdio`)
+## 17.7 Expression Statements
 
-Output is a library function, not a statement. Import `franko/stdio` and call the overloaded `stdout(...)` functions (see [franko/stdio](../library_docs/stdio.md) for the full API):
-
-```franko
-import "franko/stdio"
-
-func main() -> int32 {
-    stdout(42)        // `42` followed by a newline
-    stdout("hi")      // text followed by a newline
-    stdout(1, end = " ")    // `1` followed by a space (no newline)
-    stdout(2)         // `2` followed by a newline
-    stdout()          // bare newline
-    return 0
-}
-```
-
-A single-argument `stdout(x)` writes `x` followed by `\n`; `stdout(x, end = suffix)` writes `x` followed by `suffix` verbatim (a null or empty `suffix` means no suffix and no newline). The `end` parameter is optional, so a supplied value must be named. `stdout()` writes a bare newline. Overloads exist for all eight integer types, for `view<[uint8]>` text, and for `view<std::String>` from `franko/string`; a null text view writes no text bytes, and a non-empty `end` is still written. `stderr` mirrors every `stdout` overload on stderr, with the same suffix behavior.
-
-`stdout` has no overloads for pointers or arrays. Struct printing is limited to `std::String`; print individual elements, fields, or bytes for other structs: `stdout(xs[0])`, `stdout(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `stdout(s[0])`. A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
-
-Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](19-functions.md).
-
-Member-call printing such as `x.stdout()` is not supported; see [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
-
-## 17.8 Expression Statements
-
-Function calls are commonly used as expression statements.
+Function calls are commonly used as expression statements. Output is a library
+function, not a statement: import `franko/stdio` and call `stdout(...)`; see
+[franko/stdio](../library_docs/stdio.md).
 
 Array intrinsic calls are special expression-statement forms:
 
@@ -195,7 +172,7 @@ arr.memcpy(getptr(other));
 arr.uninit();
 ```
 
-## 17.9 Compile-Time If Statements
+## 17.8 Compile-Time If Statements
 
 `#if` and `#else` are compile-time statement forms:
 

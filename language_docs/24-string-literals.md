@@ -94,19 +94,7 @@ func main() -> int32 {
 }
 ```
 
-## 24.6 Printing Strings
-
-`stdout` (from `franko/stdio`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `stdout(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
-
-```franko
-import "franko/stdio"
-
-stdout("hi")          // writes `hi` + newline
-stdout($("hi")[0])    // 104
-stdout($("hi")[1])    // 105
-```
-
-## 24.7 Empty Strings
+## 24.6 Empty Strings
 
 An empty string literal `""` is the `null` view: it is valid wherever a
 `view<[byte, ...]>` value is expected. It has no bytes and no element

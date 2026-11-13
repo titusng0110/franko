@@ -16,7 +16,7 @@ Literal lit = Literal { x = 0, def = 1 }
 ```
 
 Aggregate literals are expressions, but they are only valid in the specific
-value-consuming contexts listed in [Allowed Expression Contexts](#296-allowed-expression-contexts).
+value-consuming contexts listed in [Allowed Expression Contexts](#306-allowed-expression-contexts).
 They are local-only: no global aggregate initializers exist.
 
 ## 30.1 Struct Literal Expressions

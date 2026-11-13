@@ -56,7 +56,12 @@ public class FunctionChecker {
             diagnostics.error("'"
                     + node.symbol.name
                     + "' is reserved for struct operator methods; only structs"
-                    + " can overload operators");
+                    + " can overload operators."
+                    + " Operator names bind to a receiver and dispatch on"
+                    + " the struct type, so a free function cannot implement"
+                    + " them."
+                    + " Declare the operator as a method on a struct, or"
+                    + " rename the function.");
         }
 
         boolean sawReturn = false;
@@ -70,7 +75,12 @@ public class FunctionChecker {
         if (!types.isVoidType(node.symbol.returnType()) && !sawReturn) {
             diagnostics.error("Non-void function '"
                     + node.symbol.fullSignatureString()
-                    + "' must contain a return statement with an expression");
+                    + "' must contain a return statement with an expression."
+                    + " Franko requires every non-void path to produce a"
+                    + " value, and falling off the end would leave the"
+                    + " result undefined."
+                    + " Add a return with an expression at the end of the"
+                    + " function, or return from every branch.");
         }
     }
 
@@ -94,7 +104,11 @@ public class FunctionChecker {
                         + param.name
                         + "' in function '"
                         + node.symbol.qualifiedName()
-                        + "'");
+                        + "'."
+                        + " Parameters are looked up by name in the"
+                        + " function body, so a duplicate would make the"
+                        + " reference ambiguous."
+                        + " Rename one of the parameters.");
             }
 
             declarations.checkVarDecl(SastNode.varDecl(node.span, param));
@@ -106,7 +120,13 @@ public class FunctionChecker {
                         + node.symbol.qualifiedName()
                         + "' has invalid parameter type "
                         + types.describeSafe(param.type)
-                        + ": parameters must have assignable value types");
+                        + ": parameters must have assignable value types."
+                        + " Call arguments are passed by value, so the"
+                        + " parameter type must be copyable as a complete"
+                        + " value."
+                        + " Use ptr<T> or view<T> for pointer-only data,"
+                        + " or change the parameter to a value-assignable"
+                        + " type.");
             }
 
             if (param.parameterDefault != null) {
@@ -124,7 +144,12 @@ public class FunctionChecker {
             if (i < start) {
                 if (param.parameterDefault != null) {
                     diagnostics.error(
-                            "Parameter 'self' cannot have a default value");
+                            "Parameter 'self' cannot have a default value."
+                            + " self is supplied automatically by the"
+                            + " method call, so a default would never be"
+                            + " used and would confuse overload resolution."
+                            + " Remove the default value from the self"
+                            + " parameter.");
                 }
 
                 continue;
@@ -139,7 +164,12 @@ public class FunctionChecker {
                         + node.parameterVariables.get(firstOptional).name
                         + "' in function '"
                         + node.symbol.qualifiedName()
-                        + "' must follow all required parameters");
+                        + "' must follow all required parameters."
+                        + " Callers may omit trailing optional arguments by"
+                        + " position, so a required parameter after an"
+                        + " optional one would have no unambiguous slot."
+                        + " Move all optional parameters to the end of the"
+                        + " parameter list.");
                 firstOptional = -1;
             }
         }
@@ -150,7 +180,12 @@ public class FunctionChecker {
             for (Symbol param : node.parameterVariables) {
                 if (param != null && param.parameterDefault != null) {
                     diagnostics.error("The entry-point function 'main'"
-                            + " cannot declare optional parameters");
+                            + " cannot declare optional parameters."
+                            + " The runtime invokes main with a fixed"
+                            + " argument list, so optional parameters cannot"
+                            + " be supplied or defaulted from outside."
+                            + " Remove the defaults from main and supply or"
+                            + " derive the values inside its body.");
                     break;
                 }
             }
@@ -171,7 +206,17 @@ public class FunctionChecker {
                     + ownerName
                     + "> self', 'view<"
                     + ownerName
-                    + "> self')");
+                    + "> self')."
+                    + " A method call passes the receiver explicitly,"
+                    + " and self must carry an owner or view permission"
+                    + " for the struct."
+                    + " Declare the first parameter as ptr<"
+                    + ownerName
+                    + "> self, mview<"
+                    + ownerName
+                    + "> self, or view<"
+                    + ownerName
+                    + "> self.");
             return;
         }
 
@@ -187,7 +232,17 @@ public class FunctionChecker {
                     + ownerName
                     + "> self', 'view<"
                     + ownerName
-                    + "> self')");
+                    + "> self')."
+                    + " A method call passes the receiver explicitly,"
+                    + " and self must carry an owner or view permission"
+                    + " for the struct."
+                    + " Declare the first parameter as ptr<"
+                    + ownerName
+                    + "> self, mview<"
+                    + ownerName
+                    + "> self, or view<"
+                    + ownerName
+                    + "> self.");
         } else if (!TypeChecker.isSelfTypeForOwner(first.type, method.owner)) {
             diagnostics.error("Method '"
                     + display
@@ -199,12 +254,25 @@ public class FunctionChecker {
                     + ownerName
                     + "> or view<"
                     + ownerName
-                    + ">)");
+                    + ">)."
+                    + " The receiver must point at the owning struct"
+                    + " with a permission the method body can use."
+                    + " Change the self parameter to ptr<"
+                    + ownerName
+                    + ">, mview<"
+                    + ownerName
+                    + ">, or view<"
+                    + ownerName
+                    + ">.");
         }
 
         for (int i = 1; i < method.parameters.size(); i++) {
             if ("self".equals(method.parameters.get(i).name)) {
-                diagnostics.error("Only the first parameter of a method may be named 'self'");
+                diagnostics.error("Only the first parameter of a method may be named 'self'."
+                        + " self is the implicit receiver slot, so a later"
+                        + " parameter with that name would be confused with"
+                        + " the receiver in the method body."
+                        + " Rename the later parameter.");
                 break;
             }
         }
@@ -215,7 +283,12 @@ public class FunctionChecker {
             if (parameter.parameterDefault != null) {
                 diagnostics.error("Operator method '"
                         + method.qualifiedName()
-                        + "' cannot declare optional parameters");
+                        + "' cannot declare optional parameters."
+                        + " Operators are invoked with a fixed operand"
+                        + " shape, so optional parameters cannot"
+                        + " participate in operator dispatch."
+                        + " Remove the defaults from the operator method's"
+                        + " parameters.");
                 break;
             }
         }
@@ -253,7 +326,10 @@ public class FunctionChecker {
                 + ownerName
                 + "> self, view<"
                 + ownerName
-                + "> other) -> uint8'");
+                + "> other) -> uint8'."
+                + " Comparison operators compare two views of the same"
+                + " struct and must return a uint8 truth value."
+                + " Declare the method with exactly that signature.");
     }
 
     private void validateAssignmentOperatorMethod(Symbol method) {
@@ -264,7 +340,13 @@ public class FunctionChecker {
                     + method.owner.qualifiedName()
                     + "' is value-assignable and cannot declare OPERATOR_MOV;"
                     + " built-in whole-value assignment is always used for"
-                    + " value-assignable structs");
+                    + " value-assignable structs."
+                    + " A move operator on a copyable struct would be"
+                    + " unreachable because assignment already copies"
+                    + " every field."
+                    + " Remove OPERATOR_MOV, or make the struct"
+                    + " pointer-only by adding a non-value field such as a"
+                    + " dynamic array.");
         }
 
         boolean valid = method.parameters.size() == 2
@@ -290,7 +372,11 @@ public class FunctionChecker {
                 + method.name
                 + "(ptr<"
                 + ownerName
-                + "> self, view<T> other) -> void'");
+                + "> self, view<T> other) -> void'."
+                + " Assignment mutates the receiver through an owner"
+                + " pointer and reads the source through a view, and it"
+                + " produces no value."
+                + " Declare the method with exactly that signature.");
     }
 
     private boolean isViewOfOwner(SastType type, StructSymbol owner) {
@@ -363,7 +449,12 @@ public class FunctionChecker {
                     + fn.fullSignatureString()
                     + "' has invalid return type "
                     + types.describeSafe(returnType)
-                    + ": return type must be void or an assignable value type");
+                    + ": return type must be void or an assignable value type."
+                    + " Franko returns values by copy, so every part of"
+                    + " the return type must be value-assignable."
+                    + " Change the return type to void or a"
+                    + " value-assignable type, or return the value through"
+                    + " ptr<T>.");
         }
     }
 
@@ -430,7 +521,11 @@ public class FunctionChecker {
         expressions.checkExpr(node.condition);
 
         if (types.isVoidType(node.condition.type)) {
-            diagnostics.error("if condition cannot be void");
+            diagnostics.error("if condition cannot be void."
+                    + " A condition must yield a truth value that the"
+                    + " branch can test."
+                    + " Use a non-void integer expression in the if"
+                    + " condition.");
             return false;
         }
 
@@ -463,7 +558,11 @@ public class FunctionChecker {
         expressions.checkExpr(node.condition);
 
         if (types.isVoidType(node.condition.type)) {
-            diagnostics.error("while condition cannot be void");
+            diagnostics.error("while condition cannot be void."
+                    + " A condition must yield a truth value that the"
+                    + " loop can test."
+                    + " Use a non-void integer expression in the while"
+                    + " condition.");
             return false;
         }
 
@@ -523,7 +622,11 @@ public class FunctionChecker {
 
         diagnostics.error("Void function '"
                 + function.fullSignatureString()
-                + "' must not return a value");
+                + "' must not return a value."
+                + " A void function has no result slot, so returning"
+                + " an expression cannot produce a value."
+                + " Use 'return' without an expression, or remove the"
+                + " return.");
     }
 
     private void visitNonVoidFunctionReturn(
@@ -533,7 +636,11 @@ public class FunctionChecker {
         if (node.value == null) {
             diagnostics.error("Non-void function '"
                     + function.fullSignatureString()
-                    + "' must return an expression");
+                    + "' must return an expression."
+                    + " The declared return type requires a value on"
+                    + " every return path."
+                    + " Return an expression assignable to the declared"
+                    + " return type.");
             return;
         }
 
@@ -542,7 +649,11 @@ public class FunctionChecker {
         if (types.isVoidType(node.value.type)) {
             diagnostics.error("Non-void function '"
                     + function.fullSignatureString()
-                    + "' cannot return a void expression");
+                    + "' cannot return a void expression."
+                    + " A void expression has no value to convert to the"
+                    + " declared return type."
+                    + " Return an expression of the declared return type,"
+                    + " or make the function void.");
             return;
         }
 

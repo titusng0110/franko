@@ -83,7 +83,7 @@ X == X
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](27-structs.md) for the complete struct reference.
 
-Tuple equality is covered in [Tuples](29-tuples.md#283-type-identity).
+Tuple equality is covered in [Tuples](29-tuples.md#293-type-identity).
 
 ## 10.7 Enum Equality
 

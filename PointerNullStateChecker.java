@@ -878,12 +878,22 @@ public final class PointerNullStateChecker {
                             INTRA
                                     + "Cannot dereference null variable '"
                                     + deref.expr.symbol.qualifiedName()
-                                    + "'",
+                                    + "'"
+                                    + ". Dereferencing a null pointer is"
+                                    + " undefined behavior and crashes at run"
+                                    + " time. Check the pointer for null before"
+                                    + " dereferencing, or assign it a non-null"
+                                    + " value such as getptr(...).",
                             "null.deref." + deref.expr.symbol.qualifiedName()
                     );
                 } else {
                     diagnostics.error(
-                            INTRA + "Cannot dereference a null pointer",
+                            INTRA + "Cannot dereference a null pointer"
+                                    + ". Dereferencing a null pointer is"
+                                    + " undefined behavior and crashes at run"
+                                    + " time. Check the pointer for null before"
+                                    + " dereferencing, or use a value known to be"
+                                    + " non-null.",
                             "null.deref.expression"
                     );
                 }
@@ -1899,7 +1909,11 @@ public final class PointerNullStateChecker {
                                     + parameterName
                                     + "' of '"
                                     + functionName
-                                    + "' which is dereferenced",
+                                    + "' which is dereferenced"
+                                    + ". The callee dereferences this parameter,"
+                                    + " so a null argument would crash at run"
+                                    + " time. Pass a non-null pointer, or guard"
+                                    + " the call with a null check.",
                             code
                     );
                 } else {

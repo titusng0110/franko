@@ -173,14 +173,25 @@ public final class SymbolTable {
         Map<String, EnumSymbol> targetEnums = targetEnums();
 
         if (targetEnums.containsKey(symbol.name)) {
-            error("Duplicate declaration of struct '" + symbol.qualifiedName() + "'");
+            error("Duplicate declaration of struct '"
+                    + symbol.qualifiedName()
+                    + "'."
+                    + " Struct and enum names share the same type"
+                    + " namespace, so this name is already taken by an"
+                    + " enum."
+                    + " Rename the struct or the enum.");
             return false;
         }
 
         StructSymbol existing = target.get(symbol.name);
 
         if (existing != null) {
-            error("Duplicate declaration of struct '" + symbol.qualifiedName() + "'");
+            error("Duplicate declaration of struct '"
+                    + symbol.qualifiedName()
+                    + "'."
+                    + " Struct names must be unique in one scope so"
+                    + " type lookups are unambiguous."
+                    + " Rename or remove the duplicate struct.");
             return false;
         }
 
@@ -193,14 +204,25 @@ public final class SymbolTable {
         Map<String, StructSymbol> targetStructs = targetStructs();
 
         if (targetStructs.containsKey(symbol.name)) {
-            error("Duplicate declaration of enum '" + symbol.qualifiedName() + "'");
+            error("Duplicate declaration of enum '"
+                    + symbol.qualifiedName()
+                    + "'."
+                    + " Struct and enum names share the same type"
+                    + " namespace, so this name is already taken by a"
+                    + " struct."
+                    + " Rename the enum or the struct.");
             return false;
         }
 
         EnumSymbol existing = target.get(symbol.name);
 
         if (existing != null) {
-            error("Duplicate declaration of enum '" + symbol.qualifiedName() + "'");
+            error("Duplicate declaration of enum '"
+                    + symbol.qualifiedName()
+                    + "'."
+                    + " Enum names must be unique in one scope so type"
+                    + " lookups are unambiguous."
+                    + " Rename or remove the duplicate enum.");
             return false;
         }
 
@@ -300,7 +322,13 @@ public final class SymbolTable {
         }
 
         if (current.containsKey(sym.name)) {
-            error("Duplicate declaration of variable '" + sym.qualifiedName() + "' in the same scope");
+            error("Duplicate declaration of variable '"
+                    + sym.qualifiedName()
+                    + "' in the same scope."
+                    + " Local names must be unique in one scope so every"
+                    + " reference resolves to one variable."
+                    + " Rename the variable or move it into a nested"
+                    + " scope.");
             return false;
         }
 
@@ -313,7 +341,13 @@ public final class SymbolTable {
         Map<String, Symbol> target = targetGlobalVariables();
 
         if (target.containsKey(sym.name)) {
-            error("Duplicate declaration of variable '" + sym.qualifiedName() + "'");
+            error("Duplicate declaration of variable '"
+                    + sym.qualifiedName()
+                    + "'."
+                    + " Global names must be unique in one namespace so"
+                    + " unqualified references are unambiguous."
+                    + " Rename the global or declare it in a different"
+                    + " namespace.");
             return false;
         }
 
@@ -395,10 +429,18 @@ public final class SymbolTable {
         List<Symbol> overloads = overloadList(targetFunctions, fn.name);
 
         for (Symbol existing : overloads) {
-            if (OverloadResolution.sameParameterSignature(existing.parameters, fn.parameters)) {
+            if (Objects.equals(existing.genericGroup, fn.genericGroup)
+                    && OverloadResolution.sameParameterSignature(
+                            existing.parameters,
+                            fn.parameters)) {
                 error("Duplicate declaration of function '"
                         + fn.signatureString()
-                        + "' in the same scope");
+                        + "' in the same scope."
+                        + " Two functions with the same parameter"
+                        + " signature cannot be distinguished by overload"
+                        + " resolution."
+                        + " Change the parameter types or remove the"
+                        + " duplicate.");
                 return;
             }
         }
@@ -431,7 +473,11 @@ public final class SymbolTable {
                     + method.name
                     + "' of struct '"
                     + owner.qualifiedName()
-                    + "'");
+                    + "'."
+                    + " Fields and methods share member lookup syntax,"
+                    + " so a call or access with that name would be"
+                    + " ambiguous."
+                    + " Rename the method or the field.");
             return;
         }
 
@@ -449,7 +495,13 @@ public final class SymbolTable {
                         + (existing.parameters.size() > 1
                                 ? ": method overload identity excludes the "
                                     + "self parameter type"
-                                : ""));
+                                : "")
+                        + "."
+                        + " Methods are overloaded by their user"
+                        + " parameters, and self is always implicit, so"
+                        + " these declarations have the same identity."
+                        + " Change the user parameter types or remove the"
+                        + " duplicate method.");
                 return;
             }
         }
@@ -522,7 +574,12 @@ public final class SymbolTable {
                             List.of(arg.describeForSignature()))
                     + "': multiple overloads match equally well (no single "
                     + "overload has the lowest constant-fit and "
-                    + "permission-downgrade costs)");
+                    + "permission-downgrade costs)."
+                    + " The compiler ranks candidates by constant fit"
+                    + " and permission downgrade, and these operators"
+                    + " remain tied after ranking."
+                    + " Use an operand type that matches one overload"
+                    + " exactly.");
 
             return matches.get(0);
         }
@@ -578,7 +635,12 @@ public final class SymbolTable {
                     + OverloadResolution.formatCallSignature(name, argTypes)
                     + "': multiple overloads match equally well (no single "
                     + "overload has the lowest constant-fit and "
-                    + "permission-downgrade costs)");
+                    + "permission-downgrade costs)."
+                    + " The compiler ranks candidates by permission"
+                    + " downgrade, constant fit, and default fills, and"
+                    + " these overloads remain tied after ranking."
+                    + " Pass arguments with exact types, or make one"
+                    + " overload a better fit.");
 
             return matches.get(0);
         }
@@ -597,6 +659,14 @@ public final class SymbolTable {
             String name,
             List<CallArg> args
     ) {
+        return resolveFunctionWithLiterals(name, args, null);
+    }
+
+    public Symbol resolveFunctionWithLiterals(
+            String name,
+            List<CallArg> args,
+            String genericGroup
+    ) {
         List<Symbol> overloads;
 
         if (currentNamespace != null
@@ -606,7 +676,11 @@ public final class SymbolTable {
             overloads = functions.get(name);
         }
 
-        return resolveFromOverloads(name, overloads, args);
+        return resolveFromOverloads(
+                name,
+                filterByGenericGroup(overloads, genericGroup),
+                args
+        );
     }
 
     public Symbol resolveFunctionIn(
@@ -622,11 +696,43 @@ public final class SymbolTable {
             String name,
             List<CallArg> args
     ) {
+        return resolveFunctionInWithLiterals(namespace, name, args, null);
+    }
+
+    public Symbol resolveFunctionInWithLiterals(
+            NamespaceSymbol namespace,
+            String name,
+            List<CallArg> args,
+            String genericGroup
+    ) {
         List<Symbol> overloads = namespace == null
                 ? functions.get(name)
                 : namespace.functions.get(name);
 
-        return resolveFromOverloads(name, overloads, args);
+        return resolveFromOverloads(
+                name,
+                filterByGenericGroup(overloads, genericGroup),
+                args
+        );
+    }
+
+    private static List<Symbol> filterByGenericGroup(
+            List<Symbol> overloads,
+            String genericGroup
+    ) {
+        if (overloads == null || overloads.isEmpty()) {
+            return List.of();
+        }
+
+        List<Symbol> filtered = new ArrayList<>();
+
+        for (Symbol fn : overloads) {
+            if (Objects.equals(fn.genericGroup, genericGroup)) {
+                filtered.add(fn);
+            }
+        }
+
+        return filtered;
     }
 
     private Symbol resolveFromOverloads(
@@ -674,7 +780,12 @@ public final class SymbolTable {
                     + OverloadResolution.formatCallSignature(name, argTypes)
                     + "': multiple overloads match equally well (no single "
                     + "overload has the lowest constant-fit and "
-                    + "permission-downgrade costs)");
+                    + "permission-downgrade costs)."
+                    + " The compiler ranks candidates by permission"
+                    + " downgrade, constant fit, and default fills, and"
+                    + " these overloads remain tied after ranking."
+                    + " Pass arguments with exact types, or make one"
+                    + " overload a better fit.");
 
             return matches.get(0);
         }
@@ -705,23 +816,42 @@ public final class SymbolTable {
     }
 
     public List<Symbol> functionOverloadsNamed(String name) {
+        return functionOverloadsNamed(name, null);
+    }
+
+    public List<Symbol> functionOverloadsNamed(
+            String name,
+            String genericGroup
+    ) {
+        List<Symbol> overloads;
+
         if (currentNamespace != null
                 && currentNamespace.functions.containsKey(name)) {
-            return List.copyOf(currentNamespace.functions.get(name));
+            overloads = currentNamespace.functions.get(name);
+        } else {
+            overloads = functions.get(name);
         }
 
-        return List.copyOf(functions.getOrDefault(name, List.of()));
+        return List.copyOf(filterByGenericGroup(overloads, genericGroup));
     }
 
     public List<Symbol> functionOverloadsNamedIn(
             NamespaceSymbol namespace,
             String name
     ) {
+        return functionOverloadsNamedIn(namespace, name, null);
+    }
+
+    public List<Symbol> functionOverloadsNamedIn(
+            NamespaceSymbol namespace,
+            String name,
+            String genericGroup
+    ) {
         List<Symbol> overloads = namespace == null
                 ? functions.get(name)
                 : namespace.functions.get(name);
 
-        return overloads == null ? List.of() : List.copyOf(overloads);
+        return List.copyOf(filterByGenericGroup(overloads, genericGroup));
     }
 
     public Collection<Symbol> allFunctions() {

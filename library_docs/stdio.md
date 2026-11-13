@@ -111,9 +111,9 @@ func main() -> int32 {
 }
 ```
 
-Integer constants resolve by the overload preference rule: the parameter
-matching the constant's own type wins when the value fits, otherwise the
-narrowest fitting type (signed before unsigned at equal width). See
+Integer constants resolve by the overload preference rule: an untyped
+constant uses the narrowest fitting type (signed before unsigned at equal
+width), while an explicitly typed constant prefers an exact match first. See
 [Fluid Integer Constants](../language_docs/07-fluid-integer-constants.md)
 and [Functions](../language_docs/19-functions.md).
 

@@ -113,11 +113,17 @@ public class StatementChecker {
                 && storage.isConst) {
             diagnostics.error("Cannot assign to const variable '"
                     + storage.name
-                    + "'");
+                    + "'"
+                    + ". Const variables cannot be mutated after their"
+                    + " initial value is set. Remove const from the"
+                    + " declaration or assign to a mutable copy.");
         }
 
         if (!isStorageBackedLValue(node.target)) {
-            diagnostics.error("Left-hand side of assignment must be a pointable storage-backed lvalue");
+            diagnostics.error("Left-hand side of assignment must be a pointable storage-backed lvalue"
+                    + ". Assignment writes through a stable storage location,"
+                    + " and temporaries have none. Assign to a variable,"
+                    + " dereference, array element, or struct field instead.");
         } else {
             expressions.ensureRegionPermission(
                     node.target,
@@ -127,7 +133,10 @@ public class StatementChecker {
         }
 
         if (types.isVoidType(node.target.type)) {
-            diagnostics.error("Left-hand side of assignment cannot have void type");
+            diagnostics.error("Left-hand side of assignment cannot have void type"
+                    + ". Void expressions have no value representation to"
+                    + " store. Use a non-void left-hand side or remove the"
+                    + " assignment.");
             return;
         }
 
@@ -156,7 +165,10 @@ public class StatementChecker {
         if (("/".equals(baseOp) || "%".equals(baseOp))
                 && node.value.isConstant()
                 && BigInteger.ZERO.equals(node.value.constantValue)) {
-            diagnostics.error("Division by zero in compile-time constant expression");
+            diagnostics.error("Division by zero in compile-time constant expression"
+                    + ". A zero divisor leaves the constant expression with no"
+                    + " defined value. Ensure the divisor is nonzero or guard"
+                    + " the operation at run time.");
         }
 
         types.ensureSameIntegralTypeOrFit(

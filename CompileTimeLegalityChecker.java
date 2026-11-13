@@ -61,7 +61,11 @@ final class CompileTimeLegalityChecker {
                 diagnostics.error("Inline function '"
                         + symbol.qualifiedName()
                         + "' cannot participate in call-graph recursion: "
-                        + formatPath(cycle));
+                        + formatPath(cycle)
+                        + ". #inline functions are expanded at every call"
+                        + " site, so a recursive cycle would expand forever."
+                        + " Remove #inline from one function on the cycle or"
+                        + " break the recursion.");
             } finally {
                 diagnostics.pop();
             }

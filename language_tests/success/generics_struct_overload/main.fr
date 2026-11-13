@@ -1,0 +1,36 @@
+import "franko/stdio"
+
+#generic struct Pick<typename T, int32 N> {
+    T value
+    int32 count = N
+}
+
+#generic struct Pick<typename T, typename U> {
+    int32 value
+    T first
+    U second
+}
+
+#generic struct Pick<int32 N> {
+    int32 value = N
+}
+
+func main() -> int32 {
+    Pick<int32, 4> a
+    a.value = 10
+    stdout(a.value)
+    stdout(a.count)
+
+    Pick<int32, uint8> b
+    b.value = 20
+    b.first = 30
+    b.second = 40
+    stdout(b.value)
+    stdout(b.first)
+    stdout(b.second)
+
+    Pick<9> c
+    stdout(c.value)
+
+    return 0
+}

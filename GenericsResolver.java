@@ -17,19 +17,22 @@ final class GenericsResolver {
         final String name;
         final List<AstNode> parameters;
         final AstNode declaration;
+        final String signatureKey;
 
         Template(
                 boolean struct,
                 String namespace,
                 String name,
                 List<AstNode> parameters,
-                AstNode declaration
+                AstNode declaration,
+                String signatureKey
         ) {
             this.struct = struct;
             this.namespace = namespace;
             this.name = name;
             this.parameters = parameters;
             this.declaration = declaration;
+            this.signatureKey = signatureKey;
         }
 
         String key() {
@@ -43,6 +46,8 @@ final class GenericsResolver {
         final Map<String, AstNode> typeBindings;
         final Map<String, AstNode> valueBindings;
         final List<String> canonicalArguments;
+        final String genericHash;
+        final String genericGroup;
         final int depth;
 
         boolean complete;
@@ -53,6 +58,8 @@ final class GenericsResolver {
                 Map<String, AstNode> typeBindings,
                 Map<String, AstNode> valueBindings,
                 List<String> canonicalArguments,
+                String genericHash,
+                String genericGroup,
                 int depth
         ) {
             this.template = template;
@@ -60,6 +67,8 @@ final class GenericsResolver {
             this.typeBindings = typeBindings;
             this.valueBindings = valueBindings;
             this.canonicalArguments = canonicalArguments;
+            this.genericHash = genericHash;
+            this.genericGroup = genericGroup;
             this.depth = depth;
         }
     }
@@ -81,7 +90,8 @@ final class GenericsResolver {
 
     private final DiagnosticBag diagnostics;
     private final TargetInfo target;
-    private final Map<String, Template> templates = new LinkedHashMap<>();
+    private final Map<String, List<Template>> structTemplates = new LinkedHashMap<>();
+    private final Map<String, List<Template>> functionTemplates = new LinkedHashMap<>();
     private final Set<String> concreteTypeKeys = new HashSet<>();
     private final Set<String> concreteFunctionKeys = new HashSet<>();
     private final Map<String, Instance> instances = new LinkedHashMap<>();
@@ -209,7 +219,12 @@ final class GenericsResolver {
                     error(item.span,
                             "Generic struct '"
                                     + key
-                                    + "' requires at least one generic parameter");
+                                    + "' requires at least one generic parameter."
+                                    + " A #generic declaration must name at least"
+                                    + " one type or value parameter so each use"
+                                    + " has something to substitute."
+                                    + " Declare a parameter list such as"
+                                    + " <typename T>, or remove #generic.");
                 }
 
                 if (item.isGeneric) {
@@ -217,32 +232,42 @@ final class GenericsResolver {
                         error(item.span,
                                 "Generic struct '"
                                         + key
-                                        + "' conflicts with an existing concrete struct or enum name");
+                                        + "' conflicts with an existing concrete struct or enum name."
+                                        + " Generic and concrete type names share"
+                                        + " one namespace, so the compiler cannot"
+                                        + " tell a template use from the concrete"
+                                        + " type."
+                                        + " Rename the generic struct or the"
+                                        + " concrete struct/enum.");
                     }
 
-                    if (templates.containsKey(key)) {
-                        error(item.span,
-                                "Duplicate generic template '"
-                                        + key
-                                        + "': generic template overloading is not supported in this version");
-                    } else {
-                        checkGenericParameters(item.genericParams, item.span);
-                        templates.put(key, new Template(
-                                true,
-                                namespace,
-                                item.name,
-                                item.genericParams,
-                                item
-                        ));
-                    }
+                    checkGenericParameters(item.genericParams, item.span);
+                    String signature = structTemplateSignature(
+                            item.genericParams);
+                    addTemplate(
+                            structTemplates,
+                            key,
+                            new Template(
+                                    true,
+                                    namespace,
+                                    item.name,
+                                    item.genericParams,
+                                    item,
+                                    signature
+                            ),
+                            item.span
+                    );
                 } else {
-                    Template existing = templates.get(key);
-
-                    if (existing != null && existing.struct) {
+                    if (structTemplates.containsKey(key)) {
                         error(item.span,
                                 "Struct '"
                                         + key
-                                        + "' conflicts with a generic struct template of the same name");
+                                        + "' conflicts with a generic struct template of the same name."
+                                        + " Concrete and generic struct names share"
+                                        + " one namespace, so this declaration"
+                                        + " would collide with the template."
+                                        + " Rename the concrete struct or the"
+                                        + " generic template.");
                     }
 
                     concreteTypeKeys.add(key);
@@ -255,7 +280,15 @@ final class GenericsResolver {
                                         + item.name
                                         + "."
                                         + method.name
-                                        + "' may only use the struct's generic parameters");
+                                        + "' may only use the struct's generic parameters."
+                                        + " Each instance is generated from the"
+                                        + " struct's own arguments, so a method"
+                                        + " cannot introduce parameters that are"
+                                        + " not bound by the struct."
+                                        + " Remove the method's #generic modifier"
+                                        + " and use the struct's parameters, or move"
+                                        + " the generic logic into a generic free"
+                                        + " function.");
                     }
                 }
 
@@ -272,13 +305,17 @@ final class GenericsResolver {
 
             if (item.kind == AstKind.ENUM_DECL) {
                 String key = qualifiedKey(namespace, item.name);
-                Template existing = templates.get(key);
 
-                if (existing != null && existing.struct) {
+                if (structTemplates.containsKey(key)) {
                     error(item.span,
                             "Enum '"
                                     + key
-                                    + "' conflicts with a generic struct template of the same name");
+                                    + "' conflicts with a generic struct template of the same name."
+                                    + " Enums and generic structs share the same"
+                                    + " type namespace, so the enum would collide"
+                                    + " with the template."
+                                    + " Rename the enum or the generic struct"
+                                    + " template.");
                 }
 
                 concreteTypeKeys.add(key);
@@ -292,35 +329,280 @@ final class GenericsResolver {
                     error(item.span,
                             "Generic function '"
                                     + key
-                                    + "' requires at least one generic parameter");
+                                    + "' requires at least one generic parameter."
+                                    + " A #generic function is expanded once per"
+                                    + " use, so it needs at least one type or value"
+                                    + " parameter to specialize."
+                                    + " Add a parameter list such as <typename T>,"
+                                    + " or remove #generic.");
                 }
 
                 if (item.isGeneric) {
                     if ("main".equals(item.name) && namespace == null) {
                         error(item.span,
-                                "The entry-point function 'main' cannot be generic");
+                                "The entry-point function 'main' cannot be generic."
+                                        + " The runtime starts main as a fixed"
+                                        + " concrete function, so there are no"
+                                        + " generic arguments to expand it with."
+                                        + " Remove #generic from main and call a"
+                                        + " generic helper from its body.");
                     }
 
-                    if (templates.containsKey(key)) {
-                        error(item.span,
-                                "Duplicate generic template '"
-                                        + key
-                                        + "': generic template overloading is not supported in this version");
-                    } else {
-                        checkGenericParameters(item.genericParams, item.span);
-                        templates.put(key, new Template(
-                                false,
-                                namespace,
-                                item.name,
-                                item.genericParams,
-                                item
-                        ));
-                    }
+                    checkGenericParameters(item.genericParams, item.span);
+                    String signature = functionTemplateSignature(
+                            item.genericParams,
+                            item.parameters
+                    );
+                    addTemplate(
+                            functionTemplates,
+                            key,
+                            new Template(
+                                    false,
+                                    namespace,
+                                    item.name,
+                                    item.genericParams,
+                                    item,
+                                    signature
+                            ),
+                            item.span
+                    );
                 } else {
                     concreteFunctionKeys.add(key);
                 }
             }
         }
+    }
+
+    private void addTemplate(
+            Map<String, List<Template>> table,
+            String key,
+            Template template,
+            SourceSpan span
+    ) {
+        List<Template> group = table.computeIfAbsent(
+                key,
+                ignored -> new ArrayList<>()
+        );
+
+        for (Template existing : group) {
+            if (existing.signatureKey.equals(template.signatureKey)) {
+                error(span,
+                        "Duplicate generic template '"
+                                + key
+                                + template.signatureKey
+                                + "'."
+                                + " The signature is built from the generic"
+                                + " parameter kinds and, for functions, the"
+                                + " ordinary parameter types, so this pair"
+                                + " would expand to the same template identity."
+                                + " Remove one template or change its parameter"
+                                + " kinds or types.");
+                return;
+            }
+        }
+
+        group.add(template);
+    }
+
+    private static String structTemplateSignature(List<AstNode> params) {
+        List<String> kinds = new ArrayList<>();
+
+        for (AstNode param : params) {
+            kinds.add(genericParameterTypeKey(param));
+        }
+
+        return "<" + String.join(",", kinds) + ">";
+    }
+
+    private static String functionTemplateSignature(
+            List<AstNode> genericParams,
+            List<AstNode> parameters
+    ) {
+        Map<String, String> typeMarkers = new LinkedHashMap<>();
+        Map<String, String> valueMarkers = new LinkedHashMap<>();
+
+        for (int i = 0; i < genericParams.size(); i++) {
+            AstNode param = genericParams.get(i);
+
+            if (param.typeParameter) {
+                typeMarkers.put(param.name, "T" + i);
+            } else {
+                valueMarkers.put(param.name, "V" + i);
+            }
+        }
+
+        List<String> kinds = new ArrayList<>();
+
+        for (AstNode param : genericParams) {
+            kinds.add(genericParameterTypeKey(param));
+        }
+
+        List<String> parameterTypes = new ArrayList<>();
+
+        for (AstNode parameter : parameters) {
+            parameterTypes.add(templateTypeKey(
+                    parameter.type,
+                    typeMarkers,
+                    valueMarkers
+            ));
+        }
+
+        return "<"
+                + String.join(",", kinds)
+                + ">("
+                + String.join(",", parameterTypes)
+                + ")";
+    }
+
+    private static String genericParameterTypeKey(AstNode param) {
+        if (param.typeParameter) {
+            return "typename";
+        }
+
+        return param.type.primitive.name().toLowerCase();
+    }
+
+    private static String templateTypeKey(
+            AstNode type,
+            Map<String, String> typeMarkers,
+            Map<String, String> valueMarkers
+    ) {
+        if (type == null) {
+            return "void";
+        }
+
+        switch (type.kind) {
+            case PRIMITIVE_TYPE:
+                return type.primitive.name().toLowerCase();
+
+            case VOID_TYPE:
+                return "void";
+
+            case DYNAMIC_ARRAY_TYPE:
+                return "["
+                        + templateTypeKey(
+                                type.type,
+                                typeMarkers,
+                                valueMarkers)
+                        + "]";
+
+            case STATIC_ARRAY_TYPE:
+                return "["
+                        + templateTypeKey(
+                                type.type,
+                                typeMarkers,
+                                valueMarkers)
+                        + ","
+                        + templateConstantKey(type.sizeExpr, valueMarkers)
+                        + "]";
+
+            case PTR_TYPE:
+                return type.permission.name()
+                        + "<"
+                        + templateTypeKey(
+                                type.type,
+                                typeMarkers,
+                                valueMarkers)
+                        + ">";
+
+            case TUPLE_TYPE: {
+                List<String> parts = new ArrayList<>();
+
+                for (AstNode element : type.elements) {
+                    parts.add(templateTypeKey(
+                            element.type,
+                            typeMarkers,
+                            valueMarkers
+                    ));
+                }
+
+                return "(" + String.join(",", parts) + ")";
+            }
+
+            case STRUCT_TYPE: {
+                if (type.names == null || type.names.isEmpty()) {
+                    String marker = typeMarkers.get(type.name);
+
+                    if (marker != null) {
+                        return marker;
+                    }
+                }
+
+                String name = displayName(type.names, type.name);
+
+                if (type.genericArgs == null || type.genericArgs.isEmpty()) {
+                    return name;
+                }
+
+                List<String> args = new ArrayList<>();
+
+                for (AstNode arg : type.genericArgs) {
+                    args.add(templateGenericArgKey(
+                            arg,
+                            typeMarkers,
+                            valueMarkers
+                    ));
+                }
+
+                return name + "<" + String.join(",", args) + ">";
+            }
+
+            default:
+                return type.kind.jsonName();
+        }
+    }
+
+    private static String templateGenericArgKey(
+            AstNode arg,
+            Map<String, String> typeMarkers,
+            Map<String, String> valueMarkers
+    ) {
+        if (arg.typeParameter) {
+            return "T:"
+                    + templateTypeKey(
+                            arg.type,
+                            typeMarkers,
+                            valueMarkers);
+        }
+
+        return "V:" + templateConstantKey(arg.value, valueMarkers);
+    }
+
+    private static String templateConstantKey(
+            AstNode expr,
+            Map<String, String> valueMarkers
+    ) {
+        if (expr == null) {
+            return "?";
+        }
+
+        BigInteger folded = ConstExpressionEvaluator.tryFold(expr);
+
+        if (folded != null) {
+            return folded.toString(10);
+        }
+
+        if (expr.kind == AstKind.VAR) {
+            String marker = valueMarkers.get(expr.name);
+            return marker == null ? expr.name : marker;
+        }
+
+        if (expr.kind == AstKind.UNARY) {
+            return "("
+                    + expr.text
+                    + templateConstantKey(expr.expr, valueMarkers)
+                    + ")";
+        }
+
+        if (expr.kind == AstKind.BINARY) {
+            return "("
+                    + templateConstantKey(expr.left, valueMarkers)
+                    + expr.text
+                    + templateConstantKey(expr.right, valueMarkers)
+                    + ")";
+        }
+
+        return expr.text == null ? expr.kind.jsonName() : expr.text;
     }
 
     private void checkGenericParameters(List<AstNode> params, SourceSpan span) {
@@ -331,7 +613,11 @@ final class GenericsResolver {
                 error(param.span,
                         "Duplicate generic parameter name '"
                                 + param.name
-                                + "'");
+                                + "'."
+                                + " Each name identifies one binding inside"
+                                + " the template, so a repeated name would"
+                                + " shadow the earlier parameter."
+                                + " Rename one of the parameters.");
             }
 
             if (!param.typeParameter) {
@@ -340,7 +626,14 @@ final class GenericsResolver {
                     error(param.span,
                             "Generic value parameter '"
                                     + param.name
-                                    + "' must have one of the eight primitive integer types");
+                                    + "' must have one of the eight primitive integer types."
+                                    + " Value parameters are folded into"
+                                    + " constants in generated code, and only"
+                                    + " primitive integer types can be used that"
+                                    + " way."
+                                    + " Declare it as int8, uint8, int16,"
+                                    + " uint16, int32, uint32, int64, or uint64,"
+                                    + " or use typename for a type parameter.");
                 }
             }
         }
@@ -398,7 +691,15 @@ final class GenericsResolver {
 
             clone.genericParams = List.of();
             clone.isGeneric = false;
-            clone.name = instance.generatedName;
+
+            if (instance.template.struct) {
+                clone.name = instance.generatedName;
+                clone.genericHash = instance.genericHash;
+                clone.genericBaseName = instance.template.name;
+            } else {
+                clone.genericGroup = instance.genericGroup;
+                clone.genericHash = instance.genericHash;
+            }
 
             AstNode desugared = desugarer.desugarSpecialization(clone);
 
@@ -594,7 +895,13 @@ final class GenericsResolver {
                     error(node.span,
                             "Type parameter '"
                                     + node.name
-                                    + "' cannot take generic arguments");
+                                    + "' cannot take generic arguments."
+                                    + " A type parameter stands for one concrete"
+                                    + " type argument, so it cannot itself be"
+                                    + " parameterized."
+                                    + " Pass the parameter without angle"
+                                    + " brackets, or use a concrete generic"
+                                    + " struct name.");
                 }
 
                 return substituteNode(bound, env);
@@ -615,20 +922,22 @@ final class GenericsResolver {
         }
 
         if (node.genericArgs != null && !node.genericArgs.isEmpty()) {
-            Template template = resolveTemplate(node.names, node.name, true, env);
+            List<Template> templates = resolveStructTemplates(
+                    node.names,
+                    node.name,
+                    env
+            );
 
-            if (template == null || !template.struct) {
-                if (template == null) {
-                    error(node.span,
-                            "Unknown generic struct '"
-                                    + displayName(node.names, node.name)
-                                    + "'");
-                } else {
-                    error(node.span,
-                            "'"
-                                    + displayName(node.names, node.name)
-                                    + "' is not a generic struct");
-                }
+            if (templates.isEmpty()) {
+                error(node.span,
+                        "Unknown generic struct '"
+                                + displayName(node.names, node.name)
+                                + "'."
+                                + " No #generic struct template with that"
+                                + " name is visible in this namespace or its"
+                                + " imports."
+                                + " Check the spelling and imports, or declare"
+                                + " the template before using it.");
 
                 return AstNode.structType(
                         node.span,
@@ -637,14 +946,21 @@ final class GenericsResolver {
                 );
             }
 
-            BoundArguments bound = bindArguments(
-                    template,
+            List<Candidate> candidates = collectCandidates(
+                    templates,
                     node.genericArgs,
                     env,
                     node.span
             );
+            candidates = preferNarrowestValueFit(candidates);
 
-            if (bound == null) {
+            if (candidates.isEmpty()) {
+                reportNoStructCandidate(
+                        templates,
+                        node,
+                        env
+                );
+
                 return AstNode.structType(
                         node.span,
                         node.names,
@@ -652,8 +968,24 @@ final class GenericsResolver {
                 );
             }
 
+            if (candidates.size() > 1) {
+                error(node.span,
+                        "Generic struct '"
+                                + displayName(node.names, node.name)
+                                + "' is ambiguous for the supplied generic arguments."
+                                + " More than one visible template matches"
+                                + " the supplied argument kinds after value"
+                                + " fitting, so the compiler cannot choose a"
+                                + " layout."
+                                + " Qualify the struct name or supply"
+                                + " arguments that match only one template.");
+            }
+
+            Candidate chosen = candidates.get(0);
+
             if (selfReference
-                    && bound.canonicalKeys.equals(env.selfCanonicalArguments)) {
+                    && chosen.bound.canonicalKeys.equals(
+                            env.selfCanonicalArguments)) {
                 return AstNode.structType(
                         node.span,
                         List.of(),
@@ -661,22 +993,35 @@ final class GenericsResolver {
                 );
             }
 
-            String generated = instantiate(template, bound, env, node.span);
+            String genericHash = Mangler.hashHex(
+                    genericArgsKey(node.genericArgs, env)
+            );
+            String generated = instantiate(
+                    chosen.template,
+                    chosen.bound,
+                    env,
+                    node.span,
+                    genericHash,
+                    null
+            );
 
             return AstNode.structType(
                     node.span,
-                    splitNamespace(template.namespace),
+                    splitNamespace(chosen.template.namespace),
                     generated
             );
         }
 
-        Template template = resolveTemplate(node.names, node.name, true, env);
-
-        if (template != null && template.struct) {
+        if (!resolveStructTemplates(node.names, node.name, env).isEmpty()) {
             error(node.span,
                     "Generic struct '"
                             + displayName(node.names, node.name)
-                            + "' requires explicit type arguments");
+                            + "' requires explicit type arguments."
+                            + " Franko never infers generic arguments, so a"
+                            + " bare template name does not identify a"
+                            + " concrete layout."
+                            + " Append arguments such as <int32> to the"
+                            + " struct name.");
         }
 
         AstNode copy = node.copyShallow();
@@ -690,20 +1035,18 @@ final class GenericsResolver {
         List<AstNode> args = substituteList(node.args, env);
 
         if (node.genericArgs != null && !node.genericArgs.isEmpty()) {
-            Template template = resolveCallTemplate(callee, env);
+            List<Template> templates = resolveFunctionTemplates(callee, env);
 
-            if (template == null || template.struct) {
-                if (template == null) {
-                    error(node.span,
-                            "Unknown generic function '"
-                                    + calleeDisplayName(callee)
-                                    + "'");
-                } else {
-                    error(node.span,
-                            "'"
-                                    + calleeDisplayName(callee)
-                                    + "' is not a generic function");
-                }
+            if (templates.isEmpty()) {
+                error(node.span,
+                        "Unknown generic function '"
+                                + calleeDisplayName(callee)
+                                + "'."
+                                + " No #generic function template with that"
+                                + " name is visible in this namespace or its"
+                                + " imports."
+                                + " Check the spelling and imports, or declare"
+                                + " the template before calling it.");
 
                 return AstNode.call(
                         node.span,
@@ -714,47 +1057,62 @@ final class GenericsResolver {
                 );
             }
 
-            BoundArguments bound = bindArguments(
-                    template,
+            List<Candidate> candidates = collectCandidates(
+                    templates,
                     node.genericArgs,
                     env,
                     node.span
             );
+            candidates = preferNarrowestValueFit(candidates);
 
-            if (bound == null) {
-                return AstNode.call(
+            String group = genericGroupKey(
+                    callee,
+                    node.genericArgs,
+                    env
+            );
+            String genericHash = Mangler.hashHex(
+                    genericArgsKey(node.genericArgs, env)
+            );
+
+            if (candidates.isEmpty()) {
+                reportNoFunctionCandidate(templates, node, env);
+            }
+
+            for (Candidate candidate : candidates) {
+                instantiate(
+                        candidate.template,
+                        candidate.bound,
+                        env,
                         node.span,
-                        callee,
-                        args,
-                        List.of(),
-                        node.argumentNames
+                        genericHash,
+                        group
                 );
             }
 
-            String generated = instantiate(template, bound, env, node.span);
-
-            return AstNode.call(
+            AstNode call = AstNode.call(
                     node.span,
-                    rewriteCalleeName(callee, template.namespace, generated),
+                    callee,
                     args,
                     List.of(),
                     node.argumentNames
             );
+            call.genericGroup = group;
+            return call;
         }
 
         if (callee != null
                 && (callee.kind == AstKind.VAR
-                        || callee.kind == AstKind.QUALIFIED_NAME)) {
-            Template template = resolveCallTemplate(callee, env);
-
-            if (template != null
-                    && !template.struct
-                    && !concreteFunctionExists(callee, env)) {
-                error(node.span,
-                        "Generic function '"
-                                + calleeDisplayName(callee)
-                                + "' requires explicit type arguments");
-            }
+                        || callee.kind == AstKind.QUALIFIED_NAME)
+                && !resolveFunctionTemplates(callee, env).isEmpty()
+                && !concreteFunctionExists(callee, env)) {
+            error(node.span,
+                    "Generic function '"
+                            + calleeDisplayName(callee)
+                            + "' requires explicit type arguments."
+                            + " Franko never infers generic arguments, so a"
+                            + " call to a template must spell them out."
+                            + " Append arguments such as <int32> to the"
+                            + " function name at the call site.");
         }
 
         return AstNode.call(
@@ -766,32 +1124,124 @@ final class GenericsResolver {
         );
     }
 
-    private AstNode rewriteCalleeName(
-            AstNode callee,
-            String templateNamespace,
-            String generatedName
+    private void reportNoStructCandidate(
+            List<Template> templates,
+            AstNode node,
+            Substitution env
     ) {
-        if (callee.kind == AstKind.VAR) {
-            return AstNode.var(callee.span, generatedName);
+        if (templates.size() == 1) {
+            bindArguments(
+                    templates.get(0),
+                    node.genericArgs,
+                    env,
+                    node.span
+            );
+            return;
         }
 
-        if (callee.kind == AstKind.QUALIFIED_NAME) {
-            List<String> segments = new ArrayList<>(callee.names);
+        error(node.span,
+                "No generic struct template '"
+                        + displayName(node.names, node.name)
+                        + "' matches generic arguments <"
+                        + genericArgsDisplay(node.genericArgs, env)
+                        + ">."
+                        + " The number or kinds of the supplied arguments"
+                        + " do not match any visible template signature."
+                        + " Check the argument count and kinds, or adjust"
+                        + " the template's parameter list.");
+    }
 
-            if (!segments.isEmpty()) {
-                segments.set(segments.size() - 1, generatedName);
-            }
-
-            return AstNode.qualifiedName(callee.span, segments);
+    private void reportNoFunctionCandidate(
+            List<Template> templates,
+            AstNode node,
+            Substitution env
+    ) {
+        if (templates.size() == 1) {
+            bindArguments(
+                    templates.get(0),
+                    node.genericArgs,
+                    env,
+                    node.span
+            );
+            return;
         }
 
-        return callee;
+        error(node.span,
+                "No generic function template '"
+                        + calleeDisplayName(node.callee)
+                        + "' matches generic arguments <"
+                        + genericArgsDisplay(node.genericArgs, env)
+                        + ">."
+                        + " The number or kinds of the supplied arguments"
+                        + " do not match any visible template signature."
+                        + " Check the argument count and kinds, or adjust"
+                        + " the template's parameter list.");
     }
 
     private static final class BoundArguments {
         final Map<String, AstNode> typeBindings = new LinkedHashMap<>();
         final Map<String, AstNode> valueBindings = new LinkedHashMap<>();
         final List<String> canonicalKeys = new ArrayList<>();
+        int valueFitCost;
+    }
+
+    private static final class Candidate {
+        final Template template;
+        final BoundArguments bound;
+
+        Candidate(Template template, BoundArguments bound) {
+            this.template = template;
+            this.bound = bound;
+        }
+    }
+
+    private List<Candidate> collectCandidates(
+            List<Template> templates,
+            List<AstNode> args,
+            Substitution env,
+            SourceSpan span
+    ) {
+        List<Candidate> candidates = new ArrayList<>();
+
+        for (Template template : templates) {
+            BoundArguments bound = bindArguments(
+                    template,
+                    args,
+                    env,
+                    span,
+                    false
+            );
+
+            if (bound != null) {
+                candidates.add(new Candidate(template, bound));
+            }
+        }
+
+        return candidates;
+    }
+
+    private List<Candidate> preferNarrowestValueFit(
+            List<Candidate> candidates
+    ) {
+        if (candidates.size() <= 1) {
+            return candidates;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (Candidate candidate : candidates) {
+            best = Math.min(best, candidate.bound.valueFitCost);
+        }
+
+        List<Candidate> preferred = new ArrayList<>();
+
+        for (Candidate candidate : candidates) {
+            if (candidate.bound.valueFitCost == best) {
+                preferred.add(candidate);
+            }
+        }
+
+        return preferred;
     }
 
     private BoundArguments bindArguments(
@@ -800,18 +1250,36 @@ final class GenericsResolver {
             Substitution env,
             SourceSpan span
     ) {
+        return bindArguments(template, args, env, span, true);
+    }
+
+    private BoundArguments bindArguments(
+            Template template,
+            List<AstNode> args,
+            Substitution env,
+            SourceSpan span,
+            boolean report
+    ) {
         if (args.size() != template.parameters.size()) {
-            error(span,
-                    "Generic "
-                            + (template.struct ? "struct" : "function")
-                            + " '"
-                            + template.key()
-                            + "' expects "
-                            + template.parameters.size()
-                            + " type/value argument"
-                            + (template.parameters.size() == 1 ? "" : "s")
-                            + ", got "
-                            + args.size());
+            if (report) {
+                error(span,
+                        "Generic "
+                                + (template.struct ? "struct" : "function")
+                                + " '"
+                                + template.key()
+                                + "' expects "
+                                + template.parameters.size()
+                                + " type/value argument"
+                                + (template.parameters.size() == 1 ? "" : "s")
+                                + ", got "
+                                + args.size()
+                                + "."
+                                + " Every generic parameter must be bound by"
+                                + " exactly one argument at a use site."
+                                + " Supply the expected number of arguments"
+                                + " in the angle brackets.");
+            }
+
             return null;
         }
 
@@ -823,16 +1291,43 @@ final class GenericsResolver {
 
             if (parameter.typeParameter) {
                 if (!argument.typeParameter) {
-                    error(argument.span,
-                            "Type argument expected for generic parameter '"
-                                    + parameter.name
-                                    + "', got a value argument");
+                    if (report) {
+                        error(argument.span,
+                                "Type argument expected for generic parameter '"
+                                        + parameter.name
+                                        + "', got a value argument."
+                                        + " A typename parameter binds a type,"
+                                        + " while an integer parameter binds a"
+                                        + " compile-time value, and the two kinds"
+                                        + " cannot be mixed."
+                                        + " Pass a type such as int32 or"
+                                        + " Box<uint8> in this position.");
+                    }
+
                     return null;
                 }
 
                 AstNode typeArgument = substituteNode(argument.type, env);
 
-                if (!validateTypeArgument(typeArgument, env, argument.span)) {
+                if (typeArgument == null) {
+                    if (report) {
+                        error(argument.span,
+                                "Missing generic type argument."
+                                        + " A typename parameter needs a"
+                                        + " concrete type before the template"
+                                        + " can be instantiated."
+                                        + " Add the missing type in the angle"
+                                        + " brackets.");
+                    }
+
+                    return null;
+                }
+
+                if (report
+                        && !validateTypeArgument(
+                                typeArgument,
+                                env,
+                                argument.span)) {
                     return null;
                 }
 
@@ -855,10 +1350,18 @@ final class GenericsResolver {
                             argument.type.name
                     );
                 } else {
-                    error(argument.span,
-                            "Value argument expected for generic parameter '"
-                                    + parameter.name
-                                    + "', got a type argument");
+                    if (report) {
+                        error(argument.span,
+                                "Value argument expected for generic parameter '"
+                                        + parameter.name
+                                        + "', got a type argument."
+                                        + " An integer value parameter must be"
+                                        + " bound by a compile-time constant, not"
+                                        + " a type."
+                                        + " Pass an integer constant expression,"
+                                        + " or change the parameter to typename.");
+                    }
+
                     return null;
                 }
             } else {
@@ -869,10 +1372,20 @@ final class GenericsResolver {
             BigInteger value = ConstExpressionEvaluator.tryFold(substituted);
 
             if (value == null) {
-                error(argument.span,
-                        "Generic value argument for parameter '"
-                                + parameter.name
-                                + "' is not a compile-time constant");
+                if (report) {
+                    error(argument.span,
+                            "Generic value argument for parameter '"
+                                    + parameter.name
+                                    + "' is not a compile-time constant."
+                                    + " Value parameters become literal"
+                                    + " constants in the generated instance, so"
+                                    + " they must be foldable before type"
+                                    + " checking."
+                                    + " Pass an integer literal or constant"
+                                    + " expression, or use a runtime parameter"
+                                    + " instead.");
+                }
+
                 return null;
             }
 
@@ -881,14 +1394,24 @@ final class GenericsResolver {
                     SemanticPrimitiveKind.valueOf(kind.name());
 
             if (!TypeChecker.fitsBigIntegerToPrimitive(value, semanticKind)) {
-                error(argument.span,
-                        "Generic value argument "
-                                + value
-                                + " does not fit in "
-                                + kind.name().toLowerCase()
-                                + " for parameter '"
-                                + parameter.name
-                                + "'");
+                if (report) {
+                    error(argument.span,
+                            "Generic value argument "
+                                    + value
+                                    + " does not fit in "
+                                    + kind.name().toLowerCase()
+                                    + " for parameter '"
+                                    + parameter.name
+                                    + "'."
+                                    + " Value arguments use the same"
+                                    + " constant-fit rules as ordinary integer"
+                                    + " literals, and an out-of-range value"
+                                    + " cannot be stored without truncation."
+                                    + " Use a value within the range of "
+                                    + kind.name().toLowerCase()
+                                    + " or widen the parameter's integer type.");
+                }
+
                 return null;
             }
 
@@ -900,6 +1423,10 @@ final class GenericsResolver {
 
             bound.valueBindings.put(parameter.name, typed);
             bound.canonicalKeys.add(kind.name() + ":" + value.toString(10));
+            bound.valueFitCost += TypeChecker.primitiveFitCost(
+                    value,
+                    semanticKind
+            );
         }
 
         return bound;
@@ -911,7 +1438,11 @@ final class GenericsResolver {
             SourceSpan span
     ) {
         if (type == null) {
-            error(span, "Missing generic type argument");
+            error(span,
+                    "Missing generic type argument."
+                            + " A typename parameter needs a concrete type"
+                            + " before the template can be instantiated."
+                            + " Add the missing type in the angle brackets.");
             return false;
         }
 
@@ -928,25 +1459,56 @@ final class GenericsResolver {
                         error(span,
                                 "Generic type argument '"
                                         + type.name
-                                        + "' is not a declared type or type parameter");
+                                        + "' is not a declared type or type parameter."
+                                        + " Every type argument must resolve to"
+                                        + " a concrete type or an enclosing type"
+                                        + " parameter before substitution."
+                                        + " Check the spelling and imports, or"
+                                        + " declare the type before using it.");
                         return false;
                     }
                 }
             }
 
             if (type.genericArgs != null && !type.genericArgs.isEmpty()) {
-                Template template = resolveTemplate(
+                List<Template> templates = resolveStructTemplates(
                         type.names,
                         type.name,
-                        true,
                         env
                 );
 
-                if (template == null) {
+                if (templates.isEmpty()) {
                     error(span,
                             "Unknown generic struct '"
                                     + displayName(type.names, type.name)
-                                    + "'");
+                                    + "'."
+                                    + " No #generic struct template with that"
+                                    + " name is visible in this namespace or its"
+                                    + " imports."
+                                    + " Check the spelling and imports, or"
+                                    + " declare the template before using it.");
+                    return false;
+                }
+
+                if (collectCandidates(
+                        templates,
+                        type.genericArgs,
+                        env,
+                        span
+                ).isEmpty()) {
+                    error(span,
+                            "No generic struct template '"
+                                    + displayName(type.names, type.name)
+                                    + "' matches generic arguments <"
+                                    + genericArgsDisplay(
+                                            type.genericArgs,
+                                            env)
+                                    + ">."
+                                    + " The number or kinds of the supplied"
+                                    + " arguments do not match any visible"
+                                    + " template signature."
+                                    + " Check the argument count and kinds, or"
+                                    + " adjust the template's parameter list.");
                     return false;
                 }
             }
@@ -986,22 +1548,19 @@ final class GenericsResolver {
             return true;
         }
 
-        Template template = templates.get(qualifiedKey(env.namespace, name));
-
-        if (template != null && template.struct) {
-            return true;
-        }
-
-        return templates.get(name) != null && templates.get(name).struct;
+        return !resolveStructTemplates(null, name, env).isEmpty();
     }
 
     private String instantiate(
             Template template,
             BoundArguments bound,
             Substitution env,
-            SourceSpan span
+            SourceSpan span,
+            String genericHash,
+            String genericGroup
     ) {
         String key = template.key()
+                + template.signatureKey
                 + "<"
                 + String.join(",", bound.canonicalKeys)
                 + ">";
@@ -1017,7 +1576,14 @@ final class GenericsResolver {
                 error(span,
                         "Generic expansion limit exceeded: more than "
                                 + MAX_INSTANCES
-                                + " generic instances in this compilation");
+                                + " generic instances in this compilation."
+                                + " Each distinct argument set creates a"
+                                + " separate concrete instance, so runaway"
+                                + " recursion can exhaust memory and compile"
+                                + " time."
+                                + " Reduce template recursion or argument"
+                                + " variation, or split the program into"
+                                + " smaller compilations.");
                 instanceLimitReported = true;
             }
 
@@ -1032,13 +1598,20 @@ final class GenericsResolver {
                             + MAX_DEPTH
                             + ") while instantiating '"
                             + key
-                            + "'");
+                            + "'."
+                            + " A template that keeps introducing new"
+                            + " arguments without a base case eventually"
+                            + " exceeds the "
+                            + MAX_DEPTH
+                            + "-level nesting limit."
+                            + " Add or fix a base case so recursion reaches"
+                            + " arguments that are already instantiated.");
             return template.name;
         }
 
-        String generatedName = template.name
-                + "__"
-                + Mangler.hashHex(key);
+        String generatedName = template.struct
+                ? "GEN_" + genericHash + "_" + template.name
+                : template.name;
 
         Instance instance = new Instance(
                 template,
@@ -1046,28 +1619,55 @@ final class GenericsResolver {
                 new LinkedHashMap<>(bound.typeBindings),
                 new LinkedHashMap<>(bound.valueBindings),
                 List.copyOf(bound.canonicalKeys),
+                genericHash,
+                genericGroup,
                 depth
         );
 
         instances.put(key, instance);
-        generatedInstanceNames.add(generatedName);
+
+        if (template.struct) {
+            generatedInstanceNames.add(generatedName);
+        }
+
         queue.add(instance);
 
         return generatedName;
     }
 
-    private Template resolveCallTemplate(AstNode callee, Substitution env) {
+    private List<Template> resolveStructTemplates(
+            List<String> namespaceSegments,
+            String name,
+            Substitution env
+    ) {
+        return resolveTemplates(
+                structTemplates,
+                namespaceSegments,
+                name,
+                env
+        );
+    }
+
+    private List<Template> resolveFunctionTemplates(
+            AstNode callee,
+            Substitution env
+    ) {
         if (callee == null) {
-            return null;
+            return List.of();
         }
 
         if (callee.kind == AstKind.VAR) {
-            return resolveTemplate(null, callee.name, false, env);
+            return resolveTemplates(
+                    functionTemplates,
+                    null,
+                    callee.name,
+                    env
+            );
         }
 
         if (callee.kind == AstKind.QUALIFIED_NAME) {
             if (callee.names.isEmpty()) {
-                return null;
+                return List.of();
             }
 
             List<String> namespaceSegments = new ArrayList<>(
@@ -1075,10 +1675,41 @@ final class GenericsResolver {
             );
             String name = callee.names.get(callee.names.size() - 1);
 
-            return resolveTemplate(namespaceSegments, name, false, env);
+            return resolveTemplates(
+                    functionTemplates,
+                    namespaceSegments,
+                    name,
+                    env
+            );
         }
 
-        return null;
+        return List.of();
+    }
+
+    private static List<Template> resolveTemplates(
+            Map<String, List<Template>> table,
+            List<String> namespaceSegments,
+            String name,
+            Substitution env
+    ) {
+        if (namespaceSegments != null && !namespaceSegments.isEmpty()) {
+            return table.getOrDefault(
+                    String.join("::", namespaceSegments) + "::" + name,
+                    List.of()
+            );
+        }
+
+        if (env.namespace != null) {
+            List<Template> current = table.get(
+                    env.namespace + "::" + name
+            );
+
+            if (current != null && !current.isEmpty()) {
+                return current;
+            }
+        }
+
+        return table.getOrDefault(name, List.of());
     }
 
     private boolean concreteFunctionExists(AstNode callee, Substitution env) {
@@ -1096,39 +1727,61 @@ final class GenericsResolver {
         return false;
     }
 
-    private Template resolveTemplate(
-            List<String> namespaceSegments,
-            String name,
-            boolean structOnly,
+    private String genericGroupKey(
+            AstNode callee,
+            List<AstNode> args,
             Substitution env
     ) {
-        if (namespaceSegments != null && !namespaceSegments.isEmpty()) {
-            Template template = templates.get(
-                    String.join("::", namespaceSegments) + "::" + name
-            );
+        return calleeDisplayName(callee)
+                + "<"
+                + genericArgsKey(args, env)
+                + ">";
+    }
 
-            if (template != null && (!structOnly || template.struct)) {
-                return template;
+    private String genericArgsDisplay(
+            List<AstNode> args,
+            Substitution env
+    ) {
+        return genericArgsKey(args, env);
+    }
+
+    private String genericArgsKey(
+            List<AstNode> args,
+            Substitution env
+    ) {
+        List<String> parts = new ArrayList<>();
+
+        for (AstNode arg : args) {
+            if (arg.typeParameter) {
+                if (arg.type != null
+                        && arg.type.kind == AstKind.STRUCT_TYPE
+                        && (arg.type.names == null
+                                || arg.type.names.isEmpty())
+                        && (arg.type.genericArgs == null
+                                || arg.type.genericArgs.isEmpty())) {
+                    AstNode value = env.valueBindings.get(arg.type.name);
+
+                    if (value != null) {
+                        BigInteger folded =
+                                ConstExpressionEvaluator.tryFold(value);
+                        parts.add(folded == null
+                                ? value.text
+                                : folded.toString(10));
+                        continue;
+                    }
+                }
+
+                AstNode type = substituteNode(arg.type, env);
+                parts.add(canonicalType(type, env));
+                continue;
             }
 
-            return null;
+            AstNode value = substituteNode(arg.value, env);
+            BigInteger folded = ConstExpressionEvaluator.tryFold(value);
+            parts.add(folded == null ? "?" : folded.toString(10));
         }
 
-        Template current = env.namespace == null
-                ? null
-                : templates.get(env.namespace + "::" + name);
-
-        if (current != null && (!structOnly || current.struct)) {
-            return current;
-        }
-
-        Template global = templates.get(name);
-
-        if (global != null && (!structOnly || global.struct)) {
-            return global;
-        }
-
-        return null;
+        return String.join(",", parts);
     }
 
     private static String canonicalType(AstNode type, Substitution env) {

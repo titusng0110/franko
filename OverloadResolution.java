@@ -292,14 +292,14 @@ final class OverloadResolution {
             return 0;
         }
 
-        if (TypeChecker.sameType(arg.lowered.type, parameterType)) {
+        if (!arg.lowered.untypedConstant
+                && TypeChecker.sameType(arg.lowered.type, parameterType)) {
             return 0;
         }
 
-        int bits = TypeChecker.bitWidth(parameterType.primitive);
-        int unsignedPenalty = TypeChecker.isSigned(parameterType.primitive) ? 0 : 1;
-
-        return 1 + 2 * bits + unsignedPenalty;
+        return TypeChecker.primitiveFitCost(
+                arg.lowered.constantValue,
+                parameterType.primitive);
     }
 
     static boolean sameParameterSignature(
@@ -543,14 +543,16 @@ final class OverloadResolution {
         }
 
 
-        if (TypeChecker.sameType(arg.lowered.type, parameterType.referencedType)) {
+        if (!arg.lowered.untypedConstant
+                && TypeChecker.sameType(
+                        arg.lowered.type,
+                        parameterType.referencedType)) {
             return 0;
         }
 
-        int bits = TypeChecker.bitWidth(parameterType.referencedType.primitive);
-        int unsignedPenalty = TypeChecker.isSigned(parameterType.referencedType.primitive) ? 0 : 1;
-
-        return 1 + 2 * bits + unsignedPenalty;
+        return TypeChecker.primitiveFitCost(
+                arg.lowered.constantValue,
+                parameterType.referencedType.primitive);
     }
 
     static int operatorArgumentDowngradeCost(

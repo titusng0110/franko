@@ -31,10 +31,13 @@ public final class ArrayLiteralLowerer {
         SastType shape = literalShape(expectedType);
 
         if (shape == null) {
-            ctx.error("Cannot infer the element type of an array literal here: "
-                    + "array literals are view<[T, N]> values and need an "
-                    + "assignment, return, or call-argument context with a "
-                    + "view<[integer or enum type]> shape");
+            ctx.error("Cannot infer the element type of an array literal here. "
+                    + "Array literals are view<[T, N]> values with no element "
+                    + "type of their own, so they need an assignment, return, "
+                    + "or call-argument context with a view<[integer or enum "
+                    + "type]> shape. Assign the literal to a view<[T, N]> "
+                    + "variable, return it from a function with that return "
+                    + "type, or pass it to a parameter with that shape.");
             return hoistFallback(lit);
         }
 
@@ -102,7 +105,10 @@ public final class ArrayLiteralLowerer {
     ) {
         if (lit.elements.isEmpty()) {
             ctx.error("Empty array literals are not supported: an array "
-                    + "literal is a view<[T, N]> value with N >= 1");
+                    + "literal is a view<[T, N]> value with N >= 1. An empty "
+                    + "literal is the null view and carries no element type "
+                    + "or inner dimension. Provide at least one element here, "
+                    + "or use '[]' only where a null view is expected.");
             return null;
         }
 
@@ -120,7 +126,11 @@ public final class ArrayLiteralLowerer {
         }
 
         ctx.error("Array literals only support integer or enum element types, got "
-                + (elementShape == null ? "<null>" : elementShape.describe()));
+                + (elementShape == null ? "<null>" : elementShape.describe())
+                + ". Array literals are hoisted to shared constant arrays, "
+                + "which can hold only primitive integer values or enum "
+                + "variants. Change the expected element type or use integer "
+                + "and enum variant elements.");
 
         return null;
     }
@@ -135,7 +145,11 @@ public final class ArrayLiteralLowerer {
         for (AstNode element : lit.elements) {
             if (element.kind == AstKind.ARRAY_LITERAL) {
                 ctx.error("Array literal elements must be all nested array "
-                        + "literals or all integer expressions here");
+                        + "literals or all integer expressions here. Mixing "
+                        + "rows and scalars would create a ragged array whose "
+                        + "shape is not static at every level. Make every "
+                        + "element at this level either an integer expression "
+                        + "or a nested array literal.");
                 return null;
             }
 
@@ -143,15 +157,23 @@ public final class ArrayLiteralLowerer {
 
             if (!(lowered.type.kind == SastTypeKind.PRIMITIVE)) {
                 ctx.error("Array literal elements must be integer expressions, got "
-                        + lowered.type.describe());
+                        + lowered.type.describe()
+                        + ". A scalar array literal is stored as an integer "
+                        + "constant array, so each element must have an integer "
+                        + "primitive type. Replace the element with an integer "
+                        + "expression or change the expected element type.");
                 return null;
             }
 
             if (!lowered.isConstant()) {
                 if (!reportedNonConstant) {
                     ctx.error("Array literal elements must be compile-time "
-                            + "constant expressions: a literal is hoisted to a "
-                            + "constant global array, like a string literal");
+                            + "constant expressions. A literal is hoisted to a "
+                            + "constant global array, like a string literal, so "
+                            + "its elements cannot depend on runtime values. "
+                            + "Replace the non-constant element with an integer "
+                            + "constant expression or compute the value into a "
+                            + "declared array with element assignments.");
                     reportedNonConstant = true;
                 }
 
@@ -165,7 +187,13 @@ public final class ArrayLiteralLowerer {
                 ctx.error("Array literal element "
                         + lowered.constantValue
                         + " does not fit in "
-                        + primitive.describe());
+                        + primitive.describe()
+                        + ". Every element is stored as a value of the "
+                        + "inferred element type, so it must be representable "
+                        + "in that type. Use a value within the range of "
+                        + primitive.describe()
+                        + " or change the expected element type to a wider "
+                        + "integer type.");
             }
 
             values.add(lowered.constantValue);
@@ -189,7 +217,11 @@ public final class ArrayLiteralLowerer {
         for (AstNode element : lit.elements) {
             if (element.kind == AstKind.ARRAY_LITERAL) {
                 ctx.error("Array literal elements must be all nested array "
-                        + "literals or all enum variant expressions here");
+                        + "literals or all enum variant expressions here. "
+                        + "Mixing rows and variants would create a ragged "
+                        + "array whose shape is not static at every level. "
+                        + "Make every element at this level either an enum "
+                        + "variant or a nested array literal.");
                 return null;
             }
 
@@ -199,7 +231,13 @@ public final class ArrayLiteralLowerer {
                 ctx.error("Array literal elements must be enum variants of type '"
                         + enumType.enumSymbol.qualifiedName()
                         + "', got "
-                        + lowered.type.describe());
+                        + lowered.type.describe()
+                        + ". An enum array literal is stored as constant "
+                        + "variant values, so each element must name a variant "
+                        + "of the inferred enum type. Replace the element with "
+                        + "a variant of '"
+                        + enumType.enumSymbol.qualifiedName()
+                        + "'.");
                 return null;
             }
 
@@ -210,7 +248,11 @@ public final class ArrayLiteralLowerer {
                         + lowered.enumSymbol.qualifiedName()
                         + "', expected '"
                         + enumType.enumSymbol.qualifiedName()
-                        + "'");
+                        + "'. All elements of an enum array literal must "
+                        + "belong to the same enum so the hoisted array has "
+                        + "one element type. Use a variant of '"
+                        + enumType.enumSymbol.qualifiedName()
+                        + "' or change the array's expected element type.");
                 return null;
             }
 
@@ -241,7 +283,11 @@ public final class ArrayLiteralLowerer {
                         + "element type is "
                         + (elementShape == null
                                 ? "<null>"
-                                : elementShape.describe()));
+                                : elementShape.describe())
+                        + ". A nested static array at this level needs each "
+                        + "element to supply a complete row literal. Wrap this "
+                        + "element's values in '[...]' or change the expected "
+                        + "element type to a scalar.");
                 return null;
             }
 
@@ -255,7 +301,11 @@ public final class ArrayLiteralLowerer {
                 rowType = loweredRow.arrayType;
             } else if (!rowType.equals(loweredRow.arrayType)) {
                 ctx.error("All rows of a nested array literal must have the "
-                        + "same length: array literals are static arrays");
+                        + "same length: array literals are static arrays. "
+                        + "Every inner dimension is fixed at compile time, so "
+                        + "a ragged row would have no single static array "
+                        + "type. Add or remove elements so every row at this "
+                        + "level has the same length.");
                 return null;
             }
 

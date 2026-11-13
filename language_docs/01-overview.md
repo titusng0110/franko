@@ -100,7 +100,7 @@ Franko currently does **not** implement:
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`);
-- tuple destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](29-tuples.md#2810-restrictions)).
+- tuple destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](29-tuples.md#2910-restrictions)).
 
 The repository also includes a VS Code extension with syntax highlighting,
 bracket matching, comment toggling, and snippets for `.fr` and `.franko`

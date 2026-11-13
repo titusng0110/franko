@@ -2,8 +2,8 @@
     return v
 }
 
-#generic func f<int32 N>() -> int32 {
-    return N
+#generic func f<typename U>(U v) -> U {
+    return v
 }
 
 func main() -> int32 {

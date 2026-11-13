@@ -203,9 +203,9 @@ conversion there. Thus the inner `view<[byte, 10]>` value decays to
 `view<[byte]>` for a `view<view<[byte]>>` parameter.
 
 Integer constants use the ordinary fluid-constant fitting rules against
-`view<primitive>` parameters: an exact natural-type match wins, otherwise
-the narrowest fitting type wins with signed before unsigned at equal
-width.
+`view<primitive>` parameters: an untyped constant uses the narrowest
+fitting type with signed before unsigned at equal width, while an
+explicitly typed constant prefers an exact match first.
 
 Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
 

@@ -1135,6 +1135,11 @@ public final class DynamicArrayMemoryChecker {
                                 + "' was invalidated by resize of dynamic array '"
                                 + arrayName(root)
                                 + "'"
+                                + ". Resizing may reallocate the buffer, so"
+                                + " element addresses obtained before the resize"
+                                + " are stale. Re-acquire the pointer after the"
+                                + " resize, or index the array directly instead"
+                                + " of caching an element address."
                 );
             } else if (epoch < state.epochMax[root]) {
                 reportAliasWarning(
@@ -1647,6 +1652,10 @@ public final class DynamicArrayMemoryChecker {
                         "Double free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' (uninit called twice)"
+                                + ". Freeing the same storage twice corrupts"
+                                + " the allocator's state. Remove the second"
+                                + " uninit call, or init the array again before"
+                                + " calling uninit."
                 );
             } else if (state.freed[arrayIndex]
                     == DynamicArrayAnalysisState.FREED_NEVER) {
@@ -1656,6 +1665,9 @@ public final class DynamicArrayMemoryChecker {
                         "Invalid free of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' (uninit before init)"
+                                + ". The array has no allocated storage to"
+                                + " release before init runs. Call init before"
+                                + " uninit, or remove the uninit call."
                 );
             } else {
                 reportWarningOnce(
@@ -1703,6 +1715,10 @@ public final class DynamicArrayMemoryChecker {
                         "Use of dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' after uninit"
+                                + ". The array's storage has been released, so"
+                                + " reading or writing it is undefined behavior."
+                                + " Call init again before using the array, or"
+                                + " remove the use after uninit."
                 );
             } else if (state.freed[arrayIndex]
                     == DynamicArrayAnalysisState.FREED_NEVER) {
@@ -1712,6 +1728,10 @@ public final class DynamicArrayMemoryChecker {
                         "Use of uninitialized dynamic array '"
                                 + arrayName(arrayIndex)
                                 + "' before init"
+                                + ". The array has no allocated elements until"
+                                + " init runs, so accessing it is invalid. Call"
+                                + " init or init_zero on the array before it is"
+                                + " used."
                 );
             } else {
                 reportWarningOnce(
@@ -2412,9 +2432,19 @@ public final class DynamicArrayMemoryChecker {
                         : "Passing uninitialized dynamic array '" + arrayName
                                 + "' to function '" + functionName
                                 + "' which requires initialized storage";
+                String errorMessage = message
+                        + (freed == DynamicArrayAnalysisState.FREED_YES
+                                ? ". The callee uses the array's elements, but"
+                                        + " its storage has already been"
+                                        + " released. Re-init the array before"
+                                        + " the call, or pass it only while its"
+                                        + " storage is live."
+                                : ". The callee uses the array's elements, but"
+                                        + " init has not allocated them yet. Call"
+                                        + " init on the array before the call.");
 
                 if (requirement == REQUIRE_MUST) {
-                    reportInterErrorOnce(site, code, message);
+                    reportInterErrorOnce(site, code, errorMessage);
                 } else {
                     reportInterWarningOnce(site, code, message);
                 }

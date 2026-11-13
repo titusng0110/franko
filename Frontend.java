@@ -44,6 +44,10 @@ public final class Frontend {
         } catch (IOException e) {
             diagnostics.add(Diagnostic.error(
                     "Failed to read '" + sourcePath + "': " + e.getMessage()
+                            + ". The compiler must read the whole source file"
+                            + " as UTF-8 before it can lex the program. Check"
+                            + " that the path exists and is readable, then"
+                            + " re-run the compiler."
             ));
             return new Result<>(null, diagnostics);
         }
@@ -66,6 +70,9 @@ public final class Frontend {
         if (syntaxErrors > 0) {
             diagnostics.add(Diagnostic.error(
                     "Parse failed: " + syntaxErrors + " syntax error(s)."
+                            + " The parser could not build a syntax tree from"
+                            + " the token stream. Fix the syntax errors reported"
+                            + " above and re-run the compiler."
             ));
         }
 
@@ -206,6 +213,9 @@ public final class Frontend {
                 diagnostics.add(Diagnostic.error(
                         span(line, charPositionInLine, text.length()),
                         "Lex error: \"" + text + "\" is not a recognizable token."
+                                + " The lexer cannot map this text to any"
+                                + " Franko token, so parsing cannot continue."
+                                + " Remove or replace it with a valid token."
                 ));
                 return;
             }
@@ -220,6 +230,9 @@ public final class Frontend {
             diagnostics.add(Diagnostic.error(
                     span(line, charPositionInLine, length),
                     msg
+                            + ". The parser could not match this token against"
+                            + " the Franko grammar. Correct the surrounding"
+                            + " syntax and re-run the compiler."
             ));
         }
 

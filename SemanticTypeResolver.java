@@ -55,7 +55,7 @@ final class SemanticTypeResolver {
 
     private SastType analyzeNormalTypeInner(AstNode node) {
         if (node == null) {
-            symbolTable.error("Missing type");
+            symbolTable.error("Missing type. Every declaration and type position must name a type so the compiler can determine storage size and allowed operations. Write an explicit type such as int32 at the missing position.");
             return FALLBACK_TYPE;
         }
 
@@ -73,7 +73,7 @@ final class SemanticTypeResolver {
                         + (s.names == null || s.names.isEmpty()
                                 ? s.name
                                 : String.join("::", s.names) + "::" + s.name)
-                        + "' was not resolved to a concrete instance");
+                        + "' was not resolved to a concrete instance. Generic structs must be instantiated with concrete arguments before semantic analysis so their field layout and method signatures are known. Specify the type arguments at the use site, such as Box<int32>.");
                 return FALLBACK_TYPE;
             }
 
@@ -90,13 +90,13 @@ final class SemanticTypeResolver {
             }
 
             if (s.names == null || s.names.isEmpty()) {
-                symbolTable.error("Unknown type '" + s.name + "'");
+                symbolTable.error("Unknown type '" + s.name + "'. A type name must refer to a declared struct, enum, or generic type argument visible at this point. Declare the type, bind the generic parameter, or qualify the name with the namespace that declares it.");
             } else {
                 symbolTable.error("Unknown type '"
                         + String.join("::", s.names)
                         + "::"
                         + s.name
-                        + "'");
+                        + "'. A type name must refer to a declared struct, enum, or generic type argument visible at this point. Declare the type, bind the generic parameter, or qualify the name with the namespace that declares it.");
             }
 
             return FALLBACK_TYPE;
@@ -106,7 +106,7 @@ final class SemanticTypeResolver {
             AstNode tuple = node;
             if (tuple.elements.size() < 2) {
                 symbolTable.error(
-                        "Tuple types must have at least two elements");
+                        "Tuple types must have at least two elements. A single-element grouping has no tuple layout or destructuring meaning in Franko. Add another element or use the element type directly.");
             }
 
             List<SastType> elementTypes = new ArrayList<>();
@@ -132,7 +132,8 @@ final class SemanticTypeResolver {
                         symbolTable.error("Duplicate tuple element name '"
                                 + effectiveName
                                 + "' in tuple type "
-                                + tupleDescription);
+                                + tupleDescription
+                                + ". Tuple elements share one field namespace, so duplicate names make named access ambiguous. Rename or remove the duplicate element name.");
                     } finally {
                         symbolTable.diagnostics().pop();
                     }
@@ -165,7 +166,7 @@ final class SemanticTypeResolver {
             AstNode s = node;
 
             if (s.sizeExpr.kind == AstKind.INFERRED_SIZE) {
-                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal initializer");
+                symbolTable.error("'?' array size is only allowed in a declaration with an array-literal initializer. The compiler infers the missing length from the literal's element count during declaration analysis. Use '?' only with an array literal, or write the explicit length here.");
                 return FALLBACK_TYPE;
             }
 
@@ -193,7 +194,7 @@ final class SemanticTypeResolver {
         }
 
         if (node.kind == AstKind.VOID_TYPE) {
-            symbolTable.error("void is not a valid ordinary type");
+            symbolTable.error("void is not a valid ordinary type. The void type marks the absence of a return value and has no size or storage representation. Use void only as a function return type and choose a concrete type here.");
             return FALLBACK_TYPE;
         }
 
@@ -205,7 +206,7 @@ final class SemanticTypeResolver {
 
     SastType analyzeReturnType(AstNode node) {
         if (node == null) {
-            symbolTable.error("Function declaration is missing a return type");
+            symbolTable.error("Function declaration is missing a return type. Franko function signatures must state their result type so calls can be type-checked and emitted. Add '-> void' for no result or '-> T' for a result.");
             return FALLBACK_TYPE;
         }
 
@@ -329,13 +330,13 @@ final class SemanticTypeResolver {
             backingKind = SemanticPrimitiveKind.valueOf(node.type.primitive.name());
         } else {
             String got = describeTypeNodeForEnumError(node.type);
-            symbolTable.error("Enum backing type must be one of the eight primitive integer types, got " + got);
+            symbolTable.error("Enum backing type must be one of the eight primitive integer types, got " + got + ". Enums are represented as integers at runtime, so the backing type fixes their storage size and value range. Use int8, uint8, int16, uint16, int32, uint32, int64, or uint64 as the backing type.");
         }
 
         String enumDisplay = namespace == null ? node.name : namespace + "::" + node.name;
 
         if (node.variants.isEmpty()) {
-            symbolTable.error("Enum '" + enumDisplay + "' must declare at least one variant");
+            symbolTable.error("Enum '" + enumDisplay + "' must declare at least one variant. An enum with no variants has no default value and no representable states. Declare at least one variant inside the enum body.");
             return new EnumSymbol(node.name, namespace, backingKind, List.of());
         }
 
@@ -346,7 +347,7 @@ final class SemanticTypeResolver {
             if (!seenNames.add(variant.name)) {
                 symbolTable.diagnostics().push(variant.span);
                 try {
-                    symbolTable.error("Duplicate variant '" + variant.name + "' in enum '" + enumDisplay + "'");
+                    symbolTable.error("Duplicate variant '" + variant.name + "' in enum '" + enumDisplay + "'. Variant names form the enum's member namespace, so duplicates make qualified references ambiguous. Rename or remove the duplicate variant.");
                 } finally {
                     symbolTable.diagnostics().pop();
                 }
@@ -365,7 +366,7 @@ final class SemanticTypeResolver {
         }
 
         if (explicitCount > 0 && explicitCount < uniqueVariants.size()) {
-            symbolTable.error("Enum '" + enumDisplay + "' must provide explicit values for every variant or for none; mixing explicit and implicit values is not allowed");
+            symbolTable.error("Enum '" + enumDisplay + "' must provide explicit values for every variant or for none; mixing explicit and implicit values is not allowed. Mixing the two forms makes auto-increment results depend on neighboring declarations and hides which values are intended. Add explicit '= constExpr' values to every variant or delete all explicit values and let them auto-increment from zero.");
         }
 
         boolean allExplicit = explicitCount == uniqueVariants.size();
@@ -382,7 +383,7 @@ final class SemanticTypeResolver {
                 if (!TypeChecker.fitsBigIntegerToPrimitive(value, backingKind)) {
                     symbolTable.diagnostics().push(variant.span);
                     try {
-                        symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase());
+                        symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase() + ". Each explicit variant value must be representable in the enum's declared backing type. Choose a value within that type's range or declare a wider backing type.");
                     } finally {
                         symbolTable.diagnostics().pop();
                     }
@@ -391,7 +392,7 @@ final class SemanticTypeResolver {
                 if (valueToVariant.containsKey(value)) {
                     symbolTable.diagnostics().push(variant.span);
                     try {
-                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'");
+                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'. Variant values must be unique so the enum's underlying integer representation identifies exactly one variant. Use a different value for one of these variants.");
                     } finally {
                         symbolTable.diagnostics().pop();
                     }
@@ -416,7 +417,7 @@ final class SemanticTypeResolver {
                     if (!TypeChecker.fitsBigIntegerToPrimitive(value, backingKind)) {
                         symbolTable.diagnostics().push(variant.span);
                         try {
-                            symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase());
+                            symbolTable.error("Enum variant '" + variant.name + "' value " + value + " does not fit in " + backingKind.name().toLowerCase() + ". Each explicit variant value must be representable in the enum's declared backing type. Choose a value within that type's range or declare a wider backing type.");
                         } finally {
                             symbolTable.diagnostics().pop();
                         }
@@ -431,7 +432,7 @@ final class SemanticTypeResolver {
                 if (valueToVariant.containsKey(value)) {
                     symbolTable.diagnostics().push(variant.span);
                     try {
-                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'");
+                        symbolTable.error("Duplicate value '" + value + "' in enum '" + enumDisplay + "'. Variant values must be unique so the enum's underlying integer representation identifies exactly one variant. Use a different value for one of these variants.");
                     } finally {
                         symbolTable.diagnostics().pop();
                     }

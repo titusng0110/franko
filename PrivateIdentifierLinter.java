@@ -427,7 +427,11 @@ public final class PrivateIdentifierLinter {
     }
 
     private void checkStructAccess(StructSymbol structSymbol) {
-        if (!structSymbol.name.startsWith("__")) {
+        String visibleName = structSymbol.genericBaseName != null
+                ? structSymbol.genericBaseName
+                : structSymbol.name;
+
+        if (!visibleName.startsWith("__")) {
             return;
         }
 
@@ -436,7 +440,9 @@ public final class PrivateIdentifierLinter {
         }
 
         diagnostics.warning("'"
-                + structSymbol.qualifiedName()
+                + (structSymbol.namespace == null
+                        ? visibleName
+                        : structSymbol.namespace + "::" + visibleName)
                 + "' is an internal struct of "
                 + namespaceDescription(structSymbol.namespace)
                 + ". Are you sure you want to reference it from "

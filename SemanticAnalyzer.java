@@ -296,7 +296,7 @@ public final class SemanticAnalyzer {
 
             symbolTable.error("Invalid top-level item '"
                     + item.kind.jsonName()
-                    + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope");
+                    + "': only struct declarations, global variable declarations, function declarations, and namespace declarations are allowed at global scope. Global scope holds declarations only, because executable statements have no enclosing function or runtime order. Move the item into a function body or replace it with a declaration.");
             } finally {
                 symbolTable.diagnostics().pop();
             }
@@ -344,9 +344,11 @@ public final class SemanticAnalyzer {
 
             for (AstNode item : space.items) {
                 if (item.kind == AstKind.STRUCT_DECL) {
-                    symbolTable.declareStruct(
-                            new StructSymbol(currentNamespaceName(), item.name)
-                    );
+                    StructSymbol struct =
+                            new StructSymbol(currentNamespaceName(), item.name);
+                    struct.genericHash = item.genericHash;
+                    struct.genericBaseName = item.genericBaseName;
+                    symbolTable.declareStruct(struct);
                 }
             }
         }
@@ -373,7 +375,7 @@ public final class SemanticAnalyzer {
                                 + fieldNode.name
                                 + "' in struct '"
                                 + structSymbol.qualifiedName()
-                                + "'");
+                                + "'. Struct fields must have unique names so member access is unambiguous. Rename or remove the duplicate field.");
                         continue;
                     }
 
@@ -630,7 +632,7 @@ public final class SemanticAnalyzer {
 
         if (globalMainCount == 0) {
             symbolTable.error(
-                    "No entry-point function 'main' declared: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'"
+                    "No entry-point function 'main' declared: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'. Every Franko program starts execution at a global main with one of these two supported signatures. Add a matching 'func main' at global scope with no optional parameters or overloads."
             );
         }
 
@@ -654,7 +656,7 @@ public final class SemanticAnalyzer {
                     + parentPath
                     + "'; declare it as '"
                     + parentPath + "::" + node.name
-                    + "' at the top level instead");
+                    + "' at the top level instead. Franko derives nested namespace paths from declaration placement, so a path header inside a namespace would produce a name that depends on both the header and its enclosing scope. Move the declaration to global scope and use the full path shown above.");
             return;
         } else {
             fullPath = parentPath + "::" + node.name;
@@ -747,7 +749,7 @@ public final class SemanticAnalyzer {
         if ("main".equals(fn.name) && currentNamespaceName() != null) {
             symbolTable.error("The entry-point function 'main' must be declared in the global namespace, not in namespace '"
                     + currentNamespaceName()
-                    + "'");
+                    + "'. The runtime entry point is resolved by its unqualified global name, so a namespaced main would never be called. Move main out of the namespace and declare it at global scope.");
         }
 
         List<Symbol> params = new ArrayList<>();
@@ -765,7 +767,7 @@ public final class SemanticAnalyzer {
 
         for (Symbol param : params) {
             if ("self".equals(param.name)) {
-                symbolTable.error("'self' is only valid as the first parameter of a struct method");
+                symbolTable.error("'self' is only valid as the first parameter of a struct method. The 'self' name is the receiver that binds a method call to its struct instance, and the receiver slot is always parameter zero. Remove the 'self' parameter here or move this declaration into a struct method.");
                 break;
             }
         }
@@ -779,6 +781,8 @@ public final class SemanticAnalyzer {
         );
 
         symbol.inlineMode = fn.inlineMode;
+        symbol.genericGroup = fn.genericGroup;
+        symbol.genericHash = fn.genericHash;
 
         if ("main".equals(fn.name) && currentNamespaceName() == null) {
             boolean returnsInt32 = symbol.returnType().kind == SastTypeKind.PRIMITIVE
@@ -800,14 +804,14 @@ public final class SemanticAnalyzer {
 
             if (hasOptional) {
                 symbolTable.error("The entry-point function 'main' cannot"
-                        + " declare optional parameters");
+                        + " declare optional parameters. The runtime invokes main with a fixed argument shape and cannot supply defaults. Remove the default value from main's parameters or move the logic into a helper function.");
             } else if (globalMainCount > 1) {
                 symbolTable.error(
-                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32', not both"
+                        "The entry-point function 'main' cannot be overloaded: declare either 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32', not both. A program needs one unambiguous entry point for the runtime to call. Keep exactly one global main declaration and rename or remove the other overload."
                 );
             } else if (!returnsInt32 || (!noArgs && !hasArgsShape)) {
                 symbolTable.error(
-                        "The entry-point function 'main' must be declared as 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'"
+                        "The entry-point function 'main' must be declared as 'func main() -> int32' or 'func main(view<[[byte]]> <name>) -> int32'. The runtime only knows how to pass arguments to these two main shapes and expects an int32 exit code. Change main's parameters and return type to match one of these signatures."
                 );
             } else {
                 entryKind = noArgs ? EntryKind.NO_ARGS : EntryKind.ARGS;
@@ -879,7 +883,7 @@ public final class SemanticAnalyzer {
                     + owner.qualifiedName()
                     + "> self', 'view<"
                     + owner.qualifiedName()
-                    + "> self')");
+                    + "> self'). Every Franko method is bound to an explicit receiver so calls know which struct instance to operate on. Add the receiver as the first parameter, choosing ptr, mview, or view as appropriate.");
         } else {
             Symbol first = params.get(0);
 
@@ -893,7 +897,7 @@ public final class SemanticAnalyzer {
                         + owner.qualifiedName()
                         + "> self', 'view<"
                         + owner.qualifiedName()
-                        + "> self')");
+                        + "> self'). Every Franko method is bound to an explicit receiver so calls know which struct instance to operate on. Add the receiver as the first parameter, choosing ptr, mview, or view as appropriate.");
             } else if (!TypeChecker.isSelfTypeForOwner(first.type, owner)) {
                 symbolTable.error("Method '"
                         + display
@@ -905,12 +909,18 @@ public final class SemanticAnalyzer {
                         + owner.qualifiedName()
                         + "> or view<"
                         + owner.qualifiedName()
-                        + ">)");
+                        + ">). A method receiver must point to the struct that owns the method so field access and permission checks use the right type. Change the self parameter to ptr<"
+                        + owner.qualifiedName()
+                        + ">, mview<"
+                        + owner.qualifiedName()
+                        + ">, or view<"
+                        + owner.qualifiedName()
+                        + "> for the owning struct.");
             }
 
             for (int i = 1; i < params.size(); i++) {
                 if ("self".equals(params.get(i).name)) {
-                    symbolTable.error("Only the first parameter of a method may be named 'self'");
+                    symbolTable.error("Only the first parameter of a method may be named 'self'. The 'self' name is reserved for the receiver slot that binds the call to its struct instance. Rename this parameter or move it to the first position as the receiver.");
                     break;
                 }
             }
@@ -1023,7 +1033,7 @@ public final class SemanticAnalyzer {
                     || !typeChecker.isValueAssignableType(value.type))) {
             symbolTable.error("Default aggregate literal for parameter '"
                     + parameter.name
-                    + "' must be a value-assignable struct literal");
+                    + "' must be a value-assignable struct literal. Parameter defaults are stored as static compile-time values, so the literal's struct cannot contain owning pointers or other non-copyable state. Use a literal of a value-assignable struct or pass the value explicitly at the call site.");
             return fallbackStaticDefault(parameter, span);
         }
 
@@ -1044,7 +1054,9 @@ public final class SemanticAnalyzer {
                     + canonical.type.describe()
                     + "', expected '"
                     + parameter.type.describe()
-                    + "'");
+                    + "'. A static default must be assignable to the declared parameter or field type so it can be substituted at each use. Change the default expression to produce '"
+                    + parameter.type.describe()
+                    + "'.");
 
             return fallbackStaticDefault(parameter, span);
         }
@@ -1059,7 +1071,7 @@ public final class SemanticAnalyzer {
             SourceSpan span
     ) {
         if (value == null) {
-            symbolTable.error(where + " must be a compile-time value");
+            symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
             return null;
         }
 
@@ -1076,7 +1088,7 @@ public final class SemanticAnalyzer {
                     symbolTable.error(where
                             + " does not fit type '"
                             + expectedType.describe()
-                            + "'");
+                            + "'. The constant must be representable in the target's storage width and signedness. Use a value within that range or widen the declared type.");
                     return null;
                 }
 
@@ -1121,7 +1133,7 @@ public final class SemanticAnalyzer {
                 return SastNode.varExpr(value.span, value.type, value.symbol);
             }
 
-            symbolTable.error(where + " must be a compile-time value");
+            symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
             return null;
         }
 
@@ -1143,7 +1155,7 @@ public final class SemanticAnalyzer {
                 );
             }
 
-            symbolTable.error(where + " must be a compile-time value");
+            symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
             return null;
         }
 
@@ -1152,7 +1164,7 @@ public final class SemanticAnalyzer {
                     || value.type.kind != SastTypeKind.STRUCT
                     || !typeChecker.isValueAssignableType(value.type)) {
                 symbolTable.error(where
-                        + " must be a value-assignable struct literal");
+                        + " must be a value-assignable struct literal. Static defaults are stored by value, so the literal's struct cannot contain owning pointers or other non-copyable fields. Use a literal of a value-assignable struct or initialize the value at runtime.");
                 return null;
             }
 
@@ -1161,7 +1173,7 @@ public final class SemanticAnalyzer {
             for (SastNode fieldInit : value.fields) {
                 if (fieldInit.kind != SastKind.AGGREGATE_FIELD_INIT
                         || fieldInit.field == null) {
-                    symbolTable.error(where + " must be a compile-time value");
+                    symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
                     return null;
                 }
 
@@ -1191,7 +1203,7 @@ public final class SemanticAnalyzer {
             );
         }
 
-        symbolTable.error(where + " must be a compile-time value");
+        symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
         return null;
     }
 
@@ -1295,6 +1307,8 @@ public final class SemanticAnalyzer {
             );
 
             symbol.inlineMode = fn.inlineMode;
+            symbol.genericGroup = fn.genericGroup;
+            symbol.genericHash = fn.genericHash;
         }
 
         Symbol savedFunction = currentFunction;
@@ -1316,7 +1330,7 @@ public final class SemanticAnalyzer {
                 appendAnalyzedStmt(stmt, bodyStatements);
             }
         } else {
-            symbolTable.error("Function '" + fn.name + "' is missing a body");
+            symbolTable.error("Function '" + fn.name + "' is missing a body. Every Franko function needs a body so calls have an implementation to link and execute. Add a function body or remove the declaration.");
         }
 
         symbolTable.popScope();
@@ -1395,7 +1409,7 @@ public final class SemanticAnalyzer {
                     + owner.qualifiedName()
                     + "."
                     + methodNode.name
-                    + "' is missing a body");
+                    + "' is missing a body. Every Franko method needs a body so calls have an implementation to link and execute. Add a method body or remove the declaration.");
         }
 
         symbolTable.popScope();
@@ -1501,13 +1515,14 @@ public final class SemanticAnalyzer {
 
             if (!(condition.type.kind == SastTypeKind.PRIMITIVE)) {
                 symbolTable.error("#if condition must be an integer, got "
-                        + condition.type.describe());
+                        + condition.type.describe()
+                        + ". The #if directive selects a branch at compile time by testing an integer for zero or nonzero. Use an integer constant expression as the condition.");
                 return null;
             }
 
             if (!condition.isConstant()) {
                 symbolTable.error(
-                        "#if condition must be a compile-time constant");
+                        "#if condition must be a compile-time constant. The #if directive chooses which branch to compile before semantic analysis, so it cannot depend on runtime values. Use literals, named constants, or other constant expressions in the condition.");
                 return null;
             }
 
@@ -1682,13 +1697,13 @@ public final class SemanticAnalyzer {
                 symbolTable.error(
                         "continue does not take a level: `continue N` is not"
                                 + " valid; continue always targets the"
-                                + " innermost loop");
+                                + " innermost loop. Loop levels are meaningful only for break, which can exit multiple enclosing loops. Replace `continue N` with plain `continue`.");
                 return null;
             }
 
             if (loopDepth == 0) {
                 symbolTable.error(
-                        "continue statement outside of a loop");
+                        "continue statement outside of a loop. The continue statement jumps to the next iteration of an enclosing loop, and there is no loop to resume here. Move the continue into a loop body or remove it.");
                 return null;
             }
 
@@ -1709,14 +1724,14 @@ public final class SemanticAnalyzer {
         if (node.kind == AstKind.FUNCTION_DECL) {
             symbolTable.error("Function declaration '"
                     + node.name
-                    + "' is only valid in the global top-level scope");
+                    + "' is only valid in the global top-level scope. Franko functions are top-level declarations and cannot be nested inside blocks or other functions. Move the function declaration to global or namespace scope.");
             return null;
         }
 
         if (node.kind == AstKind.ENUM_DECL) {
             symbolTable.error("Enum declaration '"
                     + node.name
-                    + "' is only valid at global or namespace scope");
+                    + "' is only valid at global or namespace scope. Enum declarations define named types and cannot be local to a function or block. Move the enum declaration to global or namespace scope.");
             return null;
         }
 
@@ -1858,7 +1873,7 @@ public final class SemanticAnalyzer {
                         : null;
 
         if (currentFunction == null) {
-            symbolTable.error("return statement is only valid inside a function");
+            symbolTable.error("return statement is only valid inside a function. A return needs a function signature to supply its result type and a call frame to exit. Move the return into a function body or remove it.");
 
             Symbol fallbackFn = Symbol.function(
                     null,
@@ -1884,7 +1899,7 @@ public final class SemanticAnalyzer {
 
     private SastNode analyzeBreakStmt(AstNode n) {
         if (loopDepth == 0) {
-            symbolTable.error("break statement outside of a loop");
+            symbolTable.error("break statement outside of a loop. The break statement exits the innermost enclosing loop, and there is no loop to exit here. Move the break into a loop body or remove it.");
             return null;
         }
 
@@ -1906,13 +1921,13 @@ public final class SemanticAnalyzer {
 
         if (level == null) {
             symbolTable.error(
-                    "break level must be a constant integer expression");
+                    "break level must be a constant integer expression. The compiler must resolve the target loop statically to validate the level against the nesting depth. Use an integer literal or named constant for the break level.");
             return null;
         }
 
         if (level.signum() <= 0) {
             symbolTable.error(
-                    "break level must be greater than 0, got: " + level);
+                    "break level must be greater than 0, got: " + level + ". A level of 1 targets the innermost loop, and larger levels count outward from there. Use a positive level no greater than the enclosing loop depth.");
             return null;
         }
 
@@ -1921,7 +1936,10 @@ public final class SemanticAnalyzer {
                     "break level "
                             + level
                             + " exceeds the enclosing loop depth "
-                            + loopDepth);
+                            + loopDepth
+                            + ". A break level counts outward from the innermost loop, so it cannot be larger than the number of enclosing loops. Reduce the level to "
+                            + loopDepth
+                            + " or less, or add another enclosing loop.");
             return null;
         }
 

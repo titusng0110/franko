@@ -1,6 +1,6 @@
 # 6. Integer Literals
 
-Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows.
+Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows. A literal carries a value, not a type: its type is inferred from the surrounding context, and a contextless constant defaults to the smallest signed primitive that fits.
 
 Supported literal forms:
 

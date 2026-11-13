@@ -118,7 +118,11 @@ public class ExpressionChecker {
                     + node.type.describe()
                     + " is not value-assignable; only structs and tuples whose "
                     + "fields/elements are all value-assignable can be constructed "
-                    + "as values"
+                    + "as values. Aggregate construction copies the value into "
+                    + "its destination, so every field or element must itself "
+                    + "be a value type. Replace array or pointer-only fields "
+                    + "with value types, or build the aggregate through a "
+                    + "pointer."
             );
         }
 
@@ -143,7 +147,11 @@ public class ExpressionChecker {
         }
 
         if (types.isVoidType(node.type)) {
-            diagnostics.error("Variable '" + node.symbol.qualifiedName() + "' has invalid void type");
+            diagnostics.error("Variable '" + node.symbol.qualifiedName()
+                    + "' has invalid void type. void denotes the absence of a "
+                    + "value and cannot be stored in a variable. Declare the "
+                    + "variable with a concrete type, or remove the "
+                    + "declaration.");
         }
     }
 
@@ -199,7 +207,11 @@ public class ExpressionChecker {
         if (op.equals("/") || op.equals("%")) {
             if (node.right.isConstant()
                     && BigInteger.ZERO.equals(node.right.constantValue)) {
-                diagnostics.error("Division by zero in compile-time constant expression");
+                diagnostics.error("Division by zero in compile-time constant "
+                        + "expression. The right operand is a folded constant "
+                        + "with value zero, and division or remainder by zero "
+                        + "has no defined result. Guard the divisor, or change "
+                        + "the constant operand so it is nonzero.");
             }
         }
 
@@ -233,7 +245,12 @@ public class ExpressionChecker {
                     )) {
                 diagnostics.error("Left constant operand of shift '" + op
                         + "' does not fit contextual type "
-                        + node.right.type.describe());
+                        + node.right.type.describe()
+                        + ". A constant left operand is fitted to the right "
+                        + "operand's integer type before the shift is "
+                        + "evaluated. Use a constant that fits that type, or "
+                        + "change the right operand to the integer type you "
+                        + "intend.");
             }
 
             return;
@@ -267,7 +284,12 @@ public class ExpressionChecker {
                 diagnostics.error("Cannot compare '" + node.left.type.describe()
                         + "' with '" + node.right.type.describe()
                         + "' using '" + op
-                        + "': both operands must have the same enum type");
+                        + "': both operands must have the same enum type. "
+                        + "Enums are nominal types, so different declarations "
+                        + "remain distinct even with the same backing integer "
+                        + "type. Compare values of the same enum type, or "
+                        + "convert the enum to its backing integer with "
+                        + "unsafe_cast and compare integers.");
                 return;
             }
 
@@ -276,7 +298,11 @@ public class ExpressionChecker {
             diagnostics.error("Cannot compare enum type '" + enumType.describe()
                     + "' with '" + otherType.describe()
                     + "' using '" + op
-                    + "': both operands must have the same enum type");
+                    + "': both operands must have the same enum type. Enums "
+                    + "are nominal types, so an enum never compares directly "
+                    + "with an integer or another enum. Compare two values of "
+                    + "the same enum type, or convert the enum to its backing "
+                    + "integer with unsafe_cast.");
             return;
         }
 
@@ -287,12 +313,20 @@ public class ExpressionChecker {
 
         if (op.equals("<") || op.equals(">") || op.equals("<=") || op.equals(">=")) {
             if (leftPtr || rightPtr) {
-                diagnostics.error("Pointer comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
+                diagnostics.error("Pointer comparisons must only use equality "
+                        + "operators ('==' or '!='), but got '" + op
+                        + "'. Pointers have no defined ordering across objects, "
+                        + "so only equality is meaningful. Use '==' or '!=', or "
+                        + "compare array indices to order elements.");
                 return;
             }
 
             if (leftNull || rightNull) {
-                diagnostics.error("Null comparisons must only use equality operators ('==' or '!='), but got '" + op + "'.");
+                diagnostics.error("Null comparisons must only use equality "
+                        + "operators ('==' or '!='), but got '" + op
+                        + "'. Null is the empty pointer value and has no "
+                        + "ordering relative to any pointer. Use '==' or '!=' "
+                        + "to test for null.");
                 return;
             }
         }
@@ -308,7 +342,10 @@ public class ExpressionChecker {
             if (!types.isPointerType(other.type)) {
                 diagnostics.error("Cannot compare null with non-pointer type '"
                         + other.type.describe()
-                        + "'");
+                        + "'. Null is only a valid pointer value, and the "
+                        + "comparison would have no pointer type to check. "
+                        + "Compare against a pointer, or remove the null "
+                        + "comparison for this value.");
             }
             return;
         }
@@ -319,7 +356,12 @@ public class ExpressionChecker {
                         + "' requires identical pointer types, got "
                         + node.left.type.describe()
                         + " and "
-                        + node.right.type.describe());
+                        + node.right.type.describe()
+                        + ". Franko compares pointers only when both point to "
+                        + "the same type and permission, with no implicit "
+                        + "pointer conversions in comparisons. Use pointers "
+                        + "with identical pointee types and permissions, "
+                        + "casting only to downgrade permission.");
             }
             return;
         }
@@ -329,7 +371,12 @@ public class ExpressionChecker {
                     + "', got "
                     + node.left.type.describe()
                     + " and "
-                    + node.right.type.describe());
+                    + node.right.type.describe()
+                    + ". Only two pointers, two integers, two enums of the "
+                    + "same type, or two structs of the same type can be "
+                    + "compared. Compare the pointer with another pointer or "
+                    + "null, or dereference it with $ to compare the "
+                    + "pointee.");
             return;
         }
 
@@ -361,7 +408,11 @@ public class ExpressionChecker {
                         + "' has wrong arity: expected "
                         + expectedUser
                         + " argument(s) (excluding self), got "
-                        + gotUser);
+                        + gotUser
+                        + ". Every declared user parameter except the "
+                        + "implicit self receiver must be supplied exactly "
+                        + "once. Add the missing arguments, or remove the "
+                        + "extra ones to match the method declaration.");
             }
         } else if (args.size() != parameterTypes.size()) {
             diagnostics.error("Function call to '"
@@ -369,7 +420,11 @@ public class ExpressionChecker {
                     + "' has wrong arity: expected "
                     + parameterTypes.size()
                     + " argument(s), got "
-                    + args.size());
+                    + args.size()
+                    + ". Every declared parameter must be supplied exactly "
+                    + "once, with optional parameters bound by name. Pass "
+                    + "exactly one argument per parameter, or add the missing "
+                    + "arguments.");
         }
 
         int count = Math.min(args.size(), parameterTypes.size());
@@ -441,7 +496,9 @@ public class ExpressionChecker {
             diagnostics.error("Parameter " + (index + 1)
                     + " of function '"
                     + function.signatureString()
-                    + "' has invalid void type");
+                    + "' has invalid void type. void is not a value type, so "
+                    + "no argument can be passed for this parameter. Remove "
+                    + "the parameter, or give it a concrete value type.");
             return;
         }
 
@@ -453,7 +510,10 @@ public class ExpressionChecker {
                     + parameterType.describe()
                     + "; use ptr<"
                     + parameterType.describe()
-                    + "> instead");
+                    + "> instead. Arrays are passed by pointer in Franko, "
+                    + "and an array-typed parameter would require copying the "
+                    + "whole array by value. Declare the parameter as ptr<T> "
+                    + "or view<T>, and pass getptr or getview of the array.");
             return;
         }
 
@@ -461,7 +521,11 @@ public class ExpressionChecker {
             diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
-                    + "' passes array value directly; use getptr(...) and an ptr<[...]> parameter");
+                    + "' passes array value directly; use getptr(...) and an "
+                    + "ptr<[...]> parameter. Array values are not copied into "
+                    + "calls, so callees receive pointer access instead. Pass "
+                    + "getptr(xs) for a mutable parameter or getview(xs) for a "
+                    + "read-only parameter.");
             return;
         }
 
@@ -471,7 +535,11 @@ public class ExpressionChecker {
                         + " of call to '"
                         + function.signatureString()
                         + "' passes null to non-pointer parameter type "
-                        + types.describeSafe(parameterType));
+                        + types.describeSafe(parameterType)
+                        + ". Null is only a valid pointer value and cannot "
+                        + "stand in for a concrete value type. Pass a value "
+                        + "of the parameter type, or declare the parameter as "
+                        + "a pointer.");
             }
             return;
         }
@@ -488,7 +556,11 @@ public class ExpressionChecker {
                         + "' has constant value "
                         + arg.constantValue
                         + " that does not fit parameter type "
-                        + parameterType.describe());
+                        + parameterType.describe()
+                        + ". Fluid integer constants are inferred against the "
+                        + "parameter type, and a value outside its range would "
+                        + "be truncated. Pass a constant that fits the "
+                        + "parameter type, or widen the parameter type.");
             }
             return;
         }
@@ -504,7 +576,11 @@ public class ExpressionChecker {
                 + "' has incompatible type: expected "
                 + types.describeSafe(parameterType)
                 + ", got "
-                + types.describeSafe(arg.type));
+                + types.describeSafe(arg.type)
+                + ". Franko has no implicit integer conversions; only exact "
+                + "types and the documented pointer permission conversions "
+                + "are accepted. Cast the argument explicitly with cast or "
+                + "unsafe_cast, or pass a value of the expected type.");
     }
 
     private void visitArrayAccess(SastNode node) {
@@ -557,7 +633,12 @@ public class ExpressionChecker {
                     + " is out of bounds for "
                     + node.target.type.describe()
                     + " with size "
-                    + size);
+                    + size
+                    + ". Static array indices must name an element slot "
+                    + "inside the declared length, or the access would read "
+                    + "or write adjacent storage. Use an index below "
+                    + size
+                    + ", or enlarge the array.");
         }
     }
 
@@ -570,7 +651,9 @@ public class ExpressionChecker {
 
         if (types.isVoidType(node.target.type)) {
             diagnostics.error("Operand of '" + intrinsicName
-                    + "' cannot have void type");
+                    + "' cannot have void type. A void call produces no "
+                    + "value, so there is no storage to point at. Remove the "
+                    + "intrinsic, or pass a value-producing expression.");
             return;
         }
 
@@ -585,7 +668,11 @@ public class ExpressionChecker {
 
         if (!isStorageBackedLValue(node.target)) {
             diagnostics.error("Operand of '" + intrinsicName
-                    + "' must be a pointable storage-backed lvalue");
+                    + "' must be a pointable storage-backed lvalue. The "
+                    + "intrinsic returns a pointer to real storage, and "
+                    + "temporaries, literals, and call results have no stable "
+                    + "address. Store the value in a variable, field, or "
+                    + "array element, and take a pointer to that.");
             return;
         }
 
@@ -598,7 +685,12 @@ public class ExpressionChecker {
             diagnostics.error("Cannot create a mutable pointer to const "
                     + "variable '"
                     + storage.name
-                    + "'; const storage only allows getview(...)");
+                    + "'; const storage only allows getview(...). const makes "
+                    + "the storage immutable, so a mutable or owning pointer "
+                    + "would allow writes that violate the declaration. Use "
+                    + "getview(...) instead, or remove const from '"
+                    + storage.name
+                    + "'.");
         }
 
         ensureRegionPermission(
@@ -632,7 +724,11 @@ public class ExpressionChecker {
                 + requiredWord
                 + " over its target, but the target is "
                 + regionWord
-                + " here");
+                + " here. An operation cannot use more permission than the "
+                + "storage region already has, because that would allow "
+                + "writes or ownership through a weaker view. Use a receiver "
+                + "that is not const or view-restricted, or perform the "
+                + "read-only operation instead.");
     }
 
     private void visitDeref(SastNode node) {        checkExpr(node.expr);
@@ -642,7 +738,12 @@ public class ExpressionChecker {
         }
 
         if (types.isNullType(node.expr.type)) {
-            diagnostics.error("Cannot dereference null");
+            diagnostics.error("Cannot dereference null. Null is the empty "
+                    + "pointer value and refers to no storage, so there is no "
+                    + "pointee to read or write. Guard the pointer with a "
+                    + "null check and dereference it only on the non-null "
+                    + "path, or initialize it from live storage with "
+                    + "getptr/getview/getmview.");
             return;
         }
 
@@ -653,7 +754,10 @@ public class ExpressionChecker {
 
         if (node.expr.type.kind == SastTypeKind.PTR
                 && types.isVoidType(node.expr.type.referencedType)) {
-            diagnostics.error("Cannot dereference ptr<void>");
+            diagnostics.error("Cannot dereference ptr<void>. void has no "
+                    + "size or layout, so the compiler cannot form a value "
+                    + "from the pointee. Use a pointer with a concrete pointee "
+                    + "type instead.");
         }
     }
 
@@ -681,7 +785,11 @@ public class ExpressionChecker {
                         + node.expr.type.enumSymbol.qualifiedName()
                         + "' to enum type '"
                         + node.type.enumSymbol.qualifiedName()
-                        + "'");
+                        + "'. Enums are nominal and have no conversion "
+                        + "between distinct enum declarations, even with the "
+                        + "same backing type. Convert through the backing "
+                        + "integer with unsafe_cast, then to the target enum "
+                        + "with unsafe_cast.");
                 return;
             }
 
@@ -691,7 +799,11 @@ public class ExpressionChecker {
                             + node.type.enumSymbol.qualifiedName()
                             + "'; write unsafe_cast<"
                             + node.type.enumSymbol.qualifiedName()
-                            + ">(...)");
+                            + ">(...). Integer-to-enum conversion is "
+                            + "runtime-checked because arbitrary integers may "
+                            + "not name a declared variant. Use unsafe_cast<"
+                            + node.type.enumSymbol.qualifiedName()
+                            + ">(expr) to perform the checked conversion.");
                     return;
                 }
 
@@ -701,14 +813,22 @@ public class ExpressionChecker {
             diagnostics.error("'unsafe_cast' to enum type '"
                     + node.type.enumSymbol.qualifiedName()
                     + "' requires an integer operand, got "
-                    + types.describeSafe(node.expr.type));
+                    + types.describeSafe(node.expr.type)
+                    + ". The runtime check maps the operand's integer value "
+                    + "onto the enum's backing type and declared variants. "
+                    + "Pass an integer expression, converting it to the "
+                    + "backing integer type first if needed.");
             return;
         }
 
         if (node.expr.type.kind == SastTypeKind.ENUM) {
             if (!(node.type.kind == SastTypeKind.PRIMITIVE)) {
                 diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
-                        + types.describeSafe(node.type));
+                        + types.describeSafe(node.type)
+                        + ". These are the only types with defined cast rules; "
+                        + "arrays, structs, tuples, and void have no conversion. "
+                        + "Cast to a primitive integer, pointer, or enum type, "
+                        + "or remove the cast.");
                 return;
             }
 
@@ -725,7 +845,11 @@ public class ExpressionChecker {
                         + node.type.describe()
                         + "; write unsafe_cast<"
                         + node.type.describe()
-                        + ">(...)");
+                        + ">(...). Plain cast only permits conversions that "
+                        + "preserve every source value, and narrowing or "
+                        + "signedness changes can lose data. Use unsafe_cast<"
+                        + node.type.describe()
+                        + ">(...) to make the checked conversion explicit.");
                 return;
             }
 
@@ -734,14 +858,22 @@ public class ExpressionChecker {
 
         if (!(node.type.kind == SastTypeKind.PRIMITIVE)) {
             diagnostics.error("Cast target must be a primitive integer type, a pointer type, or an enum type, got "
-                    + types.describeSafe(node.type));
+                    + types.describeSafe(node.type)
+                    + ". These are the only types with defined cast rules; "
+                    + "arrays, structs, tuples, and void have no conversion. "
+                    + "Cast to a primitive integer, pointer, or enum type, or "
+                    + "remove the cast.");
             return;
         }
 
         if (!(node.expr.type.kind == SastTypeKind.PRIMITIVE)) {
             diagnostics.error("Operand of '" + syntax
                     + "' must be an integer expression, got "
-                    + types.describeSafe(node.expr.type));
+                    + types.describeSafe(node.expr.type)
+                    + ". A checked integer cast has no defined meaning for "
+                    + "aggregates, arrays, pointers, or null. Pass an integer "
+                    + "expression, or use cast<...> for a pointer permission "
+                    + "downgrade.");
             return;
         }
 
@@ -755,7 +887,12 @@ public class ExpressionChecker {
                     + node.type.describe()
                     + " is not a value-preserving widening; write unsafe_cast<"
                     + node.type.describe()
-                    + ">(...) to make the checked narrowing explicit");
+                    + ">(...) to make the checked narrowing explicit. Plain "
+                    + "cast is reserved for conversions that preserve every "
+                    + "source value, and narrowing or signedness changes can "
+                    + "lose data. Use unsafe_cast<"
+                    + node.type.describe()
+                    + ">(...) for the runtime-checked conversion.");
             return;
         }
 
@@ -775,7 +912,11 @@ public class ExpressionChecker {
         if (node.checked) {
             diagnostics.error("'unsafe_cast' target must be a primitive "
                     + "integer type or an enum type, got "
-                    + types.describeSafe(node.type));
+                    + types.describeSafe(node.type)
+                    + ". unsafe_cast performs checked integer conversions and "
+                    + "cannot change pointer permissions. Use cast<T>(...) for "
+                    + "a pointer permission downgrade, or cast to an integer "
+                    + "target.");
             return;
         }
 
@@ -787,7 +928,11 @@ public class ExpressionChecker {
             diagnostics.error("'cast' to "
                     + types.describeSafe(node.type)
                     + " requires a pointer or null operand, got "
-                    + types.describeSafe(node.expr.type));
+                    + types.describeSafe(node.expr.type)
+                    + ". Pointer casts only adjust permission or decay an "
+                    + "array view; they never create a pointer from a "
+                    + "non-pointer value. Pass a pointer or null, or create a "
+                    + "pointer with getptr/getview/getmview.");
             return;
         }
 
@@ -805,7 +950,11 @@ public class ExpressionChecker {
                             + "; the static array's storage is borrowed by a "
                             + "hidden dynamic-array descriptor, so only "
                             + "mview<[T]> and view<[T]> accept the "
-                            + "decay");
+                            + "decay. An owning ptr<[T]> would claim ownership "
+                            + "of storage that the original array still owns. "
+                            + "Cast to mview<[T]> or view<[T]> instead, and "
+                            + "keep the original array alive for the view's "
+                            + "lifetime.");
                     return;
                 }
 
@@ -815,7 +964,12 @@ public class ExpressionChecker {
                             + types.describeSafe(node.expr.type)
                             + " cannot be cast to "
                             + types.describeSafe(node.type)
-                            + "; permissions only downgrade (ptr -> mview -> view)");
+                            + "; permissions only downgrade (ptr -> mview -> "
+                            + "view). Allowing a read-only view to become "
+                            + "mutable or owning would let code write or free "
+                            + "storage it does not control. Cast to the same "
+                            + "or weaker permission, or obtain a stronger "
+                            + "pointer from the original storage.");
                     return;
                 }
 
@@ -828,7 +982,12 @@ public class ExpressionChecker {
                     + ", expected "
                     + types.describeSafe(node.type)
                     + "; only mview<[T,N]>/view<[T,N]> decay to "
-                    + "mview<[T]>/view<[T]> (T must match)");
+                    + "mview<[T]>/view<[T]> (T must match). A pointer cast "
+                    + "may change permission or array extent, but "
+                    + "reinterpretation between pointee types would break "
+                    + "type and memory safety. Keep the pointee type "
+                    + "unchanged; for arrays, decay a static array view of "
+                    + "the same element type.");
             return;
         }
 
@@ -843,7 +1002,11 @@ public class ExpressionChecker {
                     + types.describeSafe(node.expr.type)
                     + " cannot be cast to "
                     + types.describeSafe(node.type)
-                    + "; permissions only downgrade (ptr -> mview -> view)");
+                    + "; permissions only downgrade (ptr -> mview -> view). "
+                    + "Allowing a read-only view to become mutable or owning "
+                    + "would let code write or free storage it does not "
+                    + "control. Cast to the same or weaker permission, or "
+                    + "obtain a stronger pointer from the original storage.");
         }
     }
 
@@ -934,12 +1097,17 @@ public class ExpressionChecker {
             }
 
             if (expr.constantValue.signum() < 0) {
-                diagnostics.error(message + ": value cannot be negative");
+                diagnostics.error(message + ": value cannot be negative. "
+                        + "Indices and sizes are uint32 quantities, so a "
+                        + "negative value has no representation. Use a "
+                        + "non-negative constant or a uint32-typed value.");
                 return;
             }
 
             if (!allowZero && expr.constantValue.signum() == 0) {
-                diagnostics.error(message + ": value must be greater than zero");
+                diagnostics.error(message + ": value must be greater than zero. "
+                        + "A zero size cannot describe any element storage "
+                        + "for this operation. Pass a size of at least one.");
                 return;
             }
 
@@ -947,7 +1115,10 @@ public class ExpressionChecker {
                     expr.constantValue,
                     SemanticPrimitiveKind.UINT32
             )) {
-                diagnostics.error(message + ": value does not fit in uint32");
+                diagnostics.error(message + ": value does not fit in uint32. "
+                        + "uint32 can represent at most 4294967295, and "
+                        + "larger values would be truncated. Use a smaller "
+                        + "value.");
             }
 
             return;
@@ -956,7 +1127,12 @@ public class ExpressionChecker {
         if (!(expr.type.kind == SastTypeKind.PRIMITIVE
                 && expr.type.primitive == SemanticPrimitiveKind.UINT32)) {
             diagnostics.error(message + ": expected uint32, got "
-                    + types.describeSafe(expr.type));
+                    + types.describeSafe(expr.type)
+                    + ". Franko does not implicitly convert between integer "
+                    + "types, and this position is fixed to uint32. Widen the "
+                    + "value with cast<uint32>(...) when that is "
+                    + "value-preserving, or use unsafe_cast<uint32>(...) for "
+                    + "a checked conversion.");
         }
     }
 
@@ -990,7 +1166,12 @@ public class ExpressionChecker {
             diagnostics.error(message + ": expected "
                     + kind.name().toLowerCase()
                     + ", got "
-                    + types.describeSafe(expr.type));
+                    + types.describeSafe(expr.type)
+                    + ". This argument must have exactly the requested "
+                    + "primitive type, and Franko does not implicitly convert "
+                    + "scalars. Cast the value explicitly to "
+                    + kind.name().toLowerCase()
+                    + ".");
         }
     }
 
@@ -1032,7 +1213,11 @@ public class ExpressionChecker {
                     + ": byte offset "
                     + offset
                     + ", width "
-                    + byteWidth);
+                    + byteWidth
+                    + ". A byte access must cover only bytes inside the "
+                    + "static array, or it would read or write adjacent "
+                    + "storage. Reduce the offset or width so offset + width "
+                    + "does not exceed the array size.");
         }
     }
 
@@ -1073,7 +1258,12 @@ public class ExpressionChecker {
                     + " with "
                     + totalBits
                     + " bits: bit index "
-                    + bitIndex);
+                    + bitIndex
+                    + ". Bit intrinsics address bits inside the array's byte "
+                    + "storage, so an index at or past the total bit count "
+                    + "would touch neighboring storage. Use a bit index below "
+                    + totalBits
+                    + ", or enlarge the array.");
         }
     }
 
@@ -1131,13 +1321,20 @@ public class ExpressionChecker {
                     + ": start "
                     + start
                     + ", count "
-                    + count);
+                    + count
+                    + ". The range [start, start + count) must stay inside "
+                    + "the array, or the operation would access storage "
+                    + "beyond it. Reduce start or count so start + count does "
+                    + "not exceed the array size.");
         }
     }
 
     void ensureMemsetValueCompatible(SastNode value) {
         if (value == null) {
-            diagnostics.error("memset() fill value cannot be null");
+            diagnostics.error("memset() fill value cannot be null. memset "
+                    + "writes one uint8 byte value into every destination "
+                    + "byte, and null is a pointer value. Pass a uint8 or char "
+                    + "value between 0 and 255.");
             return;
         }
 
@@ -1153,7 +1350,10 @@ public class ExpressionChecker {
         if (!(value.type.kind == SastTypeKind.PRIMITIVE
                 && value.type.primitive == SemanticPrimitiveKind.UINT8)) {
             diagnostics.error("memset() fill value must be uint8/char, got "
-                    + types.describeSafe(value.type));
+                    + types.describeSafe(value.type)
+                    + ". memset writes a single byte, so the fill value must "
+                    + "have byte width. Cast the value with "
+                    + "unsafe_cast<uint8>(...), or pass a byte literal.");
         }
     }
 

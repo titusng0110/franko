@@ -38,7 +38,12 @@ public class DeclarationChecker {
                 + node.symbol.qualifiedName()
                 + "' has type '"
                 + types.describeSafe(node.symbol.type)
-                + "'; const is only allowed for value-assignable types");
+                + "'; const is only allowed for value-assignable types."
+                + " Const storage must hold a complete value that can"
+                + " be initialized and copied, which arrays and"
+                + " pointer-only aggregates cannot provide."
+                + " Use a primitive, enum, pointer, or value-assignable"
+                + " struct/tuple, or remove const.");
         }
 
         if (node.symbol.isConst
@@ -86,7 +91,11 @@ public class DeclarationChecker {
             diagnostics.error("Variable '"
                 + node.symbol.qualifiedName()
                 + "' has a static address initializer, but only pointer "
-                + "globals can be initialized with getptr/getmview/getview");
+                + "globals can be initialized with getptr/getmview/getview."
+                + " Those intrinsics produce an address, so the global"
+                + " must be a pointer with a compatible referent type."
+                + " Declare the global as ptr<T>, mview<T>, or view<T>,"
+                + " or initialize the value another way.");
             return;
         }
 
@@ -105,7 +114,13 @@ public class DeclarationChecker {
                 + "' initializer has type "
                 + types.describeSafe(node.staticInitializer.type)
                 + ", expected "
-                + types.describeSafe(type));
+                + types.describeSafe(type)
+                + "."
+                + " A static address initializer must denote an address"
+                + " of the declared pointer type, allowing only"
+                + " permission downgrades."
+                + " Match the declared pointer type, or insert an"
+                + " explicit getview/getmview conversion.");
         }
     }
 
@@ -134,7 +149,13 @@ public class DeclarationChecker {
                         + node.structSymbol.qualifiedName()
                         + "' has a non-method function '"
                         + methodNode.symbol.name
-                        + "'");
+                        + "'."
+                        + " Functions declared inside a struct body must"
+                        + " be methods that take self so they can attach"
+                        + " to the struct."
+                        + " Add a self parameter to make it a method, or"
+                        + " move the function to global or namespace"
+                        + " scope.");
                 continue;
             }
 
@@ -145,7 +166,11 @@ public class DeclarationChecker {
                         + methodNode.symbol.name
                         + "' of struct '"
                         + node.structSymbol.qualifiedName()
-                        + "'");
+                        + "'."
+                        + " Fields and methods share member lookup syntax,"
+                        + " so a call or access with that name would be"
+                        + " ambiguous."
+                        + " Rename the method or the field.");
             }
         }
     }
@@ -226,7 +251,10 @@ public class DeclarationChecker {
                         + "'";
 
                 if (types.isVoidType(field.type)) {
-                    diagnostics.error(elementWhere + " cannot have void type");
+                    diagnostics.error(elementWhere + " cannot have void type."
+                            + " Every tuple element must store a value, and"
+                            + " void has no representation."
+                            + " Give the element a concrete non-void type.");
                     continue;
                 }
 
@@ -289,7 +317,11 @@ public class DeclarationChecker {
                 diagnostics.error(where + " creates a by-value struct cycle: "
                     + "struct '"
                     + structName
-                    + "' cannot contain itself through its fields, tuple elements, or static array elements");
+                    + "' cannot contain itself through its fields, tuple elements, or static array elements."
+                    + " A by-value field needs the complete layout of its"
+                    + " type, so a cycle would require infinite storage."
+                    + " Break the cycle by storing the field through a"
+                    + " ptr, mview, or view instead.");
             }
 
             return;
@@ -318,12 +350,19 @@ public class DeclarationChecker {
 
             if (!seenFieldNames.add(field.name)) {
                 diagnostics.error(fieldWhere
-                    + " duplicates an earlier field name");
+                    + " duplicates an earlier field name."
+                    + " Fields share one member lookup namespace, so"
+                    + " duplicate names would make access ambiguous."
+                    + " Rename or remove the duplicate field.");
                 continue;
             }
 
             if (types.isVoidType(field.type)) {
-                diagnostics.error(fieldWhere + " cannot have void type");
+                diagnostics.error(fieldWhere + " cannot have void type."
+                    + " A struct field needs storage for a value, and void"
+                    + " has no representation."
+                    + " Give the field a concrete non-void type, or remove"
+                    + " it.");
                 continue;
             }
 
@@ -356,14 +395,25 @@ public class DeclarationChecker {
                 diagnostics.error(where + " default value "
                     + field.foldedDefault
                     + " does not fit in "
-                    + field.type.describe());
+                    + field.type.describe()
+                    + "."
+                    + " The default is stored in the field's fixed-width"
+                    + " integer type, and an out-of-range value cannot"
+                    + " be stored without truncation."
+                    + " Choose a value within the type's range, or change"
+                    + " the field type.");
             }
 
             return;
         }
 
         diagnostics.error(where
-            + " has an initializer, but only primitive fields can have default values");
+            + " has an initializer, but only primitive fields can have default values."
+            + " Field defaults are folded into primitive constants,"
+            + " and struct, array, and pointer values have no such"
+            + " representation."
+            + " Remove the default and initialize the field at each"
+            + " declaration or with an aggregate literal.");
     }
 
     private void validateGlobalConstInitializer(SastNode node) {
@@ -377,7 +427,13 @@ public class DeclarationChecker {
                     + "' initializer value "
                     + node.foldedConstInitializer
                     + " does not fit in "
-                    + node.symbol.type.describe());
+                    + node.symbol.type.describe()
+                    + "."
+                    + " The initializer is stored in the global's"
+                    + " fixed-width integer type, and an out-of-range"
+                    + " value cannot be stored without truncation."
+                    + " Choose a value within the type's range, or change"
+                    + " the global's type.");
             }
 
             return;
@@ -388,7 +444,13 @@ public class DeclarationChecker {
             + "' has a constant initializer, but only primitive globals "
             + "can have constant initializers (pointer globals accept "
             + "null, getptr/getmview/getview over a global, or a string "
-            + "literal)");
+            + "literal)."
+            + " Global constant initializers are folded into static"
+            + " storage, which only primitive values can represent"
+            + " directly."
+            + " Use a primitive global, or use one of the accepted"
+            + " pointer forms such as null, getptr/getmview/getview over"
+            + " a global, or a string literal.");
     }
 
     private void validateStaticArraySize(
@@ -404,7 +466,11 @@ public class DeclarationChecker {
             if (size.signum() <= 0) {
                 diagnostics.error(where + " has invalid static array size "
                     + literal
-                    + ": size must be greater than zero");
+                    + ": size must be greater than zero."
+                    + " A static array's size determines its fixed"
+                    + " storage layout, and a zero or negative length"
+                    + " cannot allocate elements."
+                    + " Use a positive integer constant for the size.");
                 return;
             }
 
@@ -414,11 +480,20 @@ public class DeclarationChecker {
             )) {
                 diagnostics.error(where + " has invalid static array size "
                     + literal
-                    + ": size does not fit uint32");
+                    + ": size does not fit uint32."
+                    + " Franko stores static array lengths as uint32, so"
+                    + " larger values cannot be represented."
+                    + " Use a size no greater than 4294967295, or use a"
+                    + " dynamic array instead.");
             }
         } catch (IllegalArgumentException e) {
             diagnostics.error(where + " has invalid static array size literal: "
-                + literal);
+                + literal
+                + "."
+                + " Static array sizes must be integer constants known"
+                + " at compile time."
+                + " Replace it with a literal or folded integer constant"
+                + " expression.");
         }
     }
 }

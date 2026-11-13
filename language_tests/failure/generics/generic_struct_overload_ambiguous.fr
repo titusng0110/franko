@@ -1,0 +1,12 @@
+#generic struct X<int8 A, int16 B> {
+    int32 value
+}
+
+#generic struct X<int16 A, int8 B> {
+    int32 value
+}
+
+func main() -> int32 {
+    X<1, 2> x
+    return 0
+}

@@ -100,7 +100,7 @@ Franko currently does **not** implement:
 - a ternary conditional operator;
 - `switch` and `do`/`do-while`;
 - multiple declarators in one declaration (`int a, b;`);
-- tuple destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](29-tuples.md#2810-restrictions)).
+- tuple destructuring, tuple methods, tuple operators, and tuple casts (see [Tuples](29-tuples.md#2910-restrictions)).
 
 The repository also includes a VS Code extension with syntax highlighting,
 bracket matching, comment toggling, and snippets for `.fr` and `.franko`
@@ -528,7 +528,7 @@ Boolean-like results from comparison and logical operators use `uint8`, with:
 
 # 6. Integer Literals
 
-Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows.
+Integer literals are evaluated with arbitrary precision before contextual type checking; no intermediate literal arithmetic overflows. A literal carries a value, not a type: its type is inferred from the surrounding context, and a contextless constant defaults to the smallest signed primitive that fits.
 
 Supported literal forms:
 
@@ -570,9 +570,8 @@ portable.
 
 # 7. Fluid Integer Constants
 
-Integer literals and folded constant integer expressions are **fluid**.
-
-This means their initial type is not always binding. Instead, when a constant is used in a typed context, the compiler checks whether the constant value fits that context.
+Integer literals and folded constant integer expressions have **no type of
+their own**. A constant is typed by the context in which it is used.
 
 Example:
 
@@ -580,16 +579,71 @@ Example:
 func main() -> int32 {
     uint8 x;
 
-    x = 255; // valid
+    x = 255; // valid: 255 is inferred as uint8
     x = 256; // invalid: 256 does not fit uint8
 
     return 0;
 }
 ```
 
-Fluid constants also participate in function overload resolution. A folded integer constant may match a primitive integer parameter if its arbitrary-precision value fits that parameter type.
+A constant infers its type from:
 
-When a constant fits several overloads, the call is resolved by a constant-fit preference, not rejected: the overload whose parameter type equals the constant's own type wins when the value fits there; otherwise the narrowest fitting type wins, with signed preferred over unsigned at equal width. For example, `stdout(1)` selects `stdout(int32)` (a literal's own type), `stdout(5000000000)` selects `stdout(int64)`, and `stdout(100)` selects `stdout(int16)` over `stdout(uint16)` when `int32` is not among the overloads. A call is ambiguous only if several overloads tie on both permission-downgrade and constant-fit costs.
+- an assignment target;
+- a declaration initializer;
+- a function or method return type;
+- a call parameter;
+- an aggregate literal field or tuple element;
+- an array-literal element type;
+- an integer cast target.
+
+When no context supplies a type, the constant receives the smallest signed
+primitive that holds its value:
+
+```text
+0 .. 127              -> int8
+128 .. 32767          -> int16
+32768 .. 2147483647   -> int32
+...                   -> int64
+```
+
+A nonnegative value above the `int64` maximum uses `uint64`. A value that fits
+no primitive integer type is a compile error.
+
+Compile-time intrinsic results are already typed: predicates and `#IS_*`
+constants are `uint8`, and `#strcmp` is `int32`. These typed results keep
+their declared result type rather than becoming context-inferred literals.
+
+## 7.1 Overload Resolution
+
+A constant may match any primitive integer parameter whose type can represent
+its value. When several overloads fit, the narrowest fitting parameter type
+wins, with signed preferred over unsigned at equal width.
+
+```franko
+func g(int16 x) -> int32 { return 1 }
+func g(uint16 y) -> int32 { return 2 }
+
+g(100);   // selects g(int16): same width, signed wins
+```
+
+An explicitly typed constant first prefers an exact parameter type when one
+exists. Otherwise it uses the same narrowest-fit rule.
+
+A call is ambiguous only when several overloads tie on both
+permission-downgrade and constant-fit costs.
+
+## 7.2 Casts
+
+The target of an integer cast is an inference context:
+
+```franko
+uint8 a = cast<uint8>(200);   // valid: 200 is inferred as uint8
+uint8 b = cast<uint8>(300);   // invalid: 300 does not fit uint8
+```
+
+`unsafe_cast<T>` also checks the constant value at compile time and rejects a
+value outside `T`'s range. A checked cast whose constant value fits succeeds,
+just like an ordinary cast.
 
 ---
 
@@ -813,7 +867,7 @@ X == X
 
 Duplicate struct names are rejected, so each struct name denotes exactly one declared type. See [Structs](27-structs.md) for the complete struct reference.
 
-Tuple equality is covered in [Tuples](29-tuples.md#283-type-identity).
+Tuple equality is covered in [Tuples](29-tuples.md#293-type-identity).
 
 ## 10.7 Enum Equality
 
@@ -868,7 +922,7 @@ An **owning** pointer (`ptr<T>`) may not appear inside an array, struct, or
 tuple, recursively. `mview<T>` and `view<T>` are allowed in aggregates, but
 their referent types may not recursively contain an owning `ptr<T>`. This is a
 type-validity error, not a warning; see
-[Pointers](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Pointers](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 Valid:
 
@@ -1043,6 +1097,14 @@ values known to be invalid: `unsafe_cast<BigState>(999)` compiles and
 aborts at runtime instead of failing at compile time.
 
 ## 12.5 Constant Casts
+
+The target of an integer cast is an inference context: a constant operand
+is first inferred as the target type, then validated against it.
+
+```franko
+uint8 a = cast<uint8>(200);   // valid: 200 is inferred as uint8
+uint8 b = cast<uint8>(300);   // invalid: 300 does not fit uint8
+```
 
 A conversion of a folded constant expression is validated at compile
 time: the value must fit the target type or compilation fails. There is
@@ -1333,9 +1395,9 @@ conversion there. Thus the inner `view<[byte, 10]>` value decays to
 `view<[byte]>` for a `view<view<[byte]>>` parameter.
 
 Integer constants use the ordinary fluid-constant fitting rules against
-`view<primitive>` parameters: an exact natural-type match wins, otherwise
-the narrowest fitting type wins with signed before unsigned at equal
-width.
+`view<primitive>` parameters: an untyped constant uses the narrowest
+fitting type with signed before unsigned at equal width, while an
+explicitly typed constant prefers an exact match first.
 
 Tuple values have no operator methods and cannot use the struct `OPERATOR_*` overloading mechanism. Arithmetic, bitwise, shift, logical, comparison, and compound-assignment operators reject tuple operands just like whole struct values. Whole-tuple assignment is the only operator-like operation a tuple supports, and it always uses the built-in assignment rule.
 
@@ -1552,7 +1614,7 @@ See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 16.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](29-tuples.md#286-assignment).
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](29-tuples.md#296-assignment).
 
 A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](30-aggregate-literals.md).
 
@@ -1742,7 +1804,7 @@ materialized as a temporary of the referenced primitive type.
 The borrowed view is valid only for the duration of the operator call.
 An operator method must not store or forward it into caller-owned or
 global storage; the compiler rejects that pattern (see
-[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)).
 A local `view<T>` copy inside the operator body is allowed because the
 local dies before the operator call returns.
 
@@ -1910,34 +1972,11 @@ A bare `return` is valid only in a `void` function.
 
 A `return expr` statement is required for non-`void` functions.
 
-## 17.7 Output (`franko/stdio`)
+## 17.7 Expression Statements
 
-Output is a library function, not a statement. Import `franko/stdio` and call the overloaded `stdout(...)` functions (see [franko/stdio](../library_docs/stdio.md) for the full API):
-
-```franko
-import "franko/stdio"
-
-func main() -> int32 {
-    stdout(42)        // `42` followed by a newline
-    stdout("hi")      // text followed by a newline
-    stdout(1, end = " ")    // `1` followed by a space (no newline)
-    stdout(2)         // `2` followed by a newline
-    stdout()          // bare newline
-    return 0
-}
-```
-
-A single-argument `stdout(x)` writes `x` followed by `\n`; `stdout(x, end = suffix)` writes `x` followed by `suffix` verbatim (a null or empty `suffix` means no suffix and no newline). The `end` parameter is optional, so a supplied value must be named. `stdout()` writes a bare newline. Overloads exist for all eight integer types, for `view<[uint8]>` text, and for `view<std::String>` from `franko/string`; a null text view writes no text bytes, and a non-empty `end` is still written. `stderr` mirrors every `stdout` overload on stderr, with the same suffix behavior.
-
-`stdout` has no overloads for pointers or arrays. Struct printing is limited to `std::String`; print individual elements, fields, or bytes for other structs: `stdout(xs[0])`, `stdout(s.x)`. A string literal prints as text (it is a `view<[byte, N]>` value that decays to the `view<[uint8]>` overload); to print a single byte numerically, index it: `stdout(s[0])`. A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
-
-Integer constants resolve by the overload preference rule: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type (signed before unsigned at equal width). See [Functions](19-functions.md).
-
-Member-call printing such as `x.stdout()` is not supported; see [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
-
-## 17.8 Expression Statements
-
-Function calls are commonly used as expression statements.
+Function calls are commonly used as expression statements. Output is a library
+function, not a statement: import `franko/stdio` and call `stdout(...)`; see
+[franko/stdio](../library_docs/stdio.md).
 
 Array intrinsic calls are special expression-statement forms:
 
@@ -1948,7 +1987,7 @@ arr.memcpy(getptr(other));
 arr.uninit();
 ```
 
-## 17.9 Compile-Time If Statements
+## 17.8 Compile-Time If Statements
 
 `#if` and `#else` are compile-time statement forms:
 
@@ -2087,63 +2126,17 @@ There is no implicit zero-initialization for locals other than pointer storage. 
 
 ## 18.6 Struct Fields
 
-Struct fields are declared with the same `type name` syntax as variables, inside a top-level `struct` declaration:
-
-```franko
-struct X {
-    int32 num = 0
-    [int32, 4] xs
-    view<Y> next
-}
-```
-
-Field defaults must be constant expressions on primitive fields only, and duplicate field names are rejected.
-
-The complete struct reference — field rules, by-value cycles, assignability, member access, and globals — is in [Structs](27-structs.md).
-
-Tuple declarations and tuple initialization are covered in
-[Tuples](29-tuples.md).
+Struct and tuple field declarations, field defaults, duplicate names, and
+by-value cycles are described in [Structs](27-structs.md) and
+[Tuples](29-tuples.md). A field uses the same `type name` syntax as a
+variable declaration.
 
 ## 18.7 Aggregate Field Initializers
 
 A local struct or tuple declaration may initialize individual fields with a
-braced field list immediately after the declared name:
-
-```franko
-Literal lit { x = 0, def = 1 }
-Buffer b { cap = 20 }
-(int32 first, int32 second) tup { first = 1, second = 2 }
-(int32, int32) pair { 0, 1 }
-(int32, int32) partial { 0 }
-```
-
-This is declaration initialization: one ordinary field assignment per named
-or positional entry, kept as part of the declaration:
-
-```franko
-Literal lit
-lit.x = 0
-lit.def = 1
-```
-
-Rules:
-
-- struct fields are always named, tuple entries are named or positional, and
-  order is free for named entries; duplicate or unknown names are rejected;
-- positional entries are available only for all-unnamed tuple declarations,
-  fill the first N elements, may be partial, and may not exceed the element
-  count; positional and named entries cannot be mixed;
-- omitted fields keep the declaration's default-constructed state;
-- no temporary aggregate value is created and no `OPERATOR_MOV` is invoked;
-- the form works for pointer-only aggregates because each field is assigned
-  directly under ordinary assignment rules;
-- an array field still cannot be assigned from another array or a literal;
-- the brace must follow the identifier immediately; a newline ends the
-  declaration;
-- the form is local-only and is invalid at global scope.
-
-The complete aggregate initialization reference is in
-[Aggregate Literals](30-aggregate-literals.md).
+braced list. The field-wise form, positional tuple entries, and its
+`OPERATOR_MOV` behavior are part of [Aggregate Literals](30-aggregate-literals.md).
+It is declaration initialization and is local-only.
 
 ## 18.8 Const Storage
 
@@ -2264,7 +2257,7 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a declared enum type (see [Enums](31-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)); or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden)); or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
 - a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
 
@@ -2325,12 +2318,12 @@ where `mview`/`view` of `[T]` is expected; see
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](12-casts.md)).
 
-For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. When a constant fits several overloads, the constant-fit preference applies: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type wins (signed before unsigned at equal width). See [Fluid Integer Constants](07-fluid-integer-constants.md).
+For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. An untyped constant uses the narrowest fitting parameter type, with signed preferred over unsigned at equal width; an explicitly typed constant prefers an exact parameter type before falling back to that rule. See [Fluid Integer Constants](07-fluid-integer-constants.md).
 
 Overload preference: among applicable overloads, ones matched without any
 conversion win over converting ones, and among the rest the ones relying
 on the fewest conversions win, with a decay counted heavier than a pure
-permission downgrade. Constant arguments then prefer the lowest constant-fit cost (own type, then narrowest, signed first). If several overloads remain
+permission downgrade. Constant arguments then prefer the lowest constant-fit cost (exact type first for typed constants, otherwise narrowest, signed first). If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 19.7 Bare Function Names
@@ -2415,11 +2408,9 @@ Struct methods follow the same signature, overload, and return rules with an exp
 
 ## 19.12 Compile-Time Intrinsics
 
-The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
-`#strcmp`, `#strcat`, and the rest) are compile-time functions, not
-callable values. They are resolved at compile time; they cannot be stored
-in a variable, passed as a function argument, or referred to without a
-call. See [Compile-Time Reflection](35-compile-time-reflection.md).
+The built-in `#name(...)` functions are compile-time expressions, not
+functions or callable values. Their full rules are in
+[Compile-Time Reflection](35-compile-time-reflection.md).
 
 ## 19.13 Inlining Modifiers
 
@@ -2470,33 +2461,9 @@ FFI-bridged functions are provided by their bridge and ignore them.
 
 ## 19.14 Generic Functions
 
-A function declaration may be a generic template:
-
-```franko
-#generic func identity<typename T>(T value) -> T {
-    return value
-}
-```
-
-Every call supplies explicit type and value arguments:
-
-```franko
-identity<int32>(7)
-```
-
-There is no type-argument inference. A generic function name used without
-arguments is an error unless a concrete function with the same name is also
-declared. Generic template overloading is not supported: a namespace may
-contain at most one generic function template per name, while concrete
-functions may share that name.
-
-`#generic` must precede `#inline`/`#noinline`:
-
-```franko
-#generic #inline func fast<typename T>(T value) -> T { return value }
-```
-
-See [Generics](20-generics.md) for the full reference.
+A function declaration may be a `#generic` template. Generic function
+declarations, explicit type/value arguments, overload signatures, and call
+resolution are documented in [Generics](20-generics.md).
 
 ## 19.15 Named and Optional Arguments
 
@@ -2639,6 +2606,7 @@ Generics are deliberately simple:
 - a primitive integer type declares a value parameter;
 - every use spells its arguments explicitly (`Box<int32>`, `foo<int32>(...)`);
 - there is no type-argument inference;
+- generic templates may be overloaded when their signatures differ;
 - unused templates are never checked or emitted.
 
 ## 20.1 Generic Structs
@@ -2828,7 +2796,7 @@ A self reference with different arguments means a different instance:
 ```
 
 Self references are resolved before the generated declaration is checked, so
-`view<Node>` in `Node<int32>` becomes `view<Node__...>`.
+`view<Node>` in `Node<int32>` refers to that same concrete instance.
 
 ## 20.6 Nested Generic Types
 
@@ -2850,24 +2818,11 @@ are expanded as part of binding the arguments.
 
 ## 20.7 Aggregate Literals
 
-A generic struct literal spells the arguments in the type:
-
-```franko
-Box<int32> b = Box<int32> { value = 7 }
-Pair<int32, uint8> p = Pair<int32, uint8> { first = 1, second = 2 }
-```
-
-As with concrete structs, a literal requires the instance to be
-value-assignable. A generic struct with an array field is pointer-only, so use
-the field-wise declaration form instead:
-
-```franko
-#generic struct Buffer<typename T, int32 N> {
-    [T, N] data
-}
-
-Buffer<int32, 4> b { }      // valid: direct field initialization
-```
+A generic struct literal spells the instance type, for example
+`Box<int32> { value = 7 }`. Literal construction and field-wise declaration
+initialization follow the ordinary rules in
+[Aggregate Literals](30-aggregate-literals.md); the instance must be
+value-assignable, so pointer-only generic structs use the field-wise form.
 
 ## 20.8 Namespaces and Imports
 
@@ -2996,21 +2951,42 @@ an instantiation depth of 64. Exceeding either limit is a compile error.
 Recursion with ever-changing arguments that never reaches a base case will
 hit the depth limit.
 
-## 20.13 Overloading Rules
+## 20.13 Generic Template Signatures
 
-Generic template overloading is not supported in this version. A namespace
-may contain at most one generic function template with a given name,
-regardless of its parameter list:
+Generic templates may be overloaded. A generic struct template is identified
+by its name and the ordered types of its generic parameters:
 
-```franko
-#generic func f<typename T>(T value) -> T { return value }
-#generic func f<int32 N>() -> int32 { return N }
-// error: duplicate generic template 'f'
+```text
+X<typename T, int32 N>   -> signature X<typename, int32>
+X<typename T, typename U> -> signature X<typename, typename>
 ```
 
-Concrete functions may share a name with a generic template. A call with
-explicit arguments uses the template; a call without arguments uses the
-concrete overloads:
+The template's fields and methods are not part of the signature. Two generic
+struct templates with the same signature are duplicate declarations.
+
+```franko
+#generic struct X<typename T, int32 N> { T value }
+#generic struct X<typename T, typename U> { T first; U second }
+
+X<int32, 4> a        // first template: 4 is a value argument
+X<int32, uint8> b    // second template: uint8 is a type argument
+```
+
+A generic function template is identified by its name, the ordered types of
+its generic parameters, and the ordered ordinary parameter types:
+
+```text
+f<typename T>(T)              -> signature f<typename>(T)
+f<int32 N>(int32)             -> signature f<int32>(int32)
+f<typename T>(T, int32)       -> signature f<typename>(T, int32)
+```
+
+Generic parameter names and ordinary parameter names are not part of the
+signature. The return type is not part of the signature either: two templates
+that differ only in their return type are duplicates.
+
+Concrete functions have their ordinary signature (`name` plus ordered
+parameter types) and remain separate from generic templates:
 
 ```franko
 #generic func f<typename T>(T value) -> T { return value }
@@ -3023,7 +2999,38 @@ f<uint8>(1)     // generic instance
 A generic struct name may not collide with a concrete struct or enum name in
 the same scope.
 
-## 20.14 Restrictions
+## 20.14 Generic Call Resolution
+
+A generic call supplies explicit type and value arguments. Those arguments
+first select the generic templates that accept their kinds and values:
+
+- a `typename` parameter accepts a type argument;
+- a primitive value parameter accepts a compile-time integer argument that
+  fits its declared type.
+
+When several templates accept the same value argument through different value
+parameter types, the narrowest fitting type wins, with signed preferred over
+unsigned at equal width. If candidates remain tied, a generic struct use is
+ambiguous and is rejected.
+
+Every remaining generic function candidate is then instantiated, and ordinary
+overload resolution chooses among the concrete instances using the actual
+call arguments, including pointer permission downgrades, array view decay,
+constant fitting, and optional arguments.
+
+```franko
+#generic func tag<typename T>(T value) -> int32 { return 1 }
+#generic func tag<typename T>(T first, T second) -> int32 { return 2 }
+
+tag<int32>(7)       // first template
+tag<int32>(7, 8)    // second template
+```
+
+Different templates may produce instances with the same ordinary parameter
+list when their generic argument lists differ; the generic arguments keep the
+instances distinct.
+
+## 20.15 Restrictions
 
 The following are not supported in this version:
 
@@ -3033,7 +3040,6 @@ The following are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- generic template overloading;
 - independent generic methods (methods with their own parameter list);
 - runtime generic representation, type erasure, vtables, or generic function
   values.
@@ -3048,7 +3054,7 @@ They cannot be used as identifiers.
 #inline #generic func bad<typename T>(T value) -> T { return value }   // invalid
 ```
 
-## 20.15 Grammar Disambiguation
+## 20.16 Grammar Disambiguation
 
 A suffix of the form `<...>(` immediately after a name is parsed as a generic
 call. A comparison chain that ends with a parenthesized operand must be
@@ -3061,7 +3067,7 @@ foo<int32>(1)       // generic call
 a < b > (c)         // parsed as a generic call; write (a < b) > (c)
 ```
 
-## 20.16 Complete Example
+## 20.17 Complete Example
 
 ```franko
 import "franko/stdio"
@@ -3102,7 +3108,7 @@ Output:
 21
 ```
 
-## 20.17 Naming Conventions
+## 20.18 Naming Conventions
 
 Type parameters conventionally use short uppercase names: `T`, `U`, `K`, `V`.
 Value parameters use short descriptive uppercase names such as `N`, `ROWS`,
@@ -3276,81 +3282,10 @@ a.uninit();
 An array literal is not an array value; arrays receive literal
 elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
-## 21.6 Array Lifetime Checking
-
-The compiler validates intrinsic legality and checks the initialization
-lifecycle of function-local dynamic array variables and owner `ptr<[T]>`
-aliases. Definite use before init, use after `uninit`, invalid free, and
-double free are compile errors; possible cases are warnings. Repeated `init`
-is not diagnosed because an earlier call may have failed with `-1` and a
-retry is valid; the runtime still aborts on a true double init. Missing an
-explicit `uninit()` is a warning because the runtime destructor still frees
-local buffers.
-
-A call is checked against what the callee does: a callee can require an
-initialized array, initialize, resize, or free the caller's array, or return
-an element pointer into it. An owner `ptr<[T]>` or whole-array
-`view<[T]>`/`mview<[T]>` points at the array object, which keeps the same
-address across `init`, `resize`, and `uninit`; those whole-array pointers
-remain valid. Only element pointers/views created from
-`getptr`/`getmview`/`getview(d[i])` point into the element buffer and are
-invalidated when the buffer is replaced or freed.
-
-An element pointer/view is tied to the buffer that existed when it was
-created. Using one whose buffer has definitely been replaced is an error; a
-possibly stale one is a warning. This applies at dereference, indexing,
-assignment through the alias, call argument, return, and creation intrinsics
-over the alias. A whole-array view is not an element alias and is never
-invalidated by `resize`/`uninit`. A call that may invalidate array parameter
-`i` while using an element-pointer parameter `j` that aliases `i` produces a
-possible cross-parameter invalidation warning. See
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
-
-The check does not yet cover:
-
-- dynamic arrays in struct fields or nested dynamic-array elements below the
-  outermost tracked array;
-- global dynamic-array lifecycle;
-- runtime bounds violations for nonconstant indexes;
-- allocation failure status of `init`/`init_zero`.
-
-## 21.7 Owning Pointers in Arrays
-
-An array may not store an owning `ptr<T>` value, directly or recursively:
-
-```franko
-[ptr<int32>] a;           // invalid
-[ptr<int32>, 4] b;        // invalid
-[[ptr<int32>]] c;         // invalid: nested
-[view<ptr<int32>>] d;     // invalid: the view's referent contains a ptr
-```
-
-`view<T>` and `mview<T>` elements are allowed, as long as their referent
-types do not recursively contain an owning pointer. This is a declaration-type
-error:
-
-```text
-owning pointer type 'ptr<T>' cannot appear inside an array, struct, or
-tuple, recursively (including through view<T>/mview<T> referents) ...
-```
-
-The reason is lifetime ownership: an owning pointer carries the right to
-allocate and free storage. Embedding one in an array lets that responsibility
-escape into unrelated code and makes the storage lifetime impossible to
-reason about. Keep owning pointers in direct variables, parameters, or
-globals, and use `view<T>`/`mview<T>` inside arrays. For linked or node-like
-data, use the pool allocator from `franko/pool`.
-
-When the goal is an array of arrays, prefer a nested array:
-
-```franko
-[[int32]] rows;       // good: the outer array owns the inner arrays
-[ptr<[int32]>] rows;  // invalid: ownership of inner arrays is passed around
-```
-
-A nested dynamic array owns its inner arrays, and `init`, `resize`, and
-`uninit` manage their storage and lifetime automatically. It is the safe way
-to represent a dynamically sized matrix or a list of buffers.
+Array lifecycle and buffer-invalidation rules are covered in
+[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
+Owning pointers are forbidden in arrays and other aggregates; see
+[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 ---
 
@@ -3619,7 +3554,7 @@ For function-local dynamic arrays, the compiler also reports definite use
 before init, use after `uninit`, invalid free, and double free.
 Repeated `init` is not diagnosed because an earlier call may have failed
 with `-1` and a retry is valid. See
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 
 | Intrinsic | Receiver | Returns | Status |
 |---|---|---|---|
@@ -4191,19 +4126,7 @@ func main() -> int32 {
 }
 ```
 
-## 24.6 Printing Strings
-
-`stdout` (from `franko/stdio`) prints text: a string literal is a `view<[byte, N]>` value that decays to the `stdout(view<[uint8]>)` overload, so it is written verbatim followed by a newline. Print individual byte values by indexing:
-
-```franko
-import "franko/stdio"
-
-stdout("hi")          // writes `hi` + newline
-stdout($("hi")[0])    // 104
-stdout($("hi")[1])    // 105
-```
-
-## 24.7 Empty Strings
+## 24.6 Empty Strings
 
 An empty string literal `""` is the `null` view: it is valid wherever a
 `view<[byte, ...]>` value is expected. It has no bytes and no element
@@ -4255,29 +4178,14 @@ array literal through a pointer). See
 
 ## 25.2 Array and Aggregate Literal Values
 
-Array literals are not assignment shorthand: they are `view<[T, N]>` values
-over immutable constant storage, exactly like string literals. Their element
-type is inferred from the surrounding assignment, return, or call-argument
-context. See [Array Literals](22-array-literals.md).
-
-Aggregate literals are likewise ordinary values, not statement shorthand: they
-construct a temporary struct or tuple value. See
+Array literals and aggregate literals are ordinary values, not declaration
+shorthand. See [Array Literals](22-array-literals.md) and
 [Aggregate Literals](30-aggregate-literals.md).
 
 ## 25.3 String Literal Values
 
-Every string literal is a read-only `view<[byte, N]>` over immutable
-storage holding its UTF-8 bytes. No null terminator is added, and
-identical literal texts share the same storage:
-
-```franko
-stdout($("ABC")[0]);
-```
-
-The literal has type `view<[byte, 3]>` and can be indexed after a
-dereference. Because a string literal is a view value, it cannot
-initialize or assign an array: copy the bytes with `memcpy` instead. See
-[String Literals](24-string-literals.md).
+String literals are read-only `view<[byte, N]>` values over immutable UTF-8
+storage. See [String Literals](24-string-literals.md).
 
 ## 25.4 Braceless Control-Flow Bodies
 
@@ -4381,30 +4289,8 @@ pointers, non-literal initializers) is rejected. See
 
 ## 25.7 Constant Expression Evaluation
 
-Constant expressions are evaluated at compile time in every
-constant-expression position:
-
-```franko
-[int32, 0x10] xs;   // size becomes 16
-int8 g = 1 + 2;          // initializer becomes 3 (globals)
-struct S {                 // field default becomes 8
-    int32 n = 1 << 3
-}
-```
-
-Static array sizes, global initializers, struct field defaults, and
-`break N` levels are reduced to concrete values. The values are then
-validated in context (positive sizes, `uint32` range, initializer fit)
-without folding anything again.
-
-Evaluation failures are compile errors:
-
-```franko
-[int32, 10 / 0] b;   // invalid: Division by zero in constant expression
-```
-
-Constant expressions inside ordinary code are also folded at compile
-time. See [Constant Folding](08-constant-folding.md).
+Constant-expression evaluation and folding are documented in
+[Constant Folding](08-constant-folding.md).
 
 ## 25.8 Increment and Decrement Equivalence
 
@@ -4592,7 +4478,7 @@ view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
 The implicit conversions for nonconstant values are pointer
 conversions: the permission downgrades below over an identical
 referenced type, and the static-to-dynamic array pointer view decay of
-[§25.4.1](#2541-static-to-dynamic-array-pointer-views):
+[§25.4.1](#2641-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
 - `mview<T>` implicitly casts to `view<T>`;
@@ -4860,7 +4746,7 @@ A callee's return carries the null state of the value it returns, and a callee
 that writes through a `ptr<ptr<T>>` parameter can update the caller's pointer
 variable. Each function still reports its own local maybe-null warnings.
 Dangling pointers are checked separately (see
-[Pointer Lifetime Limitations](#2511-pointer-lifetime-limitations) and
+[Pointer Lifetime Limitations](#2611-pointer-lifetime-limitations) and
 [Memory Safety Checking](32-memory-safety-checking.md)).
 
 ### 26.9.3 Dereferencing and Warnings
@@ -4883,125 +4769,19 @@ Guarding with `p != null` removes the warning, because the compiler refines the 
 
 ## 26.10 Capability Linter
 
-To encourage safe, data-oriented design, the compiler tracks the
-highest permission each `ptr`/`mview` local variable and parameter
-actually exercises and produces a non-fatal **warning** recommending a
-downgrade when elevated permissions go unused (global variables are not
-linted: their uses span functions, so a per-variable recommendation is not
-meaningful):
-
-- a `ptr<T>` that never exercises allocation or lifecycle rights
-  (no `init`/`init_zero`/`resize`/`uninit`, no use where a `ptr<T>` is
-  expected):
-
-  > *'ptr<T> p' never exercises allocation or lifecycle permissions. Consider downgrading to 'mview<T>' for tighter security.*
-
-- a `ptr<T>` or `mview<T>` that is only ever read from:
-
-  > *'mview<T> v' is only ever read from. Consider downgrading to 'view<T>' for maximum safety.*
-
-Exercising *allocation* means lifecycle intrinsics, `getptr` over the
-variable's region, or using it where a `ptr<T>` is expected (argument,
-return, assignment into a `ptr` slot, method `self`). *Mutation* means
-assignment through its region, `memset`/`memcpy`/`memmove`, the byte/bit
-mutators (`write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`,
-`shift_bits_*`), or use where an `mview<T>` is expected. *Read* covers
-everything else, including `length()`, `memcmp`, `memchr`, `memmem`, the
-`read_*` accessors, `read_bit`, and `count_set_bits`.
-
-Because these are warnings, they do not fail the build. They exist to
-passively teach developers to default to immutable, non-owning pointers
-(`view` and `mview`) whenever possible, minimizing the risk of accidental
-memory corruption.
+The capability linter warns when a `ptr` or `mview` local or parameter never
+uses the permissions it requests. The full warning rules are in
+[Capability Linting](32-memory-safety-checking.md#328-capability-linting).
 
 ## 26.11 Pointer Lifetime Limitations
 
-Pointer lifetime is not fully tracked, but the compiler detects dangling
-pointers returned from a function, stored into global or caller-owned
-storage, forwarded through callees that perform such a store, and used after
-an inner block or loop body has ended.
-
-The compiler rejects a `return` of a pointer to a local variable, a
-parameter, or any field/element of one, including through pointer copies,
-`$(...)` aliases, and branches. It also rejects a dereference of a pointer
-whose pointee is a local variable from a block that has already ended. Pointer
-values are followed through function calls, so an escape performed by a
-callee is reported at the call site.
-
-A return that only *may* refer to local storage after a branch is a
-warning; a definite escape is an error. Safe returns include pointer
-parameters, pointers obtained from global storage or from
-`getptr($(pointerParameter))`, literal-backed views, existing global
-views, and decayed views of parameters or global storage. A decayed view
-of local array storage is rejected as an ordinary frame-storage escape:
-the view refers to the local array itself.
-
-What remains untracked:
-
-- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
-- pointer fields inside structs or other aggregates when the escape does not
-  go through a direct global or out-parameter store;
-- global dynamic-array lifecycle;
-- escapes that occur only through very deep or recursive call chains.
-
-Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
-(see
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
+Dangling-pointer checking, escape rules, and their remaining limitations are
+documented in [Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
 ## 26.12 Prefer Pool Indices to Linked Nodes
 
-For many programs, pool allocation is a safer and faster alternative to
-linked nodes built from pointers. Instead of a `ptr<Node> next` field
-(which is not allowed inside a struct), give each live object an index from a pool allocator, store object
-data in parallel payload arrays, and store links as `uint32` indices.
-The pool recycles indices deterministically, and its generational
-variants detect stale handles. The full API is in
-[franko/pool](../library_docs/pool.md).
-
-```franko
-import "franko/stdio"
-import "franko/pool"
-
-func main() -> int32 {
-    [int32] payload;
-    [uint32] next;
-    payload.init(8);
-    next.init(8);
-
-    std::SparseSetAllocator nodes;
-    nodes.init(8);
-
-    (uint32 idx, int32 err) first = nodes.new_index();
-    (uint32 idx, int32 err) second = nodes.new_index();
-    if (first.err != 0 || second.err != 0) {
-        return 1;
-    }
-    uint32 a = first.idx;
-    uint32 b = second.idx;
-
-    payload[a] = 10;
-    payload[b] = 20;
-    next[a] = b;                // replaces a node's `next` pointer
-    next[b] = 0xFFFFFFFF;       // end of the list
-
-    uint32 i = a;
-    while (i != 0xFFFFFFFF) {
-        stdout(payload[i]);
-        i = next[i];
-    }
-
-    nodes.free_index(a);
-    nodes.free_index(b);
-    nodes.uninit();
-    next.uninit();
-    payload.uninit();
-    return 0;
-}
-```
-
-A node handle is now the pair of its pool index and (for a generational
-pool) its generation; releasing a slot invalidates stale handles instead
-of leaving a dangling pointer.
+Pool allocation and index-based links are covered in
+[Pool Allocation](33-pool-allocation.md#331-prefer-pool-indices-to-linked-nodes).
 
 ## 26.13 Owning Pointers in Aggregates Are Forbidden
 
@@ -5076,7 +4856,7 @@ p.y = 4;
 stdout(p.x + p.y);
 ```
 
-Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](10-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](38-examples.md).
+Structs are nominal types: two distinct struct declarations are distinct types even when their field layouts are identical (see [Type Equality](10-type-equality.md)). This chapter is the complete struct reference; running examples live in [Examples](38-examples.md). Generic struct templates are covered in [Generics](20-generics.md).
 
 ## 27.1 Declaring a Struct
 
@@ -5113,7 +4893,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](23-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -5267,38 +5047,11 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `stdout` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
 - Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
-- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 - A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); a dynamic-array field breaks the cycle.
 - A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).
-
-## 27.11 Generic Structs
-
-A struct may be declared as a generic template:
-
-```franko
-#generic struct Box<typename T> {
-    T value
-}
-```
-
-Every use supplies explicit arguments (`Box<int32>`). Inside the struct body,
-the bare struct name refers to the current instantiation, and a use with the
-current arguments is equivalent:
-
-```franko
-#generic struct Node<typename T> {
-    T value
-    view<Node> next
-    [Node<T>] children
-}
-```
-
-Methods use the struct's parameters directly. Independent generic methods are
-not supported. Each concrete instance is an ordinary nominal struct type with
-its own fields, methods, and assignability rules. See
-[Generics](20-generics.md).
 
 ---
 
@@ -5409,7 +5162,7 @@ receiver is an lvalue reached through an inner pointer (for example
 `$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
 pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
 array, struct, or tuple; see
-[Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 Rules:
 
@@ -5576,7 +5329,7 @@ The `other` parameter is call-scoped: it may only be used during the operator
 call. Storing it into caller-owned or global storage is rejected; storing it
 in a local variable is allowed because the local dies before the operator
 call returns (see
-[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)).
 
 ---
 
@@ -5614,7 +5367,7 @@ Rules:
 - each element may carry an optional declaration-site name;
 - tuple types may appear wherever an ordinary declared type is allowed;
 - `void` is not a valid tuple element type;
-- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 A tuple declaration uses the tuple type followed by the variable name:
 
@@ -5943,7 +5696,7 @@ Tuples are deliberately limited to ordinary aggregate values:
   signature;
 - at least two elements are required;
 - a tuple containing a static array or dynamic array is pointer-only;
-- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)).
+- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden)).
 
 Tuple values are produced by declarations, element writes, aggregate
 literals, whole-tuple assignment, and function returns.
@@ -6001,7 +5754,7 @@ Literal lit = Literal { x = 0, def = 1 }
 ```
 
 Aggregate literals are expressions, but they are only valid in the specific
-value-consuming contexts listed in [Allowed Expression Contexts](#296-allowed-expression-contexts).
+value-consuming contexts listed in [Allowed Expression Contexts](#306-allowed-expression-contexts).
 They are local-only: no global aggregate initializers exist.
 
 ## 30.1 Struct Literal Expressions
@@ -6800,7 +6553,7 @@ Franko checks two independent properties of pointers: **null state**
 and **dangling storage**. Both checks cover all three pointer types
 (`ptr`, `mview`, and `view`). A third check tracks the initialization
 lifecycle and buffer reuse of function-local dynamic arrays (see
-[Dynamic-Array Lifecycle Checking](#2910-dynamic-array-lifecycle-checking)).
+[Dynamic-Array Lifecycle Checking](#3210-dynamic-array-lifecycle-checking)).
 
 The checks also follow values across function calls. Passing a null pointer to
 a function that uses it, forwarding a pointer to local storage into global or
@@ -7291,23 +7044,6 @@ The check does not detect:
 - use of an element pointer after its root array's scope ends; that is
   reported as a dangling-pointer error instead.
 
-## 32.11 Analysis Resource Limits
-
-The memory-safety checks have a compiler resource limit, so one extremely large
-or complex function cannot exhaust the compiler's memory. The limit applies to
-all three checks. Most functions are far below it.
-
-A function is more likely to reach the limit when it combines many pointer
-variables and assignment statements with deeply nested branches and loops. If
-the limit is reached, compilation fails with an error at the function
-declaration; it does not continue with incomplete safety results. The error
-names the function and asks you to split it into smaller functions or reduce
-deeply nested branches and loops. Splitting the function is the main remedy.
-
-This is a compiler resource limit, not a language rule. Reaching it does not by
-itself mean the program is invalid; the compiler simply cannot complete the
-memory-safety check for that function within its memory budget.
-
 ---
 
 # 33. Pool Allocation
@@ -7353,6 +7089,61 @@ Slot indices are cheap to copy, compare, and store, and a generational
 pool distinguishes a live index from one that was recycled, so a stale
 handle is detectable. The pool tracks indices only; the payload that an
 index selects belongs to the program.
+
+## 33.1 Prefer Pool Indices to Linked Nodes
+
+For many programs, pool allocation is a safer and faster alternative to
+linked nodes built from pointers. Instead of a `ptr<Node> next` field
+(which is not allowed inside a struct), give each live object an index from a
+pool allocator, store object data in parallel payload arrays, and store links
+as `uint32` indices. The pool recycles indices deterministically, and its
+generational variants detect stale handles. The full API is in
+[franko/pool](../library_docs/pool.md).
+
+```franko
+import "franko/stdio"
+import "franko/pool"
+
+func main() -> int32 {
+    [int32] payload;
+    [uint32] next;
+    payload.init(8);
+    next.init(8);
+
+    std::SparseSetAllocator nodes;
+    nodes.init(8);
+
+    (uint32 idx, int32 err) first = nodes.new_index();
+    (uint32 idx, int32 err) second = nodes.new_index();
+    if (first.err != 0 || second.err != 0) {
+        return 1;
+    }
+    uint32 a = first.idx;
+    uint32 b = second.idx;
+
+    payload[a] = 10;
+    payload[b] = 20;
+    next[a] = b;                // replaces a node's `next` pointer
+    next[b] = 0xFFFFFFFF;       // end of the list
+
+    uint32 i = a;
+    while (i != 0xFFFFFFFF) {
+        stdout(payload[i]);
+        i = next[i];
+    }
+
+    nodes.free_index(a);
+    nodes.free_index(b);
+    nodes.uninit();
+    next.uninit();
+    payload.uninit();
+    return 0;
+}
+```
+
+A node handle is now the pair of its pool index and (for a generational
+pool) its generation; releasing a slot invalidates stale handles instead
+of leaving a dangling pointer.
 
 The pool allocator API is documented in
 [`franko/pool`](../library_docs/pool.md).
@@ -8098,38 +7889,7 @@ stdout(#is_comparable(p));     // 1
 
 ---
 
-## 35.9 FFI Target Selection
-
-The intended use of declaration-level `#if` is to select platform-specific
-declarations and calls. Only the selected branch is compiled, so the other
-platform's functions do not need to exist on the current target:
-
-```franko
-import "franko/os"
-import "franko/stdio"
-
-func main() -> int32 {
-    [byte] msg;
-    msg.init(5);
-    msg.memcpy("hello");
-
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(h, getview(msg), 5, null);
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        os::posix::write(os::posix::STDIN_FILENO, getview(msg), 5);
-    }
-
-    msg.uninit();
-    return 0;
-}
-```
-
-An unguarded off-target FFI call still fails when building for that target.
-
----
-
-## 35.10 Restrictions and Edge Cases
+## 35.9 Restrictions and Edge Cases
 
 - `#if` cannot appear in a `for` header.
 - The `#if` condition must be a compile-time constant integer. A local
@@ -8151,7 +7911,7 @@ An unguarded off-target FFI call still fails when building for that target.
   arguments to other `#` intrinsics.
 - Declaration-level `#if` cannot wrap imports.
 
-## 35.11 Common Mistakes
+## 35.10 Common Mistakes
 
 A local variable is not a compile-time constant:
 
@@ -8201,7 +7961,7 @@ view<[byte, 5]> spelling = #what_type(int32)
 Remember that the unselected branch is still parsed. Its syntax must be
 valid, even though its names and types are never analyzed.
 
-## 35.12 Reflection and Generics
+## 35.11 Reflection and Generics
 
 Compile-time reflection in a generic declaration runs after the template is
 instantiated, so predicates see the concrete argument:
@@ -8316,7 +8076,7 @@ at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
 outermost tracked array, global dynamic-array lifecycle, allocation failure
 status, or all runtime bounds properties. See
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking).
+[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 
 ## 36.10 Pointer Lifetime Is Not Fully Tracked
 
@@ -8332,7 +8092,7 @@ original array, so they
 are safe to return when that storage is a parameter or global; a decayed view
 of local array storage is still caught as a normal frame-storage escape.
 Escapes through very deep or recursive call chains may be missed. See
-[Dangling-Pointer Checking](32-memory-safety-checking.md#299-dangling-pointer-checking).
+[Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
 ## 36.11 Output Is a Library Function
 
@@ -8404,13 +8164,13 @@ call returns. Forwarding the borrowed view to a callee that stores it is
 also rejected. Ordinary non-operator methods with `view<T>` parameters are
 checked the same way when their arguments are forwarded to a function that
 stores them. See
-[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)
+[Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)
 and [Operators](13-operators.md#1310-struct-operator-overloading).
 
 ## 36.18 Tuple Restrictions
 
 Tuple restrictions are documented in
-[Tuples](29-tuples.md#2810-restrictions).
+[Tuples](29-tuples.md#2910-restrictions).
 
 ## 36.19 Enum Restrictions
 
@@ -8440,7 +8200,7 @@ pointers in direct variables, parameters, and globals, or use the pool
 allocator in `franko/pool` for linked or node-like data. For an array of
 arrays, use a nested array such as `[[T]]`; the outer array owns the inner
 arrays and manages their lifetime. See
-[Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 ## 36.21 Generic Restrictions
 
@@ -8453,9 +8213,6 @@ are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- generic template overloading (one generic function template per name per
-  namespace, and no generic struct name collision with a concrete struct or
-  enum);
 - independent generic methods (methods with their own `#generic` parameter
   list);
 - runtime generic representation, type erasure, vtables, or generic function
@@ -8607,7 +8364,7 @@ Operator methods are the other fixed-name exception: `OPERATOR_EQ`,
 `OPERATOR_MOV`, and the other reserved `OPERATOR_*` names are exact,
 uppercase, and not renamed to snake case. They are reserved for struct
 operator methods and rejected on free functions. See
-[Operator Methods](28-methods.md#2710-operator-methods).
+[Operator Methods](28-methods.md#2810-operator-methods).
 
 ## 37.4 Variables and Fields
 

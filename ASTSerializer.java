@@ -87,6 +87,14 @@ public final class ASTSerializer {
                     obj.put("generic", true);
                     obj.put("genericParams", nodeArray(node.genericParams, sources));
                 }
+
+                if (node.genericGroup != null) {
+                    obj.put("genericGroup", node.genericGroup);
+                }
+
+                if (node.genericHash != null) {
+                    obj.put("genericHash", node.genericHash);
+                }
             }
             case PARAMETER -> {
                 obj.put("node", node.kind.jsonName());
@@ -111,6 +119,14 @@ public final class ASTSerializer {
                 if (node.isGeneric) {
                     obj.put("generic", true);
                     obj.put("genericParams", nodeArray(node.genericParams, sources));
+                }
+
+                if (node.genericHash != null) {
+                    obj.put("genericHash", node.genericHash);
+                }
+
+                if (node.genericBaseName != null) {
+                    obj.put("genericBaseName", node.genericBaseName);
                 }
             }
             case GENERIC_PARAM -> {
@@ -325,6 +341,10 @@ public final class ASTSerializer {
                 if (node.hasNamedArguments()) {
                     obj.put("argumentNames", stringArray(node.argumentNames));
                 }
+
+                if (node.genericGroup != null) {
+                    obj.put("genericGroup", node.genericGroup);
+                }
             }
             case GET_PTR -> {
                 obj.put("node", node.kind.jsonName());
@@ -414,6 +434,8 @@ public final class ASTSerializer {
                     node.isGeneric = true;
                 }
 
+                node.genericGroup = obj.optString("genericGroup");
+                node.genericHash = obj.optString("genericHash");
                 return node;
             }
             case PARAMETER: return AstNode.parameter(
@@ -438,6 +460,8 @@ public final class ASTSerializer {
                     node.isGeneric = true;
                 }
 
+                node.genericHash = obj.optString("genericHash");
+                node.genericBaseName = obj.optString("genericBaseName");
                 return node;
             }
             case GENERIC_PARAM: {
@@ -655,13 +679,15 @@ public final class ASTSerializer {
                                     + args.size());
                 }
 
-                return AstNode.call(
+                AstNode call = AstNode.call(
                         span,
                         nodeFromJson(obj.requireObject("callee"), sources),
                         args,
                         genericArgsFromJson(obj, sources),
                         argumentNames
                 );
+                call.genericGroup = obj.optString("genericGroup");
+                return call;
             }
             case GET_PTR: return AstNode.getPtr(
                     span,

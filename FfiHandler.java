@@ -103,6 +103,10 @@ final class FfiHandler {
                         declaration.span,
                         "FFI error: bridge file '" + match.bridgePath
                                 + "' is missing block '" + match.blockName + "'"
+                                + ". Every bridged function needs a matching"
+                                + " // @@ block that supplies its C++"
+                                + " definition. Add the block to the bridge"
+                                + " file or correct the function's bridge metadata."
                 ));
                 continue;
             }
@@ -117,6 +121,10 @@ final class FfiHandler {
                                 + match.qualifiedName
                                 + "' (expected emitted name '"
                                 + match.emittedName + "')"
+                                + ". The bridge block must define the C++ symbol"
+                                + " for this Franko function so linking succeeds."
+                                + " Add or update the definition in that block to"
+                                + " use the emitted name."
                 ));
             }
         }
@@ -172,6 +180,10 @@ final class FfiHandler {
             diagnostics.add(Diagnostic.error(
                     span,
                     "FFI error: bridged function has no bridge file"
+                            + ". The compiler needs a C++ bridge file to supply"
+                            + " the function body. Declare a bridge file in the"
+                            + " module manifest or remove the function from the"
+                            + " module's FFI list."
             ));
             return null;
         }
@@ -187,6 +199,10 @@ final class FfiHandler {
             diagnostics.add(Diagnostic.error(
                     span,
                     "FFI error: bridge file '" + path + "' is missing"
+                            + ". A manifest entry is only usable when its"
+                            + " bridge file exists at the declared path."
+                            + " Create the file at that path or correct the"
+                            + " manifest's bridge entry."
             ));
             return null;
         }
@@ -200,6 +216,10 @@ final class FfiHandler {
                     span,
                     "FFI error: cannot read bridge file '" + path
                             + "': " + e.getMessage()
+                            + ". FFI code generation needs the bridge text to"
+                            + " emit the C++ definitions. Check the file's"
+                            + " permissions and encoding, then re-run the"
+                            + " compiler."
             ));
             return null;
         }
@@ -209,7 +229,14 @@ final class FfiHandler {
         try {
             bridge = FfiBridge.parse(text);
         } catch (IllegalArgumentException e) {
-            diagnostics.add(Diagnostic.error(span, e.getMessage()));
+            diagnostics.add(Diagnostic.error(
+                    span,
+                    e.getMessage()
+                            + ". Bridge files are split into named // @@ blocks"
+                            + " so each bridged function can be emitted. Fix the"
+                            + " block markers or names described above and"
+                            + " re-run the compiler."
+            ));
             return null;
         }
 

@@ -95,7 +95,7 @@ view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
 The implicit conversions for nonconstant values are pointer
 conversions: the permission downgrades below over an identical
 referenced type, and the static-to-dynamic array pointer view decay of
-[§25.4.1](#2541-static-to-dynamic-array-pointer-views):
+[§25.4.1](#2641-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
 - `mview<T>` implicitly casts to `view<T>`;
@@ -363,7 +363,7 @@ A callee's return carries the null state of the value it returns, and a callee
 that writes through a `ptr<ptr<T>>` parameter can update the caller's pointer
 variable. Each function still reports its own local maybe-null warnings.
 Dangling pointers are checked separately (see
-[Pointer Lifetime Limitations](#2511-pointer-lifetime-limitations) and
+[Pointer Lifetime Limitations](#2611-pointer-lifetime-limitations) and
 [Memory Safety Checking](32-memory-safety-checking.md)).
 
 ### 26.9.3 Dereferencing and Warnings
@@ -386,125 +386,19 @@ Guarding with `p != null` removes the warning, because the compiler refines the 
 
 ## 26.10 Capability Linter
 
-To encourage safe, data-oriented design, the compiler tracks the
-highest permission each `ptr`/`mview` local variable and parameter
-actually exercises and produces a non-fatal **warning** recommending a
-downgrade when elevated permissions go unused (global variables are not
-linted: their uses span functions, so a per-variable recommendation is not
-meaningful):
-
-- a `ptr<T>` that never exercises allocation or lifecycle rights
-  (no `init`/`init_zero`/`resize`/`uninit`, no use where a `ptr<T>` is
-  expected):
-
-  > *'ptr<T> p' never exercises allocation or lifecycle permissions. Consider downgrading to 'mview<T>' for tighter security.*
-
-- a `ptr<T>` or `mview<T>` that is only ever read from:
-
-  > *'mview<T> v' is only ever read from. Consider downgrading to 'view<T>' for maximum safety.*
-
-Exercising *allocation* means lifecycle intrinsics, `getptr` over the
-variable's region, or using it where a `ptr<T>` is expected (argument,
-return, assignment into a `ptr` slot, method `self`). *Mutation* means
-assignment through its region, `memset`/`memcpy`/`memmove`, the byte/bit
-mutators (`write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`,
-`shift_bits_*`), or use where an `mview<T>` is expected. *Read* covers
-everything else, including `length()`, `memcmp`, `memchr`, `memmem`, the
-`read_*` accessors, `read_bit`, and `count_set_bits`.
-
-Because these are warnings, they do not fail the build. They exist to
-passively teach developers to default to immutable, non-owning pointers
-(`view` and `mview`) whenever possible, minimizing the risk of accidental
-memory corruption.
+The capability linter warns when a `ptr` or `mview` local or parameter never
+uses the permissions it requests. The full warning rules are in
+[Capability Linting](32-memory-safety-checking.md#328-capability-linting).
 
 ## 26.11 Pointer Lifetime Limitations
 
-Pointer lifetime is not fully tracked, but the compiler detects dangling
-pointers returned from a function, stored into global or caller-owned
-storage, forwarded through callees that perform such a store, and used after
-an inner block or loop body has ended.
-
-The compiler rejects a `return` of a pointer to a local variable, a
-parameter, or any field/element of one, including through pointer copies,
-`$(...)` aliases, and branches. It also rejects a dereference of a pointer
-whose pointee is a local variable from a block that has already ended. Pointer
-values are followed through function calls, so an escape performed by a
-callee is reported at the call site.
-
-A return that only *may* refer to local storage after a branch is a
-warning; a definite escape is an error. Safe returns include pointer
-parameters, pointers obtained from global storage or from
-`getptr($(pointerParameter))`, literal-backed views, existing global
-views, and decayed views of parameters or global storage. A decayed view
-of local array storage is rejected as an ordinary frame-storage escape:
-the view refers to the local array itself.
-
-What remains untracked:
-
-- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
-- pointer fields inside structs or other aggregates when the escape does not
-  go through a direct global or out-parameter store;
-- global dynamic-array lifecycle;
-- escapes that occur only through very deep or recursive call chains.
-
-Dynamic-array buffer lifetime across `resize`/`uninit` is checked separately
-(see
-[Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#2910-dynamic-array-lifecycle-checking)).
+Dangling-pointer checking, escape rules, and their remaining limitations are
+documented in [Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
 ## 26.12 Prefer Pool Indices to Linked Nodes
 
-For many programs, pool allocation is a safer and faster alternative to
-linked nodes built from pointers. Instead of a `ptr<Node> next` field
-(which is not allowed inside a struct), give each live object an index from a pool allocator, store object
-data in parallel payload arrays, and store links as `uint32` indices.
-The pool recycles indices deterministically, and its generational
-variants detect stale handles. The full API is in
-[franko/pool](../library_docs/pool.md).
-
-```franko
-import "franko/stdio"
-import "franko/pool"
-
-func main() -> int32 {
-    [int32] payload;
-    [uint32] next;
-    payload.init(8);
-    next.init(8);
-
-    std::SparseSetAllocator nodes;
-    nodes.init(8);
-
-    (uint32 idx, int32 err) first = nodes.new_index();
-    (uint32 idx, int32 err) second = nodes.new_index();
-    if (first.err != 0 || second.err != 0) {
-        return 1;
-    }
-    uint32 a = first.idx;
-    uint32 b = second.idx;
-
-    payload[a] = 10;
-    payload[b] = 20;
-    next[a] = b;                // replaces a node's `next` pointer
-    next[b] = 0xFFFFFFFF;       // end of the list
-
-    uint32 i = a;
-    while (i != 0xFFFFFFFF) {
-        stdout(payload[i]);
-        i = next[i];
-    }
-
-    nodes.free_index(a);
-    nodes.free_index(b);
-    nodes.uninit();
-    next.uninit();
-    payload.uninit();
-    return 0;
-}
-```
-
-A node handle is now the pair of its pool index and (for a generational
-pool) its generation; releasing a slot invalidates stale handles instead
-of leaving a dangling pointer.
+Pool allocation and index-based links are covered in
+[Pool Allocation](33-pool-allocation.md#331-prefer-pool-indices-to-linked-nodes).
 
 ## 26.13 Owning Pointers in Aggregates Are Forbidden
 

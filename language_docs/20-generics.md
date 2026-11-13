@@ -12,6 +12,7 @@ Generics are deliberately simple:
 - a primitive integer type declares a value parameter;
 - every use spells its arguments explicitly (`Box<int32>`, `foo<int32>(...)`);
 - there is no type-argument inference;
+- generic templates may be overloaded when their signatures differ;
 - unused templates are never checked or emitted.
 
 ## 20.1 Generic Structs
@@ -201,7 +202,7 @@ A self reference with different arguments means a different instance:
 ```
 
 Self references are resolved before the generated declaration is checked, so
-`view<Node>` in `Node<int32>` becomes `view<Node__...>`.
+`view<Node>` in `Node<int32>` refers to that same concrete instance.
 
 ## 20.6 Nested Generic Types
 
@@ -223,24 +224,11 @@ are expanded as part of binding the arguments.
 
 ## 20.7 Aggregate Literals
 
-A generic struct literal spells the arguments in the type:
-
-```franko
-Box<int32> b = Box<int32> { value = 7 }
-Pair<int32, uint8> p = Pair<int32, uint8> { first = 1, second = 2 }
-```
-
-As with concrete structs, a literal requires the instance to be
-value-assignable. A generic struct with an array field is pointer-only, so use
-the field-wise declaration form instead:
-
-```franko
-#generic struct Buffer<typename T, int32 N> {
-    [T, N] data
-}
-
-Buffer<int32, 4> b { }      // valid: direct field initialization
-```
+A generic struct literal spells the instance type, for example
+`Box<int32> { value = 7 }`. Literal construction and field-wise declaration
+initialization follow the ordinary rules in
+[Aggregate Literals](30-aggregate-literals.md); the instance must be
+value-assignable, so pointer-only generic structs use the field-wise form.
 
 ## 20.8 Namespaces and Imports
 
@@ -369,21 +357,42 @@ an instantiation depth of 64. Exceeding either limit is a compile error.
 Recursion with ever-changing arguments that never reaches a base case will
 hit the depth limit.
 
-## 20.13 Overloading Rules
+## 20.13 Generic Template Signatures
 
-Generic template overloading is not supported in this version. A namespace
-may contain at most one generic function template with a given name,
-regardless of its parameter list:
+Generic templates may be overloaded. A generic struct template is identified
+by its name and the ordered types of its generic parameters:
 
-```franko
-#generic func f<typename T>(T value) -> T { return value }
-#generic func f<int32 N>() -> int32 { return N }
-// error: duplicate generic template 'f'
+```text
+X<typename T, int32 N>   -> signature X<typename, int32>
+X<typename T, typename U> -> signature X<typename, typename>
 ```
 
-Concrete functions may share a name with a generic template. A call with
-explicit arguments uses the template; a call without arguments uses the
-concrete overloads:
+The template's fields and methods are not part of the signature. Two generic
+struct templates with the same signature are duplicate declarations.
+
+```franko
+#generic struct X<typename T, int32 N> { T value }
+#generic struct X<typename T, typename U> { T first; U second }
+
+X<int32, 4> a        // first template: 4 is a value argument
+X<int32, uint8> b    // second template: uint8 is a type argument
+```
+
+A generic function template is identified by its name, the ordered types of
+its generic parameters, and the ordered ordinary parameter types:
+
+```text
+f<typename T>(T)              -> signature f<typename>(T)
+f<int32 N>(int32)             -> signature f<int32>(int32)
+f<typename T>(T, int32)       -> signature f<typename>(T, int32)
+```
+
+Generic parameter names and ordinary parameter names are not part of the
+signature. The return type is not part of the signature either: two templates
+that differ only in their return type are duplicates.
+
+Concrete functions have their ordinary signature (`name` plus ordered
+parameter types) and remain separate from generic templates:
 
 ```franko
 #generic func f<typename T>(T value) -> T { return value }
@@ -396,7 +405,38 @@ f<uint8>(1)     // generic instance
 A generic struct name may not collide with a concrete struct or enum name in
 the same scope.
 
-## 20.14 Restrictions
+## 20.14 Generic Call Resolution
+
+A generic call supplies explicit type and value arguments. Those arguments
+first select the generic templates that accept their kinds and values:
+
+- a `typename` parameter accepts a type argument;
+- a primitive value parameter accepts a compile-time integer argument that
+  fits its declared type.
+
+When several templates accept the same value argument through different value
+parameter types, the narrowest fitting type wins, with signed preferred over
+unsigned at equal width. If candidates remain tied, a generic struct use is
+ambiguous and is rejected.
+
+Every remaining generic function candidate is then instantiated, and ordinary
+overload resolution chooses among the concrete instances using the actual
+call arguments, including pointer permission downgrades, array view decay,
+constant fitting, and optional arguments.
+
+```franko
+#generic func tag<typename T>(T value) -> int32 { return 1 }
+#generic func tag<typename T>(T first, T second) -> int32 { return 2 }
+
+tag<int32>(7)       // first template
+tag<int32>(7, 8)    // second template
+```
+
+Different templates may produce instances with the same ordinary parameter
+list when their generic argument lists differ; the generic arguments keep the
+instances distinct.
+
+## 20.15 Restrictions
 
 The following are not supported in this version:
 
@@ -406,7 +446,6 @@ The following are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- generic template overloading;
 - independent generic methods (methods with their own parameter list);
 - runtime generic representation, type erasure, vtables, or generic function
   values.
@@ -421,7 +460,7 @@ They cannot be used as identifiers.
 #inline #generic func bad<typename T>(T value) -> T { return value }   // invalid
 ```
 
-## 20.15 Grammar Disambiguation
+## 20.16 Grammar Disambiguation
 
 A suffix of the form `<...>(` immediately after a name is parsed as a generic
 call. A comparison chain that ends with a parenthesized operand must be
@@ -434,7 +473,7 @@ foo<int32>(1)       // generic call
 a < b > (c)         // parsed as a generic call; write (a < b) > (c)
 ```
 
-## 20.16 Complete Example
+## 20.17 Complete Example
 
 ```franko
 import "franko/stdio"
@@ -475,7 +514,7 @@ Output:
 21
 ```
 
-## 20.17 Naming Conventions
+## 20.18 Naming Conventions
 
 Type parameters conventionally use short uppercase names: `T`, `U`, `K`, `V`.
 Value parameters use short descriptive uppercase names such as `N`, `ROWS`,

@@ -54,6 +54,9 @@ final class AstNode {
     List<AstNode> updateItems;
     List<AstNode> genericParams;
     List<AstNode> genericArgs;
+    String genericGroup;
+    String genericHash;
+    String genericBaseName;
     List<String> names;
     List<String> argumentNames = List.of();
     List<BigInteger> literalBytes;
@@ -727,6 +730,9 @@ final class AstNode {
         copy.updateItems = updateItems;
         copy.genericParams = genericParams;
         copy.genericArgs = genericArgs;
+        copy.genericGroup = genericGroup;
+        copy.genericHash = genericHash;
+        copy.genericBaseName = genericBaseName;
         copy.names = names;
         copy.argumentNames = argumentNames;
         copy.literalBytes = literalBytes;

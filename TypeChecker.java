@@ -347,7 +347,10 @@ public class TypeChecker {
         }
 
         if (isVoidType(expr.type)) {
-            diagnostics.error(where + " cannot be void");
+            diagnostics.error(where
+                    + " cannot be void. A void expression produces no value, so it cannot"
+                    + " be used where a value is required. Use a value-producing"
+                    + " expression here, or move the void call to its own statement.");
             return false;
         }
 
@@ -376,49 +379,80 @@ public class TypeChecker {
 
     public void ensureNotVoid(SastType t, String message) {
         if (isVoidType(t)) {
-            diagnostics.error(message + ", got void");
+            diagnostics.error(message
+                    + ", got void. A void expression has no value to satisfy this"
+                    + " requirement. Use an expression of the required value type instead.");
         }
     }
 
     public void ensureIntegral(SastType t, String message) {
         if (!isIntegral(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". Franko accepts only primitive integer types here, with no"
+                    + " implicit conversion from enums, pointers, or aggregates. Use a"
+                    + " primitive integer expression, or convert the value with an"
+                    + " explicit integer cast.");
         }
     }
 
     public void ensureSignedIntegral(SastType t, String message) {
         if (!isSignedIntegral(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". This operation needs a signed integer so negative values keep"
+                    + " their meaning. Use int8, int16, int32, or int64, or cast to a"
+                    + " signed type explicitly.");
         }
     }
 
     public void ensureUnsignedIntegral(SastType t, String message) {
         if (!isUnsignedIntegral(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". This operation needs an unsigned integer so the value cannot be"
+                    + " negative. Use an unsigned integer type, and ensure any converted"
+                    + " value is nonnegative.");
         }
     }
 
     public void ensureArrayType(SastType t, String message) {
         if (!isArrayType(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". This operation needs array storage so it can use the element"
+                    + " type and length. Use a dynamic array ([T]) or static array"
+                    + " ([T, N]); dereference an array pointer with $(...) first.");
         }
     }
 
     public void ensureDynamicArrayType(SastType t, String message) {
         if (!isDynamicArrayType(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". Only dynamic arrays have a runtime length and owned heap"
+                    + " storage that this operation can manage. Declare the receiver as"
+                    + " [T], or avoid init/resize/uninit on a static array.");
         }
     }
 
     public void ensureStaticArrayType(SastType t, String message) {
         if (!isStaticArrayType(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". This operation needs a fixed-size array whose length is known"
+                    + " at compile time. Use a static array ([T, N]) instead of a dynamic"
+                    + " array.");
         }
     }
 
     public void ensurePointerType(SastType t, String message) {
         if (!isPointerType(t)) {
-            diagnostics.error(message + ", got " + describeSafe(t));
+            diagnostics.error(message
+                    + ", got " + describeSafe(t)
+                    + ". This operation requires a pointer to stored data, not a plain"
+                    + " value. Pass a ptr<T>, view<T>, or mview<T> value, or take a"
+                    + " pointer with getview(...) or getptr(...).");
         }
     }
 
@@ -428,10 +462,14 @@ public class TypeChecker {
             String message
     ) {
         if (!sameType(expected, actual)) {
-            diagnostics.error(message + ": expected "
+            diagnostics.error(message
+                    + ": expected "
                     + describeSafe(expected)
                     + ", got "
-                    + describeSafe(actual));
+                    + describeSafe(actual)
+                    + ". Franko requires exact type equality here and performs no"
+                    + " implicit conversion. Convert the value explicitly, or change the"
+                    + " expression to the expected type.");
         }
     }
 
@@ -449,14 +487,22 @@ public class TypeChecker {
         }
 
         if (isArrayType(type)) {
-            diagnostics.error(message + ": arrays cannot be returned directly; use ptr<"
+            diagnostics.error(message
+                    + ": arrays cannot be returned directly. Returning an array by"
+                    + " value would need to transfer or copy its storage, and Franko has"
+                    + " no array value-copy semantics. Return ptr<"
                     + type.describe()
-                    + "> instead");
+                    + "> instead, or write through a ptr<...> output parameter.");
             return;
         }
 
-        diagnostics.error(message + ": invalid function return type "
-                + describeSafe(type));
+        diagnostics.error(message
+                + ": invalid function return type "
+                + describeSafe(type)
+                + ". A return type must be void or a value-assignable type: a"
+                + " primitive, pointer, enum, or struct/tuple whose fields are all"
+                + " value-assignable. Replace the return type with a supported one, or"
+                + " return the value through a pointer.");
     }
 
     public void ensureAssignable(
@@ -470,12 +516,18 @@ public class TypeChecker {
         }
 
         if (isVoidType(targetType)) {
-            diagnostics.error(message + ": cannot assign to void type");
+            diagnostics.error(message
+                    + ": cannot assign to void type. A void type has no storage, so"
+                    + " there is nothing to assign into. Remove the assignment or give"
+                    + " the target a concrete value type.");
             return;
         }
 
         if (isVoidType(expr.type)) {
-            diagnostics.error(message + ": cannot assign void value");
+            diagnostics.error(message
+                    + ": cannot assign void value. A void expression produces no value"
+                    + " to store. Use a value-producing expression on the right-hand"
+                    + " side, or make the void call a separate statement.");
             return;
         }
 
@@ -483,7 +535,11 @@ public class TypeChecker {
             if (!(targetType.kind == SastTypeKind.PTR)) {
                 diagnostics.error(message
                         + ": null is only valid for pointer types, got target "
-                        + targetType.describe());
+                        + targetType.describe()
+                        + ". Null represents the absence of a pointer, not a value for"
+                        + " primitives, enums, arrays, structs, or tuples. Assign null"
+                        + " to a ptr<T> target, or initialize this target with a"
+                        + " concrete value.");
             }
             return;
         }
@@ -493,69 +549,109 @@ public class TypeChecker {
                     && expr.type.kind == SastTypeKind.PTR
                     && isArrayType(expr.type.referencedType)) {
                 if (isStringLiteralView(expr)) {
-                    diagnostics.error(message + ": a string literal is a "
+                    diagnostics.error(message
+                            + ": a string literal is a "
                             + expr.type.describe()
-                            + " value and cannot be assigned to an array; copy "
-                            + "the bytes with '<target>.memcpy(<source>)'");
+                            + " value and cannot be assigned to an array. String"
+                            + " literals are read-only views over global bytes, and"
+                            + " arrays are populated by explicit copies rather than"
+                            + " value assignment. Copy the bytes with"
+                            + " '<target>.memcpy(<source>)' instead.");
                 } else if (isArrayLiteralView(expr)) {
-                    diagnostics.error(message + ": an array literal is a "
+                    diagnostics.error(message
+                            + ": an array literal is a "
                             + expr.type.describe()
-                            + " value and cannot be assigned to an array; copy "
-                            + "the elements with '<target>.memcpy(<source>)'");
+                            + " value and cannot be assigned to an array. Array"
+                            + " literals are read-only views over global elements, and"
+                            + " arrays are populated by explicit copies rather than"
+                            + " value assignment. Copy the elements with"
+                            + " '<target>.memcpy(<source>)' instead.");
                 } else {
-                    diagnostics.error(message + ": "
+                    diagnostics.error(message
+                            + ": "
                             + expr.type.describe()
-                            + " cannot be assigned to an array; copy "
-                            + "the bytes with '<target>.memcpy(<source>)'");
+                            + " cannot be assigned to an array. Array assignment would"
+                            + " need to copy an unknown length, so Franko only copies"
+                            + " arrays through explicit intrinsics. Copy the bytes with"
+                            + " '<target>.memcpy(<source>)' instead.");
                 }
                 return;
             }
 
-            diagnostics.error(message + ": arrays cannot be directly assigned");
+            diagnostics.error(message
+                    + ": arrays cannot be directly assigned. Arrays are"
+                    + " storage-backed values, and ordinary assignment does not copy"
+                    + " their elements or manage their lifetime. Copy the elements with"
+                    + " '<target>.memcpy(<source>)' or an explicit loop.");
             return;
         }
 
         if (targetType.kind == SastTypeKind.STRUCT
                 && !isValueAssignableType(targetType)) {
-            diagnostics.error(message + ": struct type "
+            diagnostics.error(message
+                    + ": struct type "
                     + targetType.describe()
                     + " contains non-assignable fields and cannot be assigned"
-                    + " as a whole value");
+                    + " as a whole value. A struct is value-assignable only when every"
+                    + " field is a primitive, pointer, enum, or another"
+                    + " value-assignable struct/tuple; arrays require explicit copying."
+                    + " Assign the fields individually, or copy array fields with"
+                    + " memcpy.");
             return;
         }
 
         if (targetType.kind == SastTypeKind.TUPLE
                 && !isValueAssignableType(targetType)) {
-            diagnostics.error(message + ": tuple type "
+            diagnostics.error(message
+                    + ": tuple type "
                     + targetType.describe()
                     + " contains non-assignable elements and cannot be"
-                    + " assigned as a whole value");
+                    + " assigned as a whole value. A tuple is value-assignable only"
+                    + " when every element is a primitive, pointer, enum, or another"
+                    + " value-assignable struct/tuple; arrays require explicit copying."
+                    + " Assign the elements individually, or copy array elements with"
+                    + " memcpy.");
             return;
         }
 
         if (targetType.kind == SastTypeKind.ENUM) {
             if (expr.type.kind == SastTypeKind.ENUM) {
                 if (expr.type.enumSymbol != targetType.enumSymbol) {
-                    diagnostics.error(message + ": expected "
+                    diagnostics.error(message
+                            + ": expected "
                             + targetType.describe()
                             + ", got "
-                            + expr.type.describe());
+                            + expr.type.describe()
+                            + ". Enum values are nominally typed, so values of"
+                            + " different enum types never convert implicitly. Use a"
+                            + " variant of the expected enum, or convert through the"
+                            + " enum's backing integer with an explicit cast.");
                 }
                 return;
             }
 
-            diagnostics.error(message + ": expected "
+            diagnostics.error(message
+                    + ": expected "
                     + targetType.describe()
                     + ", got "
-                    + expr.type.describe());
+                    + expr.type.describe()
+                    + ". An enum is a distinct nominal type and cannot be"
+                    + " interchanged with its backing integer or other values. Assign a"
+                    + " variant of the expected enum, or use unsafe_cast<Enum>(integer)"
+                    + " when the integer is a valid representation.");
             return;
         }
 
         if (expr.type.kind == SastTypeKind.ENUM) {
-            diagnostics.error(message + ": expected "
+            diagnostics.error(message
+                    + ": expected "
                     + targetType.describe()
                     + ", got "
-                    + expr.type.describe());
+                    + expr.type.describe()
+                    + ". An enum value does not implicitly convert to its backing"
+                    + " integer or to other types. Assign a value of the target type, or"
+                    + " cast the enum to a primitive integer first when assigning to an"
+                    + " integer target.");
             return;
         }
 
@@ -571,10 +667,15 @@ public class TypeChecker {
             }
 
             if (!sameType(targetType, expr.type)) {
-                diagnostics.error(message + ": expected "
+                diagnostics.error(message
+                        + ": expected "
                         + targetType.describe()
                         + ", got "
-                        + expr.type.describe());
+                        + expr.type.describe()
+                        + ". Franko does not insert implicit integer conversions, so"
+                        + " the expression must already have the expected type. Use a"
+                        + " value of that type, or add an explicit cast (or"
+                        + " unsafe_cast when narrowing).");
             }
 
             return;
@@ -586,10 +687,14 @@ public class TypeChecker {
         }
 
         if (!sameType(targetType, expr.type)) {
-            diagnostics.error(message + ": expected "
+            diagnostics.error(message
+                    + ": expected "
                     + targetType.describe()
                     + ", got "
-                    + expr.type.describe());
+                    + expr.type.describe()
+                    + ". This context requires the exact target type and performs no"
+                    + " implicit conversion. Convert the value explicitly, or change"
+                    + " the expression to the expected type.");
         }
     }
 
@@ -614,10 +719,14 @@ public class TypeChecker {
             String message
     ) {
         if (!fitsBigIntegerToPrimitive(value, kind)) {
-            diagnostics.error(message + ": constant value "
+            diagnostics.error(message
+                    + ": constant value "
                     + value
                     + " does not fit in "
-                    + targetType.describe());
+                    + targetType.describe()
+                    + ". The target type cannot represent this value, and Franko"
+                    + " never truncates or wraps constants silently. Choose a wider"
+                    + " target type, or adjust the constant to fit its range.");
         }
     }
 
@@ -659,7 +768,11 @@ public class TypeChecker {
             diagnostics.error("Operands of '" + op + "' must have the same integer type, got "
                     + left.type.describe()
                     + " and "
-                    + right.type.describe());
+                    + right.type.describe()
+                    + ". Franko does not implicitly promote or convert mixed integer"
+                    + " widths, because that could hide sign changes or truncation."
+                    + " Cast one operand explicitly to the other's type, or make both"
+                    + " operands the same type.");
         }
     }
 
@@ -733,7 +846,10 @@ public class TypeChecker {
             }
 
             if (right.constantValue.signum() < 0) {
-                diagnostics.error("Right operand of '" + op + "' cannot be negative");
+                diagnostics.error("Right operand of '" + op + "' cannot be negative. A"
+                        + " shift count is a bit offset, so a negative value has no"
+                        + " defined meaning. Use a nonnegative constant or an unsigned"
+                        + " expression.");
                 return;
             }
 
@@ -741,7 +857,10 @@ public class TypeChecker {
 
             if (leftKind == null) {
                 diagnostics.error("Left operand of '" + op + "' must be a primitive integer, got "
-                        + describeSafe(left.type));
+                        + describeSafe(left.type)
+                        + ". The left operand determines the bit width and signedness of"
+                        + " the shift result. Use a primitive integer value, or cast the"
+                        + " operand to one first.");
                 return;
             }
 
@@ -810,10 +929,14 @@ public class TypeChecker {
         }
 
         if (!fitsBigIntegerToPrimitive(value, kind)) {
-            diagnostics.error(message + ": constant value "
+            diagnostics.error(message
+                    + ": constant value "
                     + value
                     + " does not fit in "
-                    + kind.name().toLowerCase());
+                    + kind.name().toLowerCase()
+                    + ". The target type cannot represent this value, and Franko"
+                    + " never truncates or wraps constants silently. Choose a wider type"
+                    + " or adjust the value to fit the target's range.");
         }
     }
 
@@ -838,6 +961,46 @@ public class TypeChecker {
 
         return value.compareTo(min) >= 0
                 && value.compareTo(max) <= 0;
+    }
+
+    public static SemanticPrimitiveKind defaultConstantPrimitive(
+            BigInteger value
+    ) {
+        if (value == null) {
+            return null;
+        }
+
+        for (SemanticPrimitiveKind kind : new SemanticPrimitiveKind[]{
+                SemanticPrimitiveKind.INT8,
+                SemanticPrimitiveKind.INT16,
+                SemanticPrimitiveKind.INT32,
+                SemanticPrimitiveKind.INT64
+        }) {
+            if (fitsBigIntegerToPrimitive(value, kind)) {
+                return kind;
+            }
+        }
+
+        if (value.signum() >= 0
+                && fitsBigIntegerToPrimitive(
+                        value,
+                        SemanticPrimitiveKind.UINT64)) {
+            return SemanticPrimitiveKind.UINT64;
+        }
+
+        return null;
+    }
+
+    public static int primitiveFitCost(
+            BigInteger value,
+            SemanticPrimitiveKind kind
+    ) {
+        if (!fitsBigIntegerToPrimitive(value, kind)) {
+            return Integer.MAX_VALUE;
+        }
+
+        int unsignedPenalty = isSigned(kind) ? 0 : 1;
+        return 1 + 2 * bitWidth(kind) + unsignedPenalty;
     }
 
     public static int bitWidth(SemanticPrimitiveKind kind) {

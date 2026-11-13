@@ -8,24 +8,29 @@ the Franko language (`.fr` and `.franko`).
 - TextMate syntax highlighting for Franko
 - `//` line comments
 - Bracket matching and auto-closing for `{}`, `[]`, and `()`
-- Function, struct, namespace, if, for, and tuple snippets
+- Function, struct, enum, namespace, if, for, and tuple snippets
 - Generic struct and generic function snippets, plus `#generic` and
   `typename` highlighting
+- Array and byte-array intrinsics, enum declarations, compile-time
+  reflection, and pointer operations
 
 This is a declarative TextMate highlighting extension. It does not provide
 compiler diagnostics, IntelliSense, or a language server.
 
 The grammar covers the syntax in `Franko.g4`: primitive integer types and
-aliases, `ptr`/`mview`/`view`, tuple types, `#if`/`#else`,
-`$()` dereference, `cast`/`unsafe_cast`, `getptr`/`getmview`/`getview`,
-namespace qualification with `::`, return arrows, and compound assignment
-operators.
+aliases, `ptr`/`mview`/`view`, tuple and enum types, `struct`/`enum`
+declarations, generic templates, `#if`/`#else`, `$()` dereference,
+`cast`/`unsafe_cast`, `getptr`/`getmview`/`getview`, array and byte-array
+intrinsics, namespace qualification with `::`, return arrows, and compound
+assignment operators.
 
 Highlighting categories are separated by TextMate scope:
 
-- `func`, `struct`, `namespace`, and `import` share the declaration category.
-- `if`, `else`, `while`, `for`, `break`, `continue`, and `return` share the
-  control-flow category.
+- `func`, `struct`, `enum`, `namespace`, and `import` share the declaration
+  category.
+- `if`, `else`, `while`, `for`, `break`, `continue`, `return`, `#if`, and
+  `#else` use control-flow categories.
+- Array and byte-array intrinsics use a built-in array-function category.
 - `#if` and `#else` use a compile-time-control category.
 - `#IS_*` target constants and `#name(...)` reflection functions use
   compile-time constant/function categories.
@@ -49,7 +54,7 @@ npm run package
 Then install the generated `.vsix`:
 
 ```bash
-code --install-extension franko-0.1.0.vsix
+code --install-extension franko-0.1.1.vsix
 ```
 
 Reload VS Code after installation.

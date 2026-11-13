@@ -14,7 +14,7 @@ An **owning** pointer (`ptr<T>`) may not appear inside an array, struct, or
 tuple, recursively. `mview<T>` and `view<T>` are allowed in aggregates, but
 their referent types may not recursively contain an owning `ptr<T>`. This is a
 type-validity error, not a warning; see
-[Pointers](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Pointers](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 Valid:
 

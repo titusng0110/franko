@@ -45,7 +45,7 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a declared enum type (see [Enums](31-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden)); or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden)); or
 - a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
 - a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
 
@@ -106,12 +106,12 @@ where `mview`/`view` of `[T]` is expected; see
 `cast<T>(x)` explicitly to move a value across integer widths (see
 [Casts](12-casts.md)).
 
-For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. When a constant fits several overloads, the constant-fit preference applies: the parameter matching the constant's own type wins when the value fits, otherwise the narrowest fitting type wins (signed before unsigned at equal width). See [Fluid Integer Constants](07-fluid-integer-constants.md).
+For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. An untyped constant uses the narrowest fitting parameter type, with signed preferred over unsigned at equal width; an explicitly typed constant prefers an exact parameter type before falling back to that rule. See [Fluid Integer Constants](07-fluid-integer-constants.md).
 
 Overload preference: among applicable overloads, ones matched without any
 conversion win over converting ones, and among the rest the ones relying
 on the fewest conversions win, with a decay counted heavier than a pure
-permission downgrade. Constant arguments then prefer the lowest constant-fit cost (own type, then narrowest, signed first). If several overloads remain
+permission downgrade. Constant arguments then prefer the lowest constant-fit cost (exact type first for typed constants, otherwise narrowest, signed first). If several overloads remain
 tied, the call is ambiguous and is rejected.
 
 ## 19.7 Bare Function Names
@@ -196,11 +196,9 @@ Struct methods follow the same signature, overload, and return rules with an exp
 
 ## 19.12 Compile-Time Intrinsics
 
-The built-in `#name(...)` functions (`#is_primitive`, `#what_type`,
-`#strcmp`, `#strcat`, and the rest) are compile-time functions, not
-callable values. They are resolved at compile time; they cannot be stored
-in a variable, passed as a function argument, or referred to without a
-call. See [Compile-Time Reflection](35-compile-time-reflection.md).
+The built-in `#name(...)` functions are compile-time expressions, not
+functions or callable values. Their full rules are in
+[Compile-Time Reflection](35-compile-time-reflection.md).
 
 ## 19.13 Inlining Modifiers
 
@@ -251,33 +249,9 @@ FFI-bridged functions are provided by their bridge and ignore them.
 
 ## 19.14 Generic Functions
 
-A function declaration may be a generic template:
-
-```franko
-#generic func identity<typename T>(T value) -> T {
-    return value
-}
-```
-
-Every call supplies explicit type and value arguments:
-
-```franko
-identity<int32>(7)
-```
-
-There is no type-argument inference. A generic function name used without
-arguments is an error unless a concrete function with the same name is also
-declared. Generic template overloading is not supported: a namespace may
-contain at most one generic function template per name, while concrete
-functions may share that name.
-
-`#generic` must precede `#inline`/`#noinline`:
-
-```franko
-#generic #inline func fast<typename T>(T value) -> T { return value }
-```
-
-See [Generics](20-generics.md) for the full reference.
+A function declaration may be a `#generic` template. Generic function
+declarations, explicit type/value arguments, overload signatures, and call
+resolution are documented in [Generics](20-generics.md).
 
 ## 19.15 Named and Optional Arguments
 

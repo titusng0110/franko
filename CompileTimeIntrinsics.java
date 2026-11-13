@@ -60,7 +60,10 @@ final class CompileTimeIntrinsics {
             ctx.error("#"
                     + call.name
                     + " is only valid as an expression statement or "
-                    + "declaration-level item");
+                    + "declaration-level item. This intrinsic returns void and "
+                    + "is evaluated for its compile-time side effect, so it "
+                    + "cannot produce a value in an expression. Call it as a "
+                    + "standalone statement or declaration-level directive.");
             return fallback(call.span);
         }
 
@@ -142,7 +145,10 @@ final class CompileTimeIntrinsics {
 
         ctx.error("Unknown compile-time reflection function '#"
                 + name
-                + "'");
+                + "'. Only the documented built-in # functions such as "
+                + "#is_primitive, #strcmp, and #strcat are recognized during "
+                + "compilation. Check the spelling or replace the call with a "
+                + "supported compile-time reflection function.");
         return null;
     }
 
@@ -166,7 +172,10 @@ final class CompileTimeIntrinsics {
             try {
                 ctx.error("Unknown compile-time reflection name '#"
                         + name
-                        + "'");
+                        + "'. Compile-time names are limited to the five "
+                        + "target constants #IS_LINUX, #IS_WINDOWS, #IS_MACOS, "
+                        + "#IS_X86_64, and #IS_ARM64. Check the spelling or use "
+                        + "one of the supported target constants.");
             } finally {
                 ctx.diagnostics().pop();
             }
@@ -273,7 +282,10 @@ final class CompileTimeIntrinsics {
     private StaticValue evaluateStrcat(String name, List<AstNode> args) {
         if (args.isEmpty()) {
             ctx.error("#strcat expects at least one compile-time string "
-                    + "argument");
+                    + "argument. Concatenation needs a first string to produce "
+                    + "a result, and an empty string literal is the null view "
+                    + "with no bytes. Pass one or more compile-time string "
+                    + "literals or #strcat results.");
             return null;
         }
 
@@ -395,7 +407,12 @@ final class CompileTimeIntrinsics {
                         + " argument "
                         + position
                         + " must be a compile-time string, got "
-                        + describeStaticValue(value));
+                        + describeStaticValue(value)
+                        + ". This intrinsic consumes its string arguments at "
+                        + "compile time, so a runtime value or a non-string "
+                        + "compile-time result cannot be used. Pass a string "
+                        + "literal or a compile-time string expression such "
+                        + "as #strcat.");
                 return null;
             }
 
@@ -406,7 +423,12 @@ final class CompileTimeIntrinsics {
                     + " argument "
                     + position
                     + " must be a compile-time string, got "
-                    + describeArgumentKind(arg));
+                    + describeArgumentKind(arg)
+                    + ". This intrinsic consumes its string arguments at "
+                    + "compile time, so a runtime value or a non-string "
+                    + "compile-time result cannot be used. Pass a string "
+                    + "literal or a compile-time string expression such as "
+                    + "#strcat.");
             return null;
         }
 
@@ -417,7 +439,10 @@ final class CompileTimeIntrinsics {
         if (bytes.isEmpty()) {
             ctx.error("Empty string literals are not supported: "
                     + "a string literal is a view<[byte, N]> value with "
-                    + "N >= 1");
+                    + "N >= 1. An empty literal is the null view and has no "
+                    + "bytes for this compile-time operation to consume. Write "
+                    + "at least one character in the literal or pass a "
+                    + "non-empty string expression.");
             return null;
         }
 
@@ -500,7 +525,15 @@ final class CompileTimeIntrinsics {
                 + " argument"
                 + (expected == 1 ? "" : "s")
                 + ", got "
-                + args.size());
+                + args.size()
+                + ". This compile-time intrinsic has a fixed parameter list "
+                + "that is checked before evaluation. Pass exactly "
+                + expected
+                + " argument"
+                + (expected == 1 ? "" : "s")
+                + " to '#"
+                + name
+                + "'.");
 
         return false;
     }
@@ -514,7 +547,11 @@ final class CompileTimeIntrinsics {
                         + name
                         + " argument '"
                         + arg.name
-                        + "' is not a declared variable or type");
+                        + "' is not a declared variable or type. Compile-time "
+                        + "reflection resolves this argument before runtime, so "
+                        + "it must name an in-scope variable, global, struct, "
+                        + "enum, or type. Declare the name first or pass an "
+                        + "existing type or variable.");
                 return null;
             }
 
@@ -548,7 +585,11 @@ final class CompileTimeIntrinsics {
             ctx.error("#"
                     + name
                     + " argument must be a variable identifier or a type, got "
-                    + describeStaticValue(value));
+                    + describeStaticValue(value)
+                    + ". Compile-time reflection needs a symbol whose type it "
+                    + "can inspect, and this expression has no resolvable "
+                    + "declaration. Pass a variable name or a type instead of "
+                    + "an expression.");
             return null;
         }
 
@@ -559,7 +600,10 @@ final class CompileTimeIntrinsics {
         ctx.error("#"
                 + name
                 + " argument must be a variable identifier or a type, got "
-                + describeArgumentKind(arg));
+                + describeArgumentKind(arg)
+                + ". Compile-time reflection needs a symbol whose type it can "
+                + "inspect, and this expression has no resolvable declaration. "
+                + "Pass a variable name or a type instead of an expression.");
 
         return null;
     }
@@ -592,7 +636,11 @@ final class CompileTimeIntrinsics {
                     + name
                     + " argument '"
                     + struct.name
-                    + "' is not a declared variable or type");
+                    + "' is not a declared variable or type. Compile-time "
+                    + "reflection resolves this argument before runtime, so it "
+                    + "must name an in-scope variable, global, struct, enum, "
+                    + "or type. Declare the name first or pass an existing type "
+                    + "or variable.");
             return null;
         }
 
@@ -610,7 +658,10 @@ final class CompileTimeIntrinsics {
         if (namespace == null) {
             ctx.error("Unknown namespace '"
                     + String.join("::", struct.names)
-                    + "'");
+                    + "'. The namespace path must name a namespace visible at "
+                    + "this point, because reflection resolves qualified names "
+                    + "before runtime. Check the spelling or import the module "
+                    + "that declares the namespace.");
             return null;
         }
 
@@ -638,7 +689,11 @@ final class CompileTimeIntrinsics {
                 + String.join("::", struct.names)
                 + "::"
                 + struct.name
-                + "' is not a declared variable or type");
+                + "' is not a declared variable or type. Compile-time "
+                + "reflection resolves this argument before runtime, so it "
+                + "must name an in-scope variable, global, struct, enum, or "
+                + "type. Declare the name first or pass an existing type or "
+                + "variable.");
         return null;
     }
 
@@ -664,7 +719,10 @@ final class CompileTimeIntrinsics {
         if (namespace == null) {
             ctx.error("Unknown namespace '"
                     + String.join("::", namespaceSegments)
-                    + "'");
+                    + "'. The namespace path must name a namespace visible at "
+                    + "this point, because reflection resolves qualified names "
+                    + "before runtime. Check the spelling or import the module "
+                    + "that declares the namespace.");
             return null;
         }
 
@@ -695,7 +753,11 @@ final class CompileTimeIntrinsics {
                 + name
                 + " argument '"
                 + String.join("::", qualified.names)
-                + "' is not a declared variable or type");
+                + "' is not a declared variable or type. Compile-time "
+                + "reflection resolves this argument before runtime, so it "
+                + "must name an in-scope variable, global, struct, enum, or "
+                + "type. Declare the name first or pass an existing type or "
+                + "variable.");
         return null;
     }
 

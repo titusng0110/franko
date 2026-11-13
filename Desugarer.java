@@ -203,7 +203,11 @@ public class Desugarer {
     private AstNode desugarStructMember(AstNode item) {
         if (item.kind == AstKind.STRUCT_FIELD_DECL) {
             if (item.isConst) {
-                diagnostics.error("Struct fields cannot be const");
+                diagnostics.error("Struct fields cannot be const. A struct is "
+                    + "made const as a whole through its declaration or "
+                    + "receiver, and individual fields cannot carry a separate "
+                    + "const qualifier. Remove 'const' from the field and make "
+                    + "the struct value const where needed.");
             }
 
             return AstNode.structFieldDecl(
@@ -249,7 +253,7 @@ public class Desugarer {
             }
         }
 
-        return AstNode.structDecl(
+        AstNode node = AstNode.structDecl(
             n.span,
             n.name,
             fields,
@@ -257,6 +261,9 @@ public class Desugarer {
             members,
             n.genericParams
         );
+        node.genericHash = n.genericHash;
+        node.genericBaseName = n.genericBaseName;
+        return node;
     }
 
     private AstNode desugarEnumDecl(AstNode n) {
@@ -280,7 +287,10 @@ public class Desugarer {
         if (usesInferredSize(n.type)) {
             diagnostics.error("'?' array size is not allowed for global variable '"
                 + n.name
-                + "'; '?' is only allowed in a local declaration with an array-literal initializer");
+                + "'. Global storage is laid out before main runs, and '?' "
+                + "can only be inferred from a local declaration's "
+                + "array-literal initializer. Replace '?' with an explicit "
+                + "size or move the declaration into a function.");
 
             return globalVarDecl(
                 n,
@@ -299,7 +309,11 @@ public class Desugarer {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': a string literal is a view<[byte, N]> value "
-                    + "and cannot initialize a non-pointer global");
+                    + "and cannot initialize a non-pointer global. The global "
+                    + "itself needs pointer storage to hold the view produced "
+                    + "by the literal. Declare the global as a pointer type "
+                    + "such as view<[byte, N]> or initialize it with a value "
+                    + "of its declared type.");
 
                 return globalVarDecl(n, type, null);
             }
@@ -316,7 +330,11 @@ public class Desugarer {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': only pointer-typed globals may be initialized with "
-                    + "an array literal");
+                    + "an array literal. An array literal is a read-only "
+                    + "view<[T, N]> value, not an array value, so it cannot "
+                    + "initialize array or scalar storage. Declare the global "
+                    + "as a view<[T, N]> or copy the literal into an array "
+                    + "with memcpy.");
 
                 return globalVarDecl(n, type, null);
             }
@@ -333,7 +351,10 @@ public class Desugarer {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': only pointer-typed globals may be initialized with "
-                    + "getptr/getmview/getview");
+                    + "getptr/getmview/getview. These operations produce a "
+                    + "pointer or view, so a non-pointer global has no "
+                    + "compatible storage for the result. Change the global's "
+                    + "type to the matching ptr, view, or mview type.");
 
                 return globalVarDecl(n, type, null);
             }
@@ -345,7 +366,11 @@ public class Desugarer {
             if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
-                    + "': null is only valid for pointer types");
+                    + "': null is only valid for pointer types. Franko uses "
+                    + "null specifically as the absent pointer value, and "
+                    + "scalar or aggregate globals have no null state. Declare "
+                    + "the global with a ptr, view, or mview type or initialize "
+                    + "it with a concrete value.");
 
                 return globalVarDecl(n, type, null);
             }
@@ -388,7 +413,7 @@ public class Desugarer {
             body = AstNode.block(fn.body.span, desugarStmtList(fn.body.items));
         }
 
-        return AstNode.functionDecl(
+        AstNode node = AstNode.functionDecl(
             fn.span,
             fn.name,
             parameters,
@@ -397,6 +422,9 @@ public class Desugarer {
             fn.inlineMode,
             fn.genericParams
         );
+        node.genericGroup = fn.genericGroup;
+        node.genericHash = fn.genericHash;
+        return node;
     }
 
     private AstNode desugarParameter(AstNode param) {
@@ -544,7 +572,11 @@ public class Desugarer {
         if (type.kind != AstKind.STRUCT_TYPE
                 && type.kind != AstKind.TUPLE_TYPE) {
             diagnostics.error(
-                    "Field initializer requires a struct or tuple declaration"
+                    "Field initializer requires a struct or tuple declaration. "
+                    + "The '{ field = value }' initializer form only has "
+                    + "meaning for aggregate types with named members. Declare "
+                    + "the variable as a struct or tuple type or use '=' with "
+                    + "a normal expression initializer."
             );
 
             out.add(AstNode.varDecl(n.span, type, n.name, n.isConst));
@@ -568,7 +600,11 @@ public class Desugarer {
         if (anyPositional) {
             if (!unnamedTuple) {
                 diagnostics.error("Positional field initializers are only "
-                        + "allowed for all-unnamed tuple declarations");
+                        + "allowed for all-unnamed tuple declarations. Struct "
+                        + "fields and named tuple elements must be initialized "
+                        + "by name so the target member is unambiguous. Name "
+                        + "each entry or use a tuple type whose elements are "
+                        + "all unnamed.");
 
                 out.add(AstNode.varDeclFieldsInit(
                         n.span,
@@ -582,7 +618,11 @@ public class Desugarer {
 
             if (anyNamed) {
                 diagnostics.error("Cannot mix positional and named tuple "
-                        + "element initializers");
+                        + "element initializers. A tuple initializer must "
+                        + "choose one mapping from entries to elements, "
+                        + "because positional order and explicit names can "
+                        + "disagree. Use either all positional entries or all "
+                        + "named entries.");
 
                 out.add(AstNode.varDeclFieldsInit(
                         n.span,
@@ -601,7 +641,10 @@ public class Desugarer {
                         + n.fields.size()
                         + " entries but the tuple type has only "
                         + type.elements.size()
-                        + " elements");
+                        + " elements. Each positional entry consumes one tuple "
+                        + "element, so extra entries have no target. Remove "
+                        + "the extra entries or declare a tuple type with more "
+                        + "elements.");
 
                 out.add(AstNode.varDeclFieldsInit(
                         n.span,
@@ -631,7 +674,11 @@ public class Desugarer {
             if (!seen.add(fieldName)) {
                 diagnostics.push(init.span);
                 diagnostics.error(
-                        "Duplicate initializer for field '" + fieldName + "'"
+                        "Duplicate initializer for field '" + fieldName
+                                + "'. A field-wise initializer assigns each "
+                                + "member at most once, so a second entry would "
+                                + "silently overwrite the first. Remove or "
+                                + "rename the duplicate entry."
                 );
                 diagnostics.pop();
                 continue;
@@ -712,9 +759,11 @@ public class Desugarer {
             diagnostics.error("'?' array size for '"
                 + varName
                 + "' requires a 'view<[...]>' declaration with an "
-                + "array-literal initializer, e.g. 'view<[int32, ?]> "
+                + "array-literal initializer. Inference reads the literal's "
+                + "element count, and only a view declaration can hold the "
+                + "resulting read-only array view. Write 'view<[int32, ?]> "
                 + varName
-                + " = [...]'");
+                + " = [...]' or give the type an explicit size.");
 
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
@@ -724,7 +773,11 @@ public class Desugarer {
         if (!isFullyStaticArrayNest(nest)) {
             diagnostics.error("'?' size inference for '"
                 + varName
-                + "' requires a fully static array type");
+                + "' requires a fully static array type. A dynamic array "
+                + "level has no compile-time element count for '?' to infer, "
+                + "so every dimension in the nest must be a static array. "
+                + "Replace each dynamic '[T]' level with a static '[T, N]' or "
+                + "'?' level, or use an explicit dynamic view type.");
 
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
@@ -733,10 +786,12 @@ public class Desugarer {
             diagnostics.error("'?' array size for '"
                 + varName
                 + "' cannot be inferred from a string literal: a string "
-                + "literal is a view<[byte, N]> value; declare the size "
-                + "explicitly and copy the bytes with '"
+                + "literal is a view<[byte, N]> value. Its byte count comes "
+                + "from the string contents, not from an array-literal level "
+                + "that '?' can inspect. Declare the size explicitly and copy "
+                + "the bytes with '"
                 + varName
-                + ".memcpy(\"...\")'");
+                + ".memcpy(\"...\")'.");
 
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
@@ -746,7 +801,12 @@ public class Desugarer {
         if (literal == null) {
             diagnostics.error("'?' array size for '"
                 + varName
-                + "' requires an array-literal initializer");
+                + "' requires an array-literal initializer. The size is "
+                + "inferred from the literal's element count at the matching "
+                + "level, so another initializer form provides no count. "
+                + "Initialize '"
+                + varName
+                + "' with '[...]' or write an explicit size.");
 
             return desugarType(replaceInferredSizesWithFallback(declared));
         }
@@ -787,7 +847,10 @@ public class Desugarer {
             if (count == 0) {
                 throw new InferenceFailure("'?' array size for '"
                     + varName
-                    + "' cannot be inferred from an empty initializer list");
+                    + "' cannot be inferred from an empty initializer list. "
+                    + "An empty literal is the null view and carries no element "
+                    + "count for '?' to use. Add at least one element or write "
+                    + "an explicit size.");
             }
 
             sizeNode = AstNode.intLiteral(type.sizeExpr.span, Integer.toString(count));
@@ -801,7 +864,13 @@ public class Desugarer {
                     + count
                     + " elements but declared size is "
                     + declared
-                    + " (partial initialization is not allowed when '?' is used)");
+                    + " (partial initialization is not allowed when '?' is used). "
+                    + "When any dimension uses '?', the literal must match the "
+                    + "declared sizes exactly and may not leave elements "
+                    + "uninitialized. Add or remove elements so the count "
+                    + "matches "
+                    + declared
+                    + ", or remove '?' and initialize the array separately.");
             }
 
             sizeNode = type.sizeExpr;
@@ -818,7 +887,11 @@ public class Desugarer {
                 if (row == null) {
                     throw new InferenceFailure("'?' array size inference for '"
                         + varName
-                        + "' requires nested array literals");
+                        + "' requires nested array literals. The declared type "
+                        + "has another static array level, so each element must "
+                        + "itself be a literal with a row shape. Wrap each row "
+                        + "in '[...]' or change the declared type to a scalar "
+                        + "element type.");
                 }
 
                 rows.add(row);
@@ -850,7 +923,13 @@ public class Desugarer {
                 + "' has "
                 + count
                 + " elements but inferred size is "
-                + expected);
+                + expected
+                + ". The first row fixed the array width at "
+                + expected
+                + ", and every sibling row must match that static size. Add "
+                + "or remove elements so this row also has "
+                + expected
+                + " elements.");
         }
 
         if (!isStaticArrayLevel(concrete.type)) {
@@ -865,7 +944,10 @@ public class Desugarer {
             if (row == null) {
                 throw new InferenceFailure("'?' array size inference for '"
                     + varName
-                    + "' requires nested array literals");
+                    + "' requires nested array literals. The declared type has "
+                    + "another static array level, so each element must itself "
+                    + "be a literal with a row shape. Wrap each row in '[...]' "
+                    + "or change the declared type to a scalar element type.");
             }
 
             rows.add(row);
@@ -889,7 +971,11 @@ public class Desugarer {
             if (rows.get(i).elements.size() != first) {
                 throw new InferenceFailure("'?' array size inference for '"
                     + varName
-                    + "' requires a rectangular initializer list");
+                    + "' requires a rectangular initializer list. Nested "
+                    + "array literals are static at every level, so all rows "
+                    + "must have the same length for one size to describe "
+                    + "them. Add or remove elements so every row at each level "
+                    + "has the same length.");
             }
         }
     }
@@ -1229,12 +1315,14 @@ public class Desugarer {
                 args.add(desugarExpr(arg));
             }
 
-            return AstNode.call(expr.span,
+            AstNode call = AstNode.call(expr.span,
                 desugarExpr(expr.callee),
                 args,
                 desugarGenericArguments(expr.genericArgs),
                 expr.argumentNames
             );
+            call.genericGroup = expr.genericGroup;
+            return call;
         }
 
         if (expr.kind == AstKind.GET_PTR) {
@@ -1313,7 +1401,13 @@ public class Desugarer {
             if (e.getDiagnostic() != null) {
                 diagnostics.error(e.getDiagnostic());
             } else {
-                diagnostics.error("Invalid constant expression for " + role);
+                diagnostics.error("Invalid constant expression for "
+                    + role
+                    + ". This position requires a value the compiler can fold "
+                    + "before code generation, and the expression contains "
+                    + "something it cannot evaluate. Use integer literals and "
+                    + "operators over them, or move the computation out of the "
+                    + "constant context.");
             }
 
             return AstNode.intLiteral(expr.span, "1");
@@ -1400,7 +1494,12 @@ public class Desugarer {
 
         if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
             if (type.sizeExpr.kind == AstKind.INFERRED_SIZE) {
-                diagnostics.error("'?' array size is only allowed in a declaration with an array-literal initializer");
+                diagnostics.error("'?' array size is only allowed in a "
+                    + "declaration with an array-literal initializer. There is "
+                    + "no literal at this position whose element count could "
+                    + "supply the missing size. Replace '?' with an explicit "
+                    + "size or move the declaration to a local 'view<[...]>' "
+                    + "with an array-literal initializer.");
 
                 return AstNode.staticArrayType(
                     type.span,

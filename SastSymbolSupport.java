@@ -105,6 +105,14 @@ final class SastSymbolSupport {
             if (struct.isTuple) {
                 obj.put("tuple", true);
             }
+
+            if (struct.genericHash != null) {
+                obj.put("genericHash", struct.genericHash);
+            }
+
+            if (struct.genericBaseName != null) {
+                obj.put("genericBaseName", struct.genericBaseName);
+            }
         } else if (symbol instanceof EnumSymbol) {
             EnumSymbol enumSymbol = (EnumSymbol) symbol;
             obj.put("kind", "enum");
@@ -157,6 +165,14 @@ final class SastSymbolSupport {
 
                 if (sym.inlineMode != InlineMode.DEFAULT) {
                     obj.put("inlineMode", sym.inlineMode.name());
+                }
+
+                if (sym.genericGroup != null) {
+                    obj.put("genericGroup", sym.genericGroup);
+                }
+
+                if (sym.genericHash != null) {
+                    obj.put("genericHash", sym.genericHash);
                 }
             } else if (sym.kind == SymbolKind.PARAMETER) {
                 obj.put("kind", "parameter");
@@ -237,6 +253,8 @@ final class SastSymbolSupport {
                             obj.requireString("name"),
                             obj.has("tuple") && obj.requireBool("tuple")
                     );
+                    struct.genericHash = obj.optString("genericHash");
+                    struct.genericBaseName = obj.optString("genericBaseName");
                     registry.registerWithId(id, struct);
                     structShells.put(id, obj);
                 }
@@ -361,6 +379,8 @@ final class SastSymbolSupport {
                         isBuiltin
                 );
                 function.inlineMode = inlineMode;
+                function.genericGroup = obj.optString("genericGroup");
+                function.genericHash = obj.optString("genericHash");
                 registry.registerWithId(entry.getKey(), function);
             }
         }

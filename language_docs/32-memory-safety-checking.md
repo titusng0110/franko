@@ -4,7 +4,7 @@ Franko checks two independent properties of pointers: **null state**
 and **dangling storage**. Both checks cover all three pointer types
 (`ptr`, `mview`, and `view`). A third check tracks the initialization
 lifecycle and buffer reuse of function-local dynamic arrays (see
-[Dynamic-Array Lifecycle Checking](#2910-dynamic-array-lifecycle-checking)).
+[Dynamic-Array Lifecycle Checking](#3210-dynamic-array-lifecycle-checking)).
 
 The checks also follow values across function calls. Passing a null pointer to
 a function that uses it, forwarding a pointer to local storage into global or
@@ -494,20 +494,3 @@ The check does not detect:
 - every effect of a recursive or very deep call chain;
 - use of an element pointer after its root array's scope ends; that is
   reported as a dangling-pointer error instead.
-
-## 32.11 Analysis Resource Limits
-
-The memory-safety checks have a compiler resource limit, so one extremely large
-or complex function cannot exhaust the compiler's memory. The limit applies to
-all three checks. Most functions are far below it.
-
-A function is more likely to reach the limit when it combines many pointer
-variables and assignment statements with deeply nested branches and loops. If
-the limit is reached, compilation fails with an error at the function
-declaration; it does not continue with incomplete safety results. The error
-names the function and asks you to split it into smaller functions or reduce
-deeply nested branches and loops. Splitting the function is the main remedy.
-
-This is a compiler resource limit, not a language rule. Reaching it does not by
-itself mean the program is invalid; the compiler simply cannot complete the
-memory-safety check for that function within its memory budget.

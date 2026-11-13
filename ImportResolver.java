@@ -125,6 +125,10 @@ public class ImportResolver {
                     importNode.span,
                     "Import error: cannot read imported file"
                             + candidateDescription(pathText, target, importingFile)
+                            + ". Imports are loaded before analysis, so the"
+                            + " compiler must be able to read the target file."
+                            + " Check the path spelling and the -p import"
+                            + " directory."
             ));
             return;
         }
@@ -157,6 +161,9 @@ public class ImportResolver {
                             + "' in '"
                             + importingFile
                             + "' has no file name"
+                            + ". An import must name a .fr source file, not a"
+                            + " directory. Point the import at a concrete file"
+                            + " such as '../lib/foo.fr'."
             ));
             return pathText;
         }
@@ -174,6 +181,9 @@ public class ImportResolver {
                                 + "' in '"
                                 + importingFile
                                 + "' must reference a .fr file"
+                                + ". Franko only imports source files with the"
+                                + " .fr extension. Change the import path to end"
+                                + " in .fr."
                 ));
                 return pathText;
             }

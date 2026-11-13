@@ -65,7 +65,45 @@ public final class ExpressionAnalyzer {
             return lowerArrayLiteral(node, expectedType);
         }
 
-        return analyzeValueExpr(node);
+        return adoptExpectedConstant(analyzeValueExpr(node), expectedType);
+    }
+
+    private SastNode adoptExpectedConstant(
+            SastNode expr,
+            SastType expectedType
+    ) {
+        if (expr == null
+                || expectedType == null
+                || expectedType.kind != SastTypeKind.PRIMITIVE
+                || !expr.untypedConstant
+                || !expr.isConstant()
+                || expr.constantValue == null) {
+            return expr;
+        }
+
+        if (!TypeChecker.fitsBigIntegerToPrimitive(
+                expr.constantValue,
+                expectedType.primitive)) {
+            return expr;
+        }
+
+        expr.type = expectedType;
+        expr.untypedConstant = false;
+        return expr;
+    }
+
+    private SastType defaultConstantType(BigInteger value) {
+        SemanticPrimitiveKind kind =
+                TypeChecker.defaultConstantPrimitive(value);
+
+        if (kind == null) {
+            ctx.error("Integer constant "
+                    + value
+                    + " does not fit any primitive integer type. Franko integer storage is limited to the eight fixed-width integer types, so no context can represent this value. Reduce the value or rewrite the computation so it stays within a primitive range.");
+            return FALLBACK_TYPE;
+        }
+
+        return SastType.primitive(kind);
     }
 
     public SastNode analyzeValueExpr(AstNode node) {
@@ -112,7 +150,10 @@ public final class ExpressionAnalyzer {
             if (!allowAggregateLiteral) {
                 ctx.error("Aggregate literals are only valid as assignment "
                         + "values, return values, call arguments, or aggregate "
-                        + "field values");
+                        + "field values. Aggregate construction needs a "
+                        + "destination that fixes the struct or tuple type. "
+                        + "Move the literal into one of those positions, or "
+                        + "bind it to a local variable first.");
             }
 
             return lowerAggregateLiteral(lit);
@@ -125,12 +166,16 @@ public final class ExpressionAnalyzer {
         if (node.kind == AstKind.INT) {
             AstNode n = node;
             BigInteger val = constEval.parseIntegerLiteralSafe(n.text);
-            SastType literalType = n.literalPrimitive == null
-                    ? FALLBACK_TYPE
-                    : SastType.primitive(
+            boolean explicitType = n.literalPrimitive != null;
+            SastType literalType = explicitType
+                    ? SastType.primitive(
                             SemanticPrimitiveKind.valueOf(
-                                    n.literalPrimitive.name()));
-            return SastNode.intLiteral(n.span, literalType, val, n.text);
+                                    n.literalPrimitive.name()))
+                    : defaultConstantType(val);
+            SastNode literal =
+                    SastNode.intLiteral(n.span, literalType, val, n.text);
+            literal.untypedConstant = !explicitType;
+            return literal;
         }
 
         if (node.kind == AstKind.NULL) {
@@ -143,11 +188,24 @@ public final class ExpressionAnalyzer {
 
             if (sym == null) {
                 if ("self".equals(n.name)) {
-                    ctx.error("keyword 'self' is only valid inside a method body");
+                    ctx.error("keyword 'self' is only valid inside a method "
+                            + "body. The compiler binds 'self' to the implicit "
+                            + "receiver only while checking a struct method. "
+                            + "Move this use into a method, or replace it with "
+                            + "an explicit pointer variable.");
                 } else if (ctx.hasAnyFunctionNamed(n.name)) {
-                    ctx.error("Function name '" + n.name + "' cannot be used as a value");
+                    ctx.error("Function name '" + n.name + "' cannot be used "
+                            + "as a value. Franko has no first-class function "
+                            + "values, so a function name only names a call "
+                            + "target. Call the function with its argument list, "
+                            + "or store the call result in a variable.");
                 } else {
-                    ctx.error("Undeclared variable '" + n.name + "'");
+                    ctx.error("Undeclared variable '" + n.name + "'. Every "
+                            + "variable must be declared before it is used, "
+                            + "and name lookup does not search enclosing "
+                            + "namespaces. Declare the variable in an enclosing "
+                            + "scope, or correct its spelling and namespace "
+                            + "path.");
                 }
 
                 sym = Symbol.variable(null, n.name, FALLBACK_TYPE);
@@ -194,21 +252,29 @@ public final class ExpressionAnalyzer {
         if (node.kind == AstKind.UNARY) {
             AstNode n = node;
             SastNode expr = analyzeExpr(n.expr);
-
-            SastType type = n.text.equals("!") ? BOOL_TYPE : expr.type;
-
             BigInteger folded = constEval.foldUnary(
                     n.text,
                     expr.constantValue
             );
 
-            return SastNode.unaryOp(
+            boolean untyped = !n.text.equals("!")
+                    && expr.untypedConstant
+                    && folded != null;
+            SastType type = n.text.equals("!")
+                    ? BOOL_TYPE
+                    : untyped
+                            ? defaultConstantType(folded)
+                            : expr.type;
+
+            SastNode unary = SastNode.unaryOp(
                     node.span,
                     type,
                     folded,
                     n.text,
                     expr
             );
+            unary.untypedConstant = untyped;
+            return unary;
         }
 
         if (node.kind == AstKind.BINARY) {
@@ -222,19 +288,20 @@ public final class ExpressionAnalyzer {
                 return lowerStructComparison(n.text, left, right, node.span);
             }
 
-            SastType type = inferBinaryResultType(
-                    n.text,
-                    left,
-                    right
-            );
-
             BigInteger folded = constEval.foldBinary(
                     n.text,
                     left.constantValue,
                     right.constantValue
             );
 
-            return SastNode.binOp(
+            SastType type = inferBinaryResultType(
+                    n.text,
+                    left,
+                    right,
+                    folded
+            );
+
+            SastNode binary = SastNode.binOp(
                     node.span,
                     type,
                     folded,
@@ -242,6 +309,13 @@ public final class ExpressionAnalyzer {
                     left,
                     right
             );
+            binary.untypedConstant = isUntypedBinaryConstant(
+                    n.text,
+                    left,
+                    right,
+                    folded
+            );
+            return binary;
         }
 
         if (node.kind == AstKind.ARRAY_ACCESS) {
@@ -275,7 +349,11 @@ public final class ExpressionAnalyzer {
                             + target.type.describe()
                             + "' has no element named '"
                             + n.name
-                            + "'");
+                            + "'. A tuple exposes only the element names "
+                            + "written in its type, with unnamed elements named "
+                            + "_0, _1, and so on. Use a name declared in the "
+                            + "tuple type; unnamed elements use their _N "
+                            + "names.");
 
                     return SastNode.intLiteral(
                             node.span,
@@ -297,7 +375,12 @@ public final class ExpressionAnalyzer {
                 ctx.error("Member access '"
                         + n.name
                         + "' is only valid on struct or tuple values, got type "
-                        + target.type.describe());
+                        + target.type.describe()
+                        + ". The dot operator resolves a declared field or "
+                        + "element, and primitive, pointer, array, and enum "
+                        + "types expose no members. Use a struct or tuple "
+                        + "value; for a pointer, dereference it with $(...) "
+                        + "first.");
 
                 return SastNode.intLiteral(
                         node.span,
@@ -316,7 +399,12 @@ public final class ExpressionAnalyzer {
                         + target.type.structSymbol.qualifiedName()
                         + "' has no field named '"
                         + n.name
-                        + "'");
+                        + "'. Struct fields are fixed by the declaration, and "
+                        + "member access resolves only those declared names. "
+                        + "Use a declared field name, or add the field to "
+                        + "struct '"
+                        + target.type.structSymbol.qualifiedName()
+                        + "'.");
 
                 return SastNode.intLiteral(
                         node.span,
@@ -367,9 +455,18 @@ public final class ExpressionAnalyzer {
             if (expr.type.kind == SastTypeKind.PTR) {
                 refType = expr.type.referencedType;
             } else if (expr.type.kind == SastTypeKind.NULL) {
-                ctx.error("Cannot dereference null");
+                ctx.error("Cannot dereference null. Null is the empty pointer "
+                        + "value and refers to no storage, so there is no "
+                        + "pointee to read or write. Guard the pointer with a "
+                        + "null check and dereference it only on the non-null "
+                        + "path, or initialize it from live storage with "
+                        + "getptr/getview/getmview.");
             } else {
-                ctx.error("Cannot dereference non-pointer type");
+                ctx.error("Cannot dereference non-pointer type. The $ "
+                        + "operator reads the pointee of ptr, mview, or view "
+                        + "storage and has no meaning for ordinary values. "
+                        + "Create a pointer with getptr/getview/getmview, or "
+                        + "remove the $ and use the value directly.");
             }
 
             return SastNode.deref(node.span, refType, expr);
@@ -380,10 +477,17 @@ public final class ExpressionAnalyzer {
             SastType targetType = resolveAstNode(n.type);
             SastNode expr = analyzeExpr(n.expr);
 
+            if (targetType.kind == SastTypeKind.PRIMITIVE) {
+                expr = adoptExpectedConstant(expr, targetType);
+            }
+
             String syntax = n.unsafe ? "unsafe_cast" : "cast";
 
             if (expr.type.kind == SastTypeKind.VOID) {
-                ctx.error("Operand of '" + syntax + "' cannot have void type");
+                ctx.error("Operand of '" + syntax + "' cannot have void type. "
+                        + "A void call produces no value, so there is nothing "
+                        + "to convert. Remove the cast, or call a function that "
+                        + "returns a value and cast that result.");
 
                 return SastNode.cast(
                         node.span,
@@ -411,7 +515,11 @@ public final class ExpressionAnalyzer {
                     && (targetType.kind == SastTypeKind.PRIMITIVE)
                     && !(expr.type.kind == SastTypeKind.PRIMITIVE)) {
                 ctx.error("Operand of 'unsafe_cast' must be an integer "
-                        + "expression, got " + expr.type.describe());
+                        + "expression, got " + expr.type.describe()
+                        + ". unsafe_cast performs a checked integer conversion "
+                        + "and does not apply to pointers, structs, tuples, or "
+                        + "arrays. Pass an integer value, or use cast<...> for "
+                        + "a pointer permission downgrade.");
 
                 return SastNode.cast(
                         node.span,
@@ -448,7 +556,11 @@ public final class ExpressionAnalyzer {
 
         if (node.kind == AstKind.STRING_LITERAL) {
             ctx.error("String literal is not a valid expression here; a "
-                    + "string literal is a view<[byte, N]> value");
+                    + "string literal is a view<[byte, N]> value. String "
+                    + "literals are read-only views over static byte storage, "
+                    + "not values this context can lower directly. Bind the "
+                    + "literal to a view<[byte, N]> variable and use that, or "
+                    + "pass it to a parameter that accepts a byte view.");
 
             return SastNode.intLiteral(
                     node.span,
@@ -503,7 +615,12 @@ public final class ExpressionAnalyzer {
                         reportedPositional = true;
                         ctx.error("Struct literal fields must be named; "
                                 + "positional initializers are only allowed for "
-                                + "all-unnamed tuple types");
+                                + "all-unnamed tuple types. Struct fields are "
+                                + "identified by name and may omit defaulted "
+                                + "fields, so position alone cannot identify "
+                                + "which field an entry initializes. Write each "
+                                + "entry as 'field = value' using a field "
+                                + "declared by the struct.");
                     }
 
                     analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
@@ -517,7 +634,12 @@ public final class ExpressionAnalyzer {
                             + owner.qualifiedName()
                             + "' has no field named '"
                             + init.name
-                            + "'");
+                            + "'. Struct fields are fixed by the declaration, "
+                            + "and member access resolves only those declared "
+                            + "names. Use a declared field name, or add the "
+                            + "field to struct '"
+                            + owner.qualifiedName()
+                            + "'.");
                     analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
                     continue;
                 }
@@ -527,7 +649,10 @@ public final class ExpressionAnalyzer {
                             + init.name
                             + "' of struct '"
                             + owner.qualifiedName()
-                            + "'");
+                            + "'. Each field may be initialized at most once, "
+                            + "otherwise the final field value would be "
+                            + "ambiguous. Remove or merge the duplicate "
+                            + "initializer.");
                     analyzeExprWithExpectedType(init.value, field.type);
                     continue;
                 }
@@ -561,7 +686,11 @@ public final class ExpressionAnalyzer {
 
             if (anyPositional && anyNamed) {
                 ctx.error("Cannot mix positional and named tuple element "
-                        + "initializers");
+                        + "initializers. Positional entries fill elements in "
+                        + "order while named entries select by name, so a "
+                        + "mixed literal has no single rule for locating its "
+                        + "elements. Use only positional entries in order, or "
+                        + "name every entry.");
             }
 
             boolean unnamedLiteral = isAllUnnamedTupleLiteral(lit);
@@ -581,7 +710,12 @@ public final class ExpressionAnalyzer {
                             reportedPositionalNotAllowed = true;
                             ctx.error("Positional tuple literal fields are "
                                     + "only allowed for an all-unnamed tuple "
-                                    + "type");
+                                    + "type. A named tuple spelling defines "
+                                    + "element names, so its literal is "
+                                    + "name-based and does not accept "
+                                    + "positional slots. Name every entry in "
+                                    + "the literal, or spell the tuple type "
+                                    + "without element names.");
                         }
 
                         analyzeExprWithExpectedType(
@@ -598,7 +732,11 @@ public final class ExpressionAnalyzer {
                             ctx.error("Positional initializer for tuple type '"
                                     + literalType.describe()
                                     + "' has more entries than the tuple has "
-                                    + "elements");
+                                    + "elements. A positional entry fills "
+                                    + "exactly one element slot, and the tuple "
+                                    + "type fixes the number of slots. Remove "
+                                    + "the extra entries, or use a tuple type "
+                                    + "with more elements.");
                         }
 
                         analyzeExprWithExpectedType(
@@ -619,7 +757,11 @@ public final class ExpressionAnalyzer {
                                 + literalType.describe()
                                 + "' has no element named '"
                                 + init.name
-                                + "'");
+                                + "'. A tuple exposes only the element names "
+                                + "declared in its type, with unnamed elements "
+                                + "named _0, _1, and so on. Use a name declared "
+                                + "in the tuple type; unnamed elements use "
+                                + "their _N names.");
                         analyzeExprWithExpectedType(
                                 init.value,
                                 FALLBACK_TYPE
@@ -633,7 +775,10 @@ public final class ExpressionAnalyzer {
                             + field.name
                             + "' of tuple type '"
                             + literalType.describe()
-                            + "'");
+                            + "'. Each element may be initialized at most "
+                            + "once, and repeated names would make the final "
+                            + "value ambiguous. Remove or merge the duplicate "
+                            + "initializer.");
                     analyzeExprWithExpectedType(init.value, field.type);
                     continue;
                 }
@@ -651,7 +796,11 @@ public final class ExpressionAnalyzer {
             );
         }
 
-        ctx.error("Aggregate literal requires a struct or tuple type");
+        ctx.error("Aggregate literal requires a struct or tuple type. Only "
+                + "structs and tuples have named or positional fields that a "
+                + "braced initializer can fill. Spell a struct or tuple type "
+                + "before the braces, or use an array literal for array "
+                + "values.");
 
         for (AstNode init : lit.fields) {
             analyzeExprWithExpectedType(init.value, FALLBACK_TYPE);
@@ -676,7 +825,11 @@ public final class ExpressionAnalyzer {
 
         if (named != 0 && named != tuple.elements.size()) {
             ctx.error("Tuple literal type must name all elements or no "
-                    + "elements; mixed spellings are not allowed");
+                    + "elements; mixed spellings are not allowed. A tuple "
+                    + "literal resolves entries by name only when every "
+                    + "element is named, and by position only for the "
+                    + "all-unnamed form. Name every element in the tuple type, "
+                    + "or remove all element names.");
         }
     }
 
@@ -731,7 +884,11 @@ public final class ExpressionAnalyzer {
             }
         }
 
-        ctx.error("Invalid constant expression for " + roleDescription);
+        ctx.error("Invalid constant expression for " + roleDescription
+                + ". This position requires a compile-time integer constant "
+                + "so its value can be fixed before code generation. Replace "
+                + "the expression with an integer literal or a constant "
+                + "expression built from literals and folded # intrinsics.");
         return BigInteger.ZERO;
     }
 
@@ -749,7 +906,11 @@ public final class ExpressionAnalyzer {
             String roleDescription
     ) {
         if (!isValidStorageBackedLValue(expr)) {
-            ctx.error(roleDescription + " must be a storage-backed lvalue");
+            ctx.error(roleDescription + " must be a storage-backed lvalue. "
+                    + "Franko can take a pointer or assign only to a variable, "
+                    + "field, array element, or $(...) chain that names real "
+                    + "storage. Pass such an lvalue, or store the value in a "
+                    + "local variable and pass that variable instead.");
         }
     }
 
@@ -759,7 +920,11 @@ public final class ExpressionAnalyzer {
     ) {
         if (!isArrayType(expr.type)) {
             ctx.error(roleDescription + " must have array type, got "
-                    + expr.type.describe());
+                    + expr.type.describe()
+                    + ". This operation reads element slots from a static "
+                    + "[T, N] or dynamic [T] array and has no meaning for "
+                    + "other value types. Pass a static or dynamic array value "
+                    + "instead.");
         }
     }
 
@@ -769,7 +934,11 @@ public final class ExpressionAnalyzer {
     ) {
         if (!isDynamicArrayType(expr.type)) {
             ctx.error(roleDescription + " must have dynamic array type, got "
-                    + expr.type.describe());
+                    + expr.type.describe()
+                    + ". Resizing and uninit apply only to dynamic arrays, "
+                    + "whose storage can be allocated and released at runtime. "
+                    + "Declare the value as [T] instead of a static array, or "
+                    + "use a static-array operation.");
         }
     }
 
@@ -816,7 +985,11 @@ public final class ExpressionAnalyzer {
                     + "' and type '"
                     + right.type.describe()
                     + "': comparison operators on structs require both "
-                    + "operands to have the same struct type");
+                    + "operands to have the same struct type. Struct "
+                    + "comparison dispatches to the struct's OPERATOR_* "
+                    + "method, which is declared per nominal struct type. "
+                    + "Compare values of the same struct type, or compare "
+                    + "their individual fields.");
 
             return operatorFallbackLiteral(span);
         }
@@ -844,7 +1017,11 @@ public final class ExpressionAnalyzer {
                     + owner.qualifiedName()
                     + "> self, view<"
                     + owner.qualifiedName()
-                    + "> other) -> uint8'");
+                    + "> other) -> uint8'. Comparison operators on structs "
+                    + "are never built in; each one must be declared as the "
+                    + "matching OPERATOR_* method with that exact "
+                    + "view-receiver signature. Declare the expected method "
+                    + "on the struct, or compare its fields directly.");
 
             return operatorFallbackLiteral(span);
         }
@@ -938,7 +1115,13 @@ public final class ExpressionAnalyzer {
                     + op
                     + "' (expected method '"
                     + methodName
-                    + "')");
+                    + "'). Franko has no built-in compound assignment for "
+                    + "structs; the operator must map to a declared OPERATOR_* "
+                    + "method. Declare method '"
+                    + methodName
+                    + "' on struct '"
+                    + owner.qualifiedName()
+                    + "', or use the equivalent explicit method call.");
 
             return OperatorAssignmentLowering.call(
                     operatorFallbackLiteral(span)
@@ -956,7 +1139,10 @@ public final class ExpressionAnalyzer {
             if (loweredValue.type.kind == SastTypeKind.VOID) {
                 ctx.error("Right-hand side of operator '"
                         + op
-                        + "' cannot have void type");
+                        + "' cannot have void type. A void call produces no "
+                        + "value for the operator method to receive. Pass a "
+                        + "value-producing expression, or remove the void "
+                        + "call.");
 
                 return OperatorAssignmentLowering.call(
                         operatorFallbackLiteral(span)
@@ -974,7 +1160,11 @@ public final class ExpressionAnalyzer {
                         + owner.qualifiedName()
                         + "' cannot apply operator '"
                         + op
-                        + "' to null");
+                        + "' to null. Null is a pointer value, and the "
+                        + "operator method expects a value view of a non-null "
+                        + "operand. Pass a struct value of type '"
+                        + owner.qualifiedName()
+                        + "' instead, or handle null before the operator.");
 
                 return OperatorAssignmentLowering.call(
                         operatorFallbackLiteral(span)
@@ -1007,7 +1197,11 @@ public final class ExpressionAnalyzer {
                     + methodName
                     + "(ptr<"
                     + owner.qualifiedName()
-                    + "> self, view<T> other) -> void')");
+                    + "> self, view<T> other) -> void'). Compound assignment "
+                    + "on structs dispatches to the matching OPERATOR_*MOV "
+                    + "method, and the argument must convert to its view<T> "
+                    + "parameter. Declare the expected method, or pass an "
+                    + "argument whose type matches that parameter.");
 
             return OperatorAssignmentLowering.call(
                     operatorFallbackLiteral(span)
@@ -1090,7 +1284,11 @@ public final class ExpressionAnalyzer {
         NamespaceSymbol namespace = ctx.resolveNamespace(namespaceSegments);
 
         if (namespace == null) {
-            ctx.error("Unknown namespace '" + namespacePath + "'");
+            ctx.error("Unknown namespace '" + namespacePath + "'. Qualified "
+                    + "names resolve strictly from the first path segment as "
+                    + "a top-level namespace, with no fallback to enclosing "
+                    + "namespaces. Declare the namespace, correct the path, or "
+                    + "import the file that declares it.");
 
             return SastNode.intLiteral(
                     q.span,
@@ -1106,11 +1304,19 @@ public final class ExpressionAnalyzer {
             if (ctx.hasAnyFunctionNamedIn(namespace, name)) {
                 ctx.error("Function name '"
                         + qualified
-                        + "' cannot be used as a value");
+                        + "' cannot be used as a value. Franko has no "
+                        + "first-class function values, so a qualified "
+                        + "function name only names a call target. Call the "
+                        + "function with its argument list, or store the call "
+                        + "result in a variable.");
             } else {
                 ctx.error("Undeclared variable '"
                         + qualified
-                        + "'");
+                        + "'. Every variable must be declared before it is "
+                        + "used, and qualified names resolve only through an "
+                        + "existing top-level namespace path. Declare the "
+                        + "variable, or correct its spelling and namespace "
+                        + "path.");
             }
 
             sym = Symbol.global(namespace.name, name, FALLBACK_TYPE);
@@ -1145,7 +1351,13 @@ public final class ExpressionAnalyzer {
         EnumVariant variant = enumSymbol.resolveVariant(variantName);
 
         if (variant == null) {
-            ctx.error("Enum '" + enumSymbol.qualifiedName() + "' has no variant named '" + variantName + "'");
+            ctx.error("Enum '" + enumSymbol.qualifiedName()
+                    + "' has no variant named '" + variantName
+                    + "'. Variants are fixed by the enum declaration and are "
+                    + "reached as 'Enum::variant'. Use a declared variant "
+                    + "name, or add the variant to enum '"
+                    + enumSymbol.qualifiedName()
+                    + "'.");
 
             if (!enumSymbol.variants.isEmpty()) {
                 return SastNode.enumVariant(q.span, enumSymbol, enumSymbol.variants.get(0));
@@ -1260,7 +1472,7 @@ public final class ExpressionAnalyzer {
             SastType parameterType
     ) {
         if (!callArg.isLiteral()) {
-            return callArg.lowered;
+            return adoptExpectedConstant(callArg.lowered, parameterType);
         }
 
         return lowerArrayLiteral(callArg.literal, parameterType);
@@ -1284,7 +1496,12 @@ public final class ExpressionAnalyzer {
             if (!arg.isNamed()) {
                 if (namedSeen) {
                     ctx.error("Positional arguments must appear before named"
-                            + " arguments in call to '" + displayName + "'");
+                            + " arguments in call to '" + displayName
+                            + "'. The compiler binds positional arguments by "
+                            + "position and named arguments by parameter name, "
+                            + "so a positional argument after a named one has "
+                            + "no stable slot. Move all positional arguments to "
+                            + "the front, or name every argument.");
                     valid = false;
                 }
 
@@ -1295,13 +1512,19 @@ public final class ExpressionAnalyzer {
 
             if (method && "self".equals(arg.name)) {
                 ctx.error("Named argument 'self' is not valid in a method"
-                        + " call; self is implicit");
+                        + " call; self is implicit. The receiver is passed "
+                        + "automatically as the method's first argument, and "
+                        + "self is never a user argument. Remove the 'self = "
+                        + "...' argument and call the method on the receiver.");
                 valid = false;
             }
 
             if (!names.add(arg.name)) {
                 ctx.error("Named argument '" + arg.name + "' is specified"
-                        + " more than once in call to '" + displayName + "'");
+                        + " more than once in call to '" + displayName
+                        + "'. Each parameter can receive at most one argument, "
+                        + "and duplicate names would make the selected value "
+                        + "ambiguous. Remove the duplicate named argument.");
                 valid = false;
             }
         }
@@ -1400,7 +1623,8 @@ public final class ExpressionAnalyzer {
 
             Symbol fn = ctx.resolveFunctionWithLiterals(
                     calleeVar.name,
-                    callArgs
+                    callArgs,
+                    call.genericGroup
             );
 
             List<SastNode> args = finalizeCallArgs(callArgs, fn, false);
@@ -1410,12 +1634,19 @@ public final class ExpressionAnalyzer {
 
                 if (ctx.resolve(calleeVar.name) != null
                         && !ctx.hasAnyFunctionNamed(calleeVar.name)) {
-                    ctx.error("'" + calleeVar.name + "' is not a function");
+                    ctx.error("'" + calleeVar.name + "' is not a function. "
+                            + "The name resolves to a variable, and Franko has "
+                            + "no first-class function values, so variables "
+                            + "cannot be called. Call a declared function or "
+                            + "method by name, or remove the argument list to "
+                            + "use the variable.");
                     explained = true;
                 } else if (shapeValid) {
                     explained = reportCallBindingProblem(
                             calleeVar.name,
-                            ctx.functionOverloadsNamed(calleeVar.name),
+                            ctx.functionOverloadsNamed(
+                                    calleeVar.name,
+                                    call.genericGroup),
                             callArgs,
                             false
                     );
@@ -1426,7 +1657,11 @@ public final class ExpressionAnalyzer {
                             + formatCallSignature(
                                     calleeVar.name,
                                     callArgTypes(args))
-                            + "'");
+                            + "'. The argument types must match a declared "
+                            + "overload, with only the documented constant "
+                            + "fitting and pointer conversions. Pass arguments "
+                            + "matching one declared signature, or add an "
+                            + "overload that accepts these types.");
                 }
 
                 Symbol fallbackFn = Symbol.function(
@@ -1472,7 +1707,11 @@ public final class ExpressionAnalyzer {
             if (namespace == null) {
                 ctx.error("Unknown namespace '"
                         + String.join("::", namespaceSegments)
-                        + "'");
+                        + "'. Qualified names resolve strictly from the first "
+                        + "path segment as a top-level namespace, with no "
+                        + "fallback to enclosing namespaces. Declare the "
+                        + "namespace, correct the path, or import the file "
+                        + "that declares it.");
 
                 return SastNode.intLiteral(
                         call.span,
@@ -1491,7 +1730,8 @@ public final class ExpressionAnalyzer {
             Symbol fn = ctx.resolveFunctionInWithLiterals(
                     namespace,
                     calleeName,
-                    callArgs
+                    callArgs,
+                    call.genericGroup
             );
 
             List<SastNode> args = finalizeCallArgs(callArgs, fn, false);
@@ -1504,7 +1744,8 @@ public final class ExpressionAnalyzer {
                             qualifiedCallee,
                             ctx.functionOverloadsNamedIn(
                                     namespace,
-                                    calleeName
+                                    calleeName,
+                                    call.genericGroup
                             ),
                             callArgs,
                             false
@@ -1516,7 +1757,11 @@ public final class ExpressionAnalyzer {
                             + formatCallSignature(
                                     qualifiedCallee,
                                     callArgTypes(args))
-                            + "'");
+                            + "'. The argument types must match a declared "
+                            + "overload, with only the documented constant "
+                            + "fitting and pointer conversions. Pass arguments "
+                            + "matching one declared signature, or add an "
+                            + "overload that accepts these types.");
                 }
 
                 Symbol fallbackFn = Symbol.function(
@@ -1547,7 +1792,10 @@ public final class ExpressionAnalyzer {
             return analyzeMethodCallExpr(call, call.callee);
         }
 
-        ctx.error("Unsupported call expression");
+        ctx.error("Unsupported call expression. Franko calls must name a "
+                + "function, a namespace-qualified function, or a struct "
+                + "method directly. Rewrite the call to use a declared "
+                + "function or method name.");
 
         return SastNode.intLiteral(
                 call.span,
@@ -1567,7 +1815,10 @@ public final class ExpressionAnalyzer {
             ctx.error("Method call '"
                     + mac.name
                     + "' is only valid on struct values; tuple values have"
-                    + " no methods");
+                    + " no methods. Methods belong to struct declarations, "
+                    + "and tuples are anonymous aggregates without a method "
+                    + "table. Call a free function on the tuple, or wrap the "
+                    + "data in a struct that declares the method.");
 
             return SastNode.intLiteral(
                     call.span,
@@ -1586,12 +1837,19 @@ public final class ExpressionAnalyzer {
                         + target.type.describe()
                         + "; use $(p)."
                         + mac.name
-                        + "(...) for pointer receivers");
+                        + "(...) for pointer receivers. Franko has no "
+                        + "implicit auto-deref for method calls. Dereference "
+                        + "the pointer with $(...) and call the method on the "
+                        + "resulting struct value.");
             } else {
                 ctx.error("Method call '"
                         + mac.name
                         + "' is only valid on struct values, got type "
-                        + target.type.describe());
+                        + target.type.describe()
+                        + ". Methods are declared inside struct bodies and "
+                        + "are dispatched on a struct receiver. Use a "
+                        + "struct-typed receiver, or call a free function for "
+                        + "this value.");
             }
 
             return SastNode.intLiteral(
@@ -1606,7 +1864,11 @@ public final class ExpressionAnalyzer {
 
         if (!isValidStorageBackedLValue(target)) {
             ctx.error("Method call receiver must be a storage-backed lvalue: "
-                    + "a variable, field, array element, or $(...) expression");
+                    + "a variable, field, array element, or $(...) expression. "
+                    + "The receiver is passed to the method as a self pointer, "
+                    + "which requires stable storage to point at. Store the "
+                    + "receiver in a local variable, or use an existing "
+                    + "variable, field, array element, or $(...) chain.");
 
             return SastNode.intLiteral(
                     call.span,
@@ -1626,7 +1888,11 @@ public final class ExpressionAnalyzer {
         if (OperatorMethods.isOperatorMethodName(mac.name)
                 && call.hasNamedArguments()) {
             ctx.error("Named arguments are not supported for operator method"
-                    + " calls");
+                    + " calls. Operator methods are fixed-shape and are "
+                    + "invoked through operator syntax, which has no argument "
+                    + "names. Pass the operand positionally, because operator "
+                    + "methods reject named arguments even when called "
+                    + "explicitly.");
         }
 
         boolean shapeValid = validateCallShape(
@@ -1661,7 +1927,13 @@ public final class ExpressionAnalyzer {
                         + owner.qualifiedName()
                         + "."
                         + formatCallSignature(mac.name, userArgTypes)
-                        + "'");
+                        + "'. The receiver's struct must declare a method "
+                        + "with this name whose user parameter types match "
+                        + "the call. Pass arguments matching a declared "
+                        + "method, or declare the missing overload on struct "
+                        + "'"
+                        + owner.qualifiedName()
+                        + "'.");
             }
         }
 
@@ -1707,7 +1979,8 @@ public final class ExpressionAnalyzer {
     private SastType inferBinaryResultType(
             String op,
             SastNode left,
-            SastNode right
+            SastNode right,
+            BigInteger folded
     ) {
         if (BOOL_RESULT_OPS.contains(op)) {
             return BOOL_TYPE;
@@ -1717,13 +1990,45 @@ public final class ExpressionAnalyzer {
             boolean leftConst = left != null && left.isConstant();
             boolean rightConst = right != null && right.isConstant();
 
-            if (leftConst && !rightConst) return right.type;
-            if (!leftConst && rightConst) return left.type;
+            if (leftConst && rightConst) {
+                if (left.untypedConstant && right.untypedConstant) {
+                    return folded == null
+                            ? left.type
+                            : defaultConstantType(folded);
+                }
+
+                if (left.untypedConstant) {
+                    return right.type;
+                }
+
+                if (right.untypedConstant) {
+                    return left.type;
+                }
+
+                return left.type;
+            }
+
+            if (leftConst) return right.type;
+            if (rightConst) return left.type;
 
             return left.type;
         }
 
         return left.type;
+    }
+
+    private boolean isUntypedBinaryConstant(
+            String op,
+            SastNode left,
+            SastNode right,
+            BigInteger folded
+    ) {
+        return !BOOL_RESULT_OPS.contains(op)
+                && folded != null
+                && left != null
+                && right != null
+                && left.untypedConstant
+                && right.untypedConstant;
     }
 
     private SastType extractElementType(SastType type) {
@@ -1735,7 +2040,11 @@ public final class ExpressionAnalyzer {
             return type.elementType;
         }
 
-        ctx.error("Indexed expression is not an array");
+        ctx.error("Indexed expression is not an array. The [] subscript "
+                + "reads an element slot from a static or dynamic array and "
+                + "has no meaning for other types. Index an array value, or "
+                + "use a pointer dereference with $ for pointer-backed "
+                + "storage.");
         return FALLBACK_TYPE;
     }
 

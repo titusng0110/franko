@@ -588,38 +588,7 @@ stdout(#is_comparable(p));     // 1
 
 ---
 
-## 35.9 FFI Target Selection
-
-The intended use of declaration-level `#if` is to select platform-specific
-declarations and calls. Only the selected branch is compiled, so the other
-platform's functions do not need to exist on the current target:
-
-```franko
-import "franko/os"
-import "franko/stdio"
-
-func main() -> int32 {
-    [byte] msg;
-    msg.init(5);
-    msg.memcpy("hello");
-
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-        os::win32::WriteFile(h, getview(msg), 5, null);
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        os::posix::write(os::posix::STDIN_FILENO, getview(msg), 5);
-    }
-
-    msg.uninit();
-    return 0;
-}
-```
-
-An unguarded off-target FFI call still fails when building for that target.
-
----
-
-## 35.10 Restrictions and Edge Cases
+## 35.9 Restrictions and Edge Cases
 
 - `#if` cannot appear in a `for` header.
 - The `#if` condition must be a compile-time constant integer. A local
@@ -641,7 +610,7 @@ An unguarded off-target FFI call still fails when building for that target.
   arguments to other `#` intrinsics.
 - Declaration-level `#if` cannot wrap imports.
 
-## 35.11 Common Mistakes
+## 35.10 Common Mistakes
 
 A local variable is not a compile-time constant:
 
@@ -691,7 +660,7 @@ view<[byte, 5]> spelling = #what_type(int32)
 Remember that the unselected branch is still parsed. Its syntax must be
 valid, even though its names and types are never analyzed.
 
-## 35.12 Reflection and Generics
+## 35.11 Reflection and Generics
 
 Compile-time reflection in a generic declaration runs after the template is
 instantiated, so predicates see the concrete argument:

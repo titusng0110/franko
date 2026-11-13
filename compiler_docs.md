@@ -302,11 +302,13 @@ every checker plus `ExpressionAnalyzer`/`DeclarationChecker` statically).
   `AstKind` constants (`PRIMITIVE_TYPE`, `DYNAMIC_ARRAY_TYPE`,
   `STATIC_ARRAY_TYPE`, `PTR_TYPE`, `STRUCT_TYPE`, `TUPLE_TYPE`) instead of a
   `AstNode` hierarchy. Generic metadata lives on the same nodes:
-  `isGeneric`, `genericModifier`, `genericParams`, `genericArgs`, and
-  `typeParameter`; `GENERIC_PARAM`/`GENERIC_ARG` are ordinary raw node kinds.
+  `isGeneric`, `genericModifier`, `genericParams`, `genericArgs`,
+  `genericGroup`, `genericHash`, `genericBaseName`, and `typeParameter`;
+  `GENERIC_PARAM`/`GENERIC_ARG` are ordinary raw node kinds.
   `literalPrimitive` marks folded integer results with an explicit primitive
   type so early folding preserves overload behavior. `copyShallow()` is the
-  shared clone primitive for generic specialization.
+  shared clone primitive for generic specialization and copies the generic
+  metadata.
 - `SastNode.java` / `SastKind.java` — one final tagged semantic-AST class,
   produced by `SemanticAnalyzer`/`ExpressionAnalyzer`/`ArrayLowerer`/
   `ArrayLiteralLowerer`; every node carries the originating `SourceSpan`,
@@ -452,12 +454,14 @@ Slots are shared by kind: `name`, `text`, `rawContent`, `primitive`, `type`,
 `index`, `callee`, `init`, `update`, `level`, `sizeExpr`, `defaultValue`, the list slots
 (`items`, `parameters`, `fields`, `methods`, `members`, `variants`, `args`,
 `elements`, `thenItems`, `elseItems`, `updateItems`, `names`,
-`argumentNames`), and
-`literalBytes`. Static factories in `AstNode` construct each kind.
+`argumentNames`), `literalBytes`, and the scalar generic metadata
+`genericGroup`, `genericHash`, and `genericBaseName`. Static factories in
+`AstNode` construct each kind.
 `defaultValue` is the raw default expression on a `PARAMETER` (null when
 required); `argumentNames` is parallel to `CALL.args`, with `""` for a
 positional argument and the parameter name for a named one. `copyShallow()`
-copies both slots; `hasNamedArguments()` reports whether any name is set.
+copies all slots, including the generic metadata; `hasNamedArguments()`
+reports whether any name is set.
 
 `GlobalVarDecl.literalBytes` is non-null only for string-literal globals
 hoisted by the Desugarer (§4.10): a literal-backed `[byte, N]` whose value is
@@ -595,18 +599,22 @@ responsibility.
 
 #### `GenericsResolver`
 AST-to-AST explicit-instantiation engine owned by `SemanticAnalyzer`. It
-collects struct/function templates, validates generic parameter lists,
-rejects duplicate templates, generic `main`, independent generic methods, and
-generic struct/concrete type collisions; binds explicit type/value arguments;
-canonicalizes them; caches instances by template plus canonical arguments;
-clones/substitutes templates with `AstNode.copyShallow`; renames instances to
-`<base>__<8hex FNV>`; runs `SpecializationDesugarer`; folds constant
-`#if`/declaration-`#if` conditions during substitution; and inserts generated
-declarations into their template namespaces. Substitution includes
-`PARAMETER.defaultValue`, reconstructed calls preserve `argumentNames`, and
-`containsGenericUse` inspects defaults, so value-parameter defaults become
-concrete literals before semantic default resolution. Limits are 1024
-instances and depth 64. See §4.31.
+collects struct/function templates into per-name overload groups, validates
+generic parameter lists, rejects duplicate signatures (name + ordered generic
+parameter types + ordered ordinary parameter types; return type excluded),
+generic `main`, independent generic methods, and generic struct/concrete type
+collisions. A use or call binds its explicit type/value arguments, filters
+templates by argument kind and value fit, applies the narrowest-value-fit
+preference (signed first at equal width), and then instantiates the remaining
+candidates. Function candidates keep the source base name and carry a
+canonical `genericGroup` marking the call's generic-argument list; struct
+instances receive a unique internal name plus `genericHash`/`genericBaseName`
+metadata. Instances are cached by template signature plus canonical
+arguments, cloned/substituted with `AstNode.copyShallow`, desugared by
+`SpecializationDesugarer`, and inserted into their template namespaces.
+Substitution includes `PARAMETER.defaultValue`, reconstructed calls preserve
+`argumentNames` and `genericGroup`, and `containsGenericUse` inspects
+defaults. Limits are 1024 instances and depth 64. See §4.31.
 
 #### `ImportResolver`
 Consumes an already-desugared `AstDocument`. For each surviving `AstKind.IMPORT`
@@ -816,6 +824,11 @@ analysis runs eight internal phases:
 8. resolve parameter defaults, then lower items in source order (enums,
    structs+methods, globals, function bodies).
 
+Registration copies `AstNode.genericGroup`/`genericHash` onto generated
+function symbols and `AstNode.genericHash`/`genericBaseName` onto generated
+`StructSymbol` shells. The same metadata is applied to fallback symbols when
+registration recovered from an error.
+
 `resolveParameterDefaults` runs after all registration and before any body
 lowering, so forward calls see complete defaults. For every free function and
 struct method it pushes a temporary scope containing the parameter symbols,
@@ -951,7 +964,9 @@ Statements use `isStmt()`, expressions use `isExpr()`, and lvalue queries use
 `VAR_EXPR` returns its symbol, `MEMBER_ACCESS`/`ARRAY_ACCESS` recurse into the
 target, `DEREF` returns `null` (the pointee is a different storage region), and
 everything else returns `null`. Every expression carries `type` and
-`constantValue: BigInteger`; declarations carry `symbol` (and
+`constantValue: BigInteger`; integer constants additionally carry the
+analysis-only `untypedConstant` flag described in §4.2. Declarations carry
+`symbol` (and
 `structSymbol`/`enumSymbol` where relevant). Dispatch is `switch (node.kind)`
 throughout the compiler and serializer.
 
@@ -1030,7 +1045,7 @@ The symbol model is one final tagged class with `SymbolKind` =
 `VARIABLE`, `PARAMETER`, `GLOBAL`, `FUNCTION`, `METHOD`. Fields: `name`,
 `namespace`, `type`, `parameters`, `isBuiltin`, `isConst`, `inlineMode`, `owner`, `index`,
 `compileTimeConstantValue`, `literalBytes`, `literalValues`,
-`parameterDefault`. `isConst` is
+`parameterDefault`, `genericGroup`, `genericHash`. `isConst` is
 carried only by variables, parameters, and globals; it is not part of the
 type, signature key, mangling, overload identity, or emitted C++ name.
 `inlineMode` (`DEFAULT`, `INLINE`, `NOINLINE`) is carried only by functions
@@ -1039,6 +1054,10 @@ copied from the declaration during semantic registration.
 `parameterDefault` is analysis-only: it holds the resolved static default on
 a `PARAMETER` symbol, is null for required parameters, and is not part of the
 type, signature, mangling, or emitted name.
+`genericGroup` is the canonical generic-argument key that selects a generated
+function's overload set; it is null for ordinary functions and is not part of
+the ordinary signature. `genericHash` is the canonical hash of the generic
+arguments inside `<...>` and drives the `GEN_` emitted-name prefix.
 
 - `VARIABLE` — local variable, optional namespace.
 - `PARAMETER` — `index`, no namespace.
@@ -1047,7 +1066,9 @@ type, signature, mangling, or emitted name.
   §4.10), and `literalValues` (row-major folded values of a hoisted
   array-literal global, §4.13).
 - `FUNCTION` — parameters, namespace, `isBuiltin`; `mangledName()` =
-  `FUNC_<name>_<8 hex>`; `emittedLocalName()` for codegen. Overload identity
+  `FUNC_<name>_<8 hex>`, or
+  `GEN_<generic-hash>_FUNC_<name>_<8 hex>` for a generic instance;
+  `emittedLocalName()` for codegen. Overload identity
   is name + ordered parameter types; **return type is intentionally not part
   of overload identity** (so `f(int32)->int32` and `f(int32)->uint32`
   conflict).
@@ -1070,7 +1091,9 @@ field/method clash detection), `EnumVariant`, `EnumSymbol`, and
   `FIELD_<name>` for ordinary fields, keeping emitted member names unambiguous
   with the other `VAR_`/`PARAM_`/`STRUCT_`/`FUNC_` prefixes.
 - `StructSymbol.isTuple` marks the synthetic `TUPLE_<hash>` symbols created
-  for tuple types (no namespace, no methods).
+  for tuple types (no namespace, no methods). `genericHash` and
+  `genericBaseName` are non-null only on generated generic struct instances;
+  they feed the emitted `GEN_<hash>_STRUCT_<base>` type name.
 - `EnumSymbol` stores name, namespace, backing kind, ordered variants, with
   `qualifiedName()`, `resolveVariant(name)`, and `variantWithValue(value)`.
   Enums are nominal types, not variables/functions, so `EnumSymbol` is not a
@@ -1095,12 +1118,15 @@ registration and resolution (`resolveFunction/resolveMethod` — arity +
 type applicability, constant-fluid arguments may widen, nonconstants must
 match exactly **or be a pointer conversion** (permission downgrade or
 array-view decay), ambiguity is an
-error; among applicable overloads exact permission matches win over
+error; generated generic functions are filtered by `Symbol.genericGroup`,
+with ordinary calls selecting only null-group functions and generic calls
+selecting only the matching group; among applicable overloads exact permission matches win over
 downgrading ones, then pure downgrades, then decays, then a constant-fit
-preference (the parameter matching the constant's own type wins when the
-value fits, otherwise the narrowest fitting type, signed before unsigned
-at equal width — so `stdout(1)` selects `stdout(int32)` and
-`stdout(5000000000)` selects `stdout(int64)`), then the fewest-default-fills
+preference (an explicitly typed constant prefers its exact parameter type;
+an untyped constant, or a typed constant without an exact match, uses the
+narrowest fitting type with signed before unsigned at equal width — so
+`stdout(1)` selects `stdout(int8)` and `stdout(5000000000)` selects
+`stdout(int64)`), then the fewest-default-fills
 preference (an overload needing no defaults wins over an otherwise equal one),
 then ambiguity —
 the fewest-downgrades tally weights a decay twice a pure downgrade). Call
@@ -1144,8 +1170,9 @@ the public registration/lookup API plus scope and namespace bookkeeping;
 `OverloadResolution` owns the pure rules: argument-to-parameter binding
 (`bindArguments`/`findParameter`), applicability of a call/literal
 argument to a parameter, exact-permission preference, constant-fit
-preference/costs, the fewest-default-fills preference, pointer-conversion/
-downgrade costs, array-literal shape
+preference/costs (untyped constants use narrowest-fit scoring; typed
+constants get an exact-type cost of zero), the fewest-default-fills
+preference, pointer-conversion/downgrade costs, array-literal shape
 matching, operator-method applicability/cost, duplicate-signature identity,
 and call-signature formatting, with `arrayLiteralRowsMatch` accepting
 `SastType.ENUM` in the scalar-element case. `bindArguments` maps positional
@@ -1193,9 +1220,16 @@ strictly against declared namespaces, and compile-time constants
 and `#IS_*` target names fold into integer literals; `#name(...)` calls are
 delegated to `CompileTimeIntrinsics` before ordinary function resolution
 (identifier, type, and string-literal arguments are inspected, not
-lowered). `inferBinaryResultType` implements the fluid-constant rule
-(when one operand is a folded constant, the result takes the other side's
-type), while unary `~` is type-preserving like unary `-`; casts between identical primitive kinds are returned unchanged (no cast node emitted);
+lowered). Literal `INT` nodes start with `untypedConstant = true` and a
+concrete default type from `TypeChecker.defaultConstantPrimitive`; explicitly
+typed folds and generic value bindings start typed. `inferBinaryResultType`
+keeps a constant-only expression untyped, takes the typed side when exactly
+one constant is typed, and otherwise follows the nonconstant operand.
+`analyzeExprWithExpectedType` adopts a fitting primitive expected type on an
+untyped constant; call finalization does the same for selected parameters,
+and integer cast targets act as expected types. Unary `~` is type-preserving
+like unary `-`; casts between identical primitive kinds are returned unchanged
+(no cast node emitted);
 `cast<T>()` lowers mechanically (target resolved through the wired type
 resolver) and `unsafe_cast<T>()` always lowers as a checked cast, with
 integer and pointer targets as before and enum targets accepted for
@@ -2582,7 +2616,10 @@ are skipped, matching the definition-suppression rule. Default functions
 emit no prefix. Enums emit as `ENUM_<Name>` wrapper structs
 (`emittedEnumTypeName`, qualified by namespace in `emitType`) before any
 struct definition, since struct fields may use them. Ordinary structs emit
-as `STRUCT_<Name>` and their ordinary fields as `FIELD_<name>`; synthetic
+as `STRUCT_<Name>`, generated generic structs emit as
+`GEN_<generic-hash>_STRUCT_<base-name>`
+(`StructSymbol.genericHash`/`genericBaseName`), and their ordinary fields
+emit as `FIELD_<name>`; synthetic
 tuple structs emit as their `TUPLE_<hash>` name directly and their fields
 as `_0`, `_1`, … (`FieldSymbol.emittedName()`), so differently named but
 structurally identical tuple declarations share one C++ type. Tuple types
@@ -2746,7 +2783,9 @@ load. Deserialization is multi-phase: struct shells, enum symbols with backing
 kinds and variants, fields/parameters/globals/variables, functions/methods,
 struct field/method tables, then AST nodes. `StructSymbol.methods` is
 serialized explicitly so overload groups survive; `methodDeclSymbols` /
-`functionDeclSymbols` are analysis-only and never serialized. Enum symbols
+`functionDeclSymbols` are analysis-only and never serialized. Generated
+generic metadata is serialized as optional `genericGroup`/`genericHash` on
+function symbols and `genericHash`/`genericBaseName` on struct symbols. Enum symbols
 serialize as kind `enum` with `name`, `namespace`, `backing`, and `variants`
 (`name`/`value` decimal strings), since variants are embedded rather than
 registered separately. Semantic types add kind `enum` (`symbol`), nodes add
@@ -2911,11 +2950,11 @@ AST node kinds and additional fields (all also carry `span`):
 | `namespace` | `name`, `items` |
 | `import` | `path` |
 | `block` | `statements` |
-| `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`), optional `generic: true` + `genericParams` |
+| `functionDecl` | `name`, `returnType`, `parameters`, `body`, optional `inlineMode` (`INLINE` or `NOINLINE`), optional `generic: true` + `genericParams`, optional `genericGroup`/`genericHash` |
 | `genericParam` | `name`, `typeParam` (`true`/`false`), optional `type` for value parameters |
 | `genericArg` | either `type` or `value` |
 | `parameter` | `type`, `name`, optional `default` |
-| `structDecl` | `name`, `fields`, `methods`, `members`, optional `generic: true` + `genericParams` |
+| `structDecl` | `name`, `fields`, `methods`, `members`, optional `generic: true` + `genericParams`, optional `genericHash`/`genericBaseName` |
 | `structFieldDecl` | `type`, `name`, `constInitializer` |
 | `enumDecl` | `name`, `backingType`, `variants` |
 | `enumVariant` | `name`, `constInitializer` |
@@ -2947,7 +2986,7 @@ AST node kinds and additional fields (all also carry `span`):
 | `binary` | `op`, `left`, `right` |
 | `arrayAccess` | `target`, `index` |
 | `memberAccess` | `target`, `member` |
-| `call` | `callee`, `args`, optional `typeArgs`, optional `argumentNames` (parallel to `args`; `""` is positional) |
+| `call` | `callee`, `args`, optional `typeArgs`, optional `argumentNames` (parallel to `args`; `""` is positional), optional `genericGroup` |
 | `getPtr` | `permission`, `target` |
 | `deref` | `expr` |
 | `cast` | `unsafe`, `target`, `expr` |
@@ -3004,11 +3043,13 @@ Expression metadata is always `type` (a semantic type object) and
 `constantValue` (decimal string or `null`).
 
 Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
-`tuple: true` for synthetic tuple structs), `enum` (`name`, `namespace`,
+`tuple: true` for synthetic tuple structs, optional
+`genericHash`/`genericBaseName`), `enum` (`name`, `namespace`,
 `backing`, `variants` with `{name, value}` decimal strings), `field`
 (`name`, `type`, `foldedDefault`, optional `tupleIndex` when `>= 0`),
 `function` (`name`, `namespace`,
-`parameters`, `returnType`, `isBuiltin`, optional `inlineMode`), `method` (function fields plus
+`parameters`, `returnType`, `isBuiltin`, optional `inlineMode`, optional
+`genericGroup`/`genericHash`), `method` (function fields plus
 `owner`), `parameter` (`name`, `index`, `type`, optional `const`), `variable`
 (`name`, `namespace`, `type`, optional `const`), `global` (variable fields
 plus `compileTimeConstantValue`, `literalBytes`, `literalValues`, optional
@@ -3097,11 +3138,18 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
 
 ### 4.2 Fluid integer constants
 Constant values are carried as `BigInteger` on raw-AST `AstKind.INT` nodes and
-semantic expression nodes. `ExpressionAnalyzer.inferBinaryResultType` applies
-the fluid-constant rule, `TypeChecker.ensureSameIntegralTypeOrFit` /
+semantic expression nodes. Syntactic literals have no inherent type:
+`SastNode.untypedConstant` marks them, and
+`TypeChecker.defaultConstantPrimitive` supplies the contextless default
+(int8, int16, int32, int64, then uint64 for nonnegative values).
+`ExpressionAnalyzer.inferBinaryResultType` propagates untypedness through
+constant-only expressions, expected-type lowering adopts a fitting primitive
+type, and selected call parameters contextualize arguments.
+`TypeChecker.ensureSameIntegralTypeOrFit` /
 `ensureMixedIntegralOperandsWithConstantFit` / `requireConstantFitsType` apply
-contextual fit, and `OverloadResolution` scores constants by fit cost. The
-language rules live in `07-fluid-integer-constants.md`; the implementation
+contextual fit, and `OverloadResolution` scores untyped constants by the
+narrowest fitting primitive (typed constants get an exact-type zero cost).
+The language rules live in `07-fluid-integer-constants.md`; the implementation
 contract is that folding and fit-checking stay arbitrary-precision until a
 concrete type context is applied. `ExpressionChecker.visitCast` range-checks
 constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
@@ -3110,6 +3158,14 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
 ### 4.3 Name mangling
 - `FUNC_<name>_<8hex>` / `METH_<name>_OFSTRUCT_<Struct>_<8hex>`,
   where the 8-hex hash is the low 32 bits of a 64-bit FNV-1a hash of the canonical `signatureKey()`.
+- A generated generic function is
+  `GEN_<generic-hash>_FUNC_<name>_<8hex>`. The `generic-hash` is the 8-hex
+  FNV-1a hash of the canonical generic arguments inside `<...>` only, not the
+  template signature, base name, or return type.
+- A generated generic struct's emitted C++ type is
+  `GEN_<generic-hash>_STRUCT_<base-name>`, using the same argument-only hash.
+  Its semantic `StructSymbol.name` remains a unique internal
+  `GEN_<hash>_<base-name>`.
 - `STRUCT_<name>`, `VAR_<name>`, `PARAM_<name>`, `FIELD_<name>`,
   `NS_<segment>` prefixes/namespaces make kinds unambiguous, so struct names may legally
   clash with variable/function names and field names cannot collide with
@@ -3127,7 +3183,10 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   64 bits as 16 hex digits.
 - Tuple mangling keys are canonical ordered element keys with names ignored,
   e.g. `(int32,int32)` or `(int32,[uint8,4])`.
-- Overload identity = name + ordered parameter types (return type excluded).
+- Ordinary overload identity = name + ordered parameter types (return type
+  excluded). Generic template identity = name + ordered generic parameter
+  types + ordered ordinary parameter types; return type is excluded, so
+  templates that differ only by return type are duplicates.
 - Pinned-hash drift guards: `Main` (template entry call) and
   `FfiHandler` (bridge block contains the computed emitted name).
 
@@ -3932,9 +3991,10 @@ accepts a single operator-form `CallArg` (lowered value or raw array literal) an
 implements operator-only rules: constant fitting through a `view<P>`
 parameter, ordinary pointer conversion between the value type and the
 parameter's inner referenced type (one level), and array-literal shape
-matching against that inner type. Preference is constant-fit first (exact
-natural type, then narrowest fitting with signed before unsigned), then
-inner permission/decay cost (decay 2, plain conversion 1), then ambiguity.
+matching against that inner type. Preference is constant-fit first (an
+explicitly typed constant prefers its exact natural type; an untyped constant
+uses narrowest fitting with signed before unsigned), then inner
+permission/decay cost (decay 2, plain conversion 1), then ambiguity.
 Array literals are lowered with the selected inner referenced type and then
 borrowed.
 
@@ -4472,6 +4532,15 @@ inlinable” warning. Forward declarations and definitions share
 emit no prefix because the bridge supplies the definition. Default functions
 emit no attribute at all.
 
+## 4.33 Diagnostic message style
+
+User-facing compiler errors use three short sentences: what failed, why the
+rule exists, and how to fix the code. The first sentence stays stable so test
+fixtures and tooling can match established message prefixes. Hand-crafted
+multi-sentence diagnostics that already follow this structure are preserved.
+Warnings, `#panic`/`#warning` user messages, internal invariant errors, and
+JSON/codec errors are not part of this style rule.
+
 ## 5. Build & test quick reference
 
 ```bash
@@ -4653,7 +4722,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 |---|---|
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `AstNode.java` + `ASTSerializer` |
 | Add a function declaration modifier | `Franko.g4` (`functionModifier`) + `FrankoASTVisitor` + `InlineMode`/`AstNode.inlineMode` + `ASTSerializer` + `Desugarer` + `Symbol.inlineMode`/`SemanticAnalyzer` + `CompileTimeLegalityChecker` + `Cpp14Codegen.emitFunctionHeader` + §4.30 |
-| Add or change generics | `Franko.g4` (`HASH_GENERIC`, `TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) + `FrankoASTVisitor` + `AstNode`/`AstKind` + `ASTSerializer` + `PreGenericsDesugarer`/`SpecializationDesugarer` + `GenericsResolver` + `DeclarationSelector` modes + §4.31 |
+| Add or change generics | `Franko.g4` (`HASH_GENERIC`, `TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) + `FrankoASTVisitor` + `AstNode`/`AstKind` + `ASTSerializer` + `PreGenericsDesugarer`/`SpecializationDesugarer` + `GenericsResolver` + `DeclarationSelector` modes + `SymbolTable` group filtering + §4.31 |
 | Add an early constant-only intrinsic | `CompileTimeIntrinsicCore` + `PreGenericsCompileTimeFolder`/`PostGenericsCompileTimeFolder` + §4.31 |
 | Add a compile-time directive | `DeferredDirectives` + `CompileTimeIntrinsics` + `SemanticAnalyzer` flush + §4.31 |
 | Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
@@ -4674,6 +4743,9 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change normal/return type resolution | `SemanticTypeResolver` + `SemanticAnalyzer` + `ExpressionLowering` |
 | Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `AstNode.java` (`AstKind.ENUM_DECL`/`AstKind.ENUM_VARIANT`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SastType.java` (`SastType.ENUM`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SastSerializer` + `InactiveDeclarationPruner`/`MemoryShapeIndex`/`PrivateIdentifierLinter` + §4.27 |
 | Change overload applicability/cost rules | `OverloadResolution` + `SymbolTable` |
+| Change typeless-constant inference or defaults | `SastNode.untypedConstant` + `ExpressionAnalyzer.adoptExpectedConstant`/`inferBinaryResultType` + `TypeChecker.defaultConstantPrimitive`/`primitiveFitCost` + `OverloadResolution` fit costs + §4.2 |
+| Change generic template identity or overload groups | `GenericsResolver` signature canonicalizers/candidate filtering + `AstNode.genericGroup` + `Symbol.genericGroup`/`SymbolTable` + §4.31 |
+| Change `GEN_` generic mangling | `GenericsResolver.genericArgsKey`/`instantiate` + `Symbol.mangledName` + `StructSymbol.genericHash`/`Cpp14Codegen.emittedStructTypeName` + §4.3 |
 | Add a type rule shared by checks | `TypeChecker` |
 | Change the owned-pointer-in-aggregate ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerAggregate` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
@@ -4761,14 +4833,18 @@ sizes, field defaults, and generic value arguments.
 
 **AST.** `AstKind.GENERIC_PARAM` and `AstKind.GENERIC_ARG` are added.
 `AstNode` carries `isGeneric`, `typeParameter`, `genericParams`,
-`genericArgs`, and `literalPrimitive`. `copyShallow()` is the shared clone
-primitive used by the resolver; it copies every slot including
-`literalPrimitive`, `inlineMode`, `isConst`, and `compileTimeConstant`.
+`genericArgs`, `genericGroup`, `genericHash`, `genericBaseName`, and
+`literalPrimitive`. `copyShallow()` is the shared clone primitive used by the
+resolver; it copies every slot including `literalPrimitive`, `inlineMode`,
+`isConst`, `compileTimeConstant`, and the generic metadata. Desugaring
+preserves the metadata on function declarations, struct declarations, and
+calls.
 `AstNode.typedIntLiteral` produces a fluid literal with an explicit result
 primitive; `ExpressionAnalyzer` uses `literalPrimitive` instead of the
 fallback type. `ASTSerializer` writes/reads optional `"generic"`,
-`"genericParams"`, `"typeArgs"`, `"literalType"`, and the `genericParam` /
-`genericArg` node shapes; old artifacts default to no generics.
+`"genericParams"`, `"typeArgs"`, `"literalType"`, `"genericGroup"`,
+`"genericHash"`, `"genericBaseName"`, and the `genericParam` / `genericArg`
+node shapes; old artifacts default to no generics.
 
 **Early target folding.** `EarlyTargetFolder` runs in `Frontend.parseFile`
 after the visitor and before desugaring, for the root file and every imported
@@ -4784,23 +4860,41 @@ string table; `GenericsResolver` collects the new `STRLIT_` globals and
 prepends them once, deduplicating by generated name.
 
 **GenericsResolver.** `GenericsResolver` is an AST-to-AST engine owned by
-`SemanticAnalyzer`. It collects `Template` records (struct/function,
-namespace, base name, ordered params, declaration), rejects duplicate
-templates and generic-struct/concrete-type collisions, rejects generic
-`main`, validates parameter lists, and rejects independent generic methods.
+`SemanticAnalyzer`. It collects `Template` records into per-name overload
+groups for structs and functions separately. A struct template signature is
+its base name plus ordered generic parameter types; a function template
+signature adds the ordered ordinary parameter types. Return types, parameter
+names, generic parameter names, fields, and bodies are excluded. Duplicate
+signatures, generic-struct/concrete-type collisions, generic `main`,
+invalid parameter lists, and independent generic methods are rejected.
 `expand` then:
 1. rewrites non-generic items, dropping templates;
-2. binds each `STRUCT_TYPE.genericArgs` and `CALL.genericArgs` against the
-   unique template for the resolved name;
-3. caches instances by `(template key, canonical type/value arguments)` and
-   inserts the cache entry before cloning, so same-argument recursion hits the
-   in-progress entry;
-4. processes the worklist: clone via `AstNode.copyShallow` +
-   `substituteNode`, clear `genericParams`/`isGeneric`, rename to
-   `<base>__<8hex FNV hash>`, run `SpecializationDesugarer`, and insert the
-   concrete declaration into the template namespace;
-5. appends generated declarations to the matching namespace nodes and adds
+2. normalizes each `STRUCT_TYPE.genericArgs` and `CALL.genericArgs` into
+   canonical type/value keys and probes every template in the resolved
+   overload group silently;
+3. filters candidates by argument kind and value fit, then keeps the
+   candidates with the lowest `TypeChecker.primitiveFitCost` (narrowest,
+   signed first); generic struct uses require exactly one surviving template,
+   while function calls instantiate all survivors;
+4. caches instances by `(template signature, canonical type/value
+   arguments)` and inserts the cache entry before cloning, so same-argument
+   recursion hits the in-progress entry;
+5. processes the worklist: clone via `AstNode.copyShallow` +
+   `substituteNode`, clear `genericParams`/`isGeneric`, assign
+   `genericHash`/`genericGroup`, assign generated struct names and metadata,
+   run `SpecializationDesugarer`, and insert the concrete declaration into
+   the template namespace;
+6. appends generated declarations to the matching namespace nodes and adds
    hoisted string globals.
+
+Function instances keep the source base name. Every call site is rewritten to
+the base callee with `genericGroup` set to the canonical qualified base name
+plus generic argument list. `SymbolTable` filters generated functions by that
+group, then runs the ordinary overload-resolution pipeline. This permits
+different generic templates with the same ordinary parameter list but
+different generic argument lists to coexist, and lets different ordinary
+signatures produced from the same generic argument list overload normally.
+`genericHash` is the hash of the canonical arguments inside `<...>` only.
 
 Type binding canonicalizes primitive aliases, arrays, pointers, tuples
 (names ignored), qualified struct names, and nested generic uses. Value
@@ -4857,7 +4951,7 @@ require non-code SAST markers through `BranchPruner`.
 reaches the SAST. `SemanticTypeResolver` defensively reports an unresolved
 `STRUCT_TYPE.genericArgs` as a compiler error. The legality checkers, both
 pruners, all memory checkers, and `Cpp14Codegen` see ordinary concrete
-declarations; generated names are ordinary identifiers. `#inline` recursion
+declarations; generated names carry `GEN_` metadata/prefixes. `#inline` recursion
 is checked per concrete instance. `InactiveDeclarationPruner` prunes unused
 instances like any other declaration. Generic FFI functions are rejected by
 `ModuleValidator` at parse time.
@@ -4865,13 +4959,22 @@ instances like any other declaration. Generic FFI functions are rejected by
 **Fixture list.** `language_tests/success/generics_*` covers basic structs,
 functions, value parameters, nesting, methods, self references, recursion,
 namespaces, imports, compile-time reflection, typed constants, unused
-templates, directives, JSON emission, and `-Omax`.
+templates, directives, JSON emission, generic struct/function overloading,
+template groups, value-fit narrowing, and `-Omax`.
 `language_tests/failure/generics/` covers arity, argument-kind, constant-fit,
 unknown-name, missing-argument, duplicate-parameter/template, collision,
 generic-`main`, independent-method, expansion-depth, self-reference,
 unresolved-parameter, non-value-assignable literal, unsupported-operation,
 directive-position, unknown-intrinsic, invalid-size, generic-enum/global,
-`#inline #generic`, and generic-FFI cases.
+ambiguous struct overload, return-only duplicate template, `#inline
+#generic`, and generic-FFI cases.
+
+Typeless constant fixtures are
+`language_tests/success/constants_typeless/`,
+`language_tests/success/fluid_constants/`,
+`language_tests/success/overload_const_preference/`,
+`language_tests/failure/fluid_consts/`, and the cast-context cases in
+`language_tests/success/cast_intrinsics/`.
 
 **Adding generic syntax or behavior.** Update `Franko.g4` (`HASH_GENERIC`,
 `TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) +

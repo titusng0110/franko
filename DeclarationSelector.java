@@ -441,13 +441,16 @@ final class DeclarationSelector {
                 members
         );
 
-        selectedStructs.put(node, AstNode.structDecl(
+        AstNode selected = AstNode.structDecl(
                 node.span,
                 node.name,
                 fields,
                 methods,
                 members
-        ));
+        );
+        selected.genericHash = node.genericHash;
+        selected.genericBaseName = node.genericBaseName;
+        selectedStructs.put(node, selected);
     }
 
     private void appendSelectedMembers(
@@ -513,7 +516,11 @@ final class DeclarationSelector {
                     && !"panic".equals(item.name)
                     && !"warning".equals(item.name)) {
                 diagnostics.error("Only #panic and #warning are allowed as a "
-                        + "declaration-level compile-time item");
+                        + "declaration-level compile-time item"
+                        + ". Declaration-level items are spliced before code"
+                        + " generation, where only diagnostics can stand alone."
+                        + " Move the call into a function body or guard it with"
+                        + " #if.");
                 return;
             }
 
@@ -537,12 +544,19 @@ final class DeclarationSelector {
 
             if (!(value.type.kind == SastTypeKind.PRIMITIVE)) {
                 diagnostics.error("#if condition must be an integer, got "
-                        + value.type.describe());
+                        + value.type.describe()
+                        + ". #if selects declarations based on integer truth"
+                        + " at compile time. Use an integer constant or an"
+                        + " integer comparison in the condition.");
                 return false;
             }
 
             if (!value.isConstant()) {
-                diagnostics.error("#if condition must be a compile-time constant");
+                diagnostics.error("#if condition must be a compile-time constant"
+                        + ". Declarations must be selected before type checking,"
+                        + " so runtime values are not available here. Build the"
+                        + " condition from literals, constants, or built-in"
+                        + " target queries such as #IS_LINUX.");
                 return false;
             }
 

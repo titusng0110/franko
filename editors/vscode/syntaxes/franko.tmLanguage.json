@@ -20,22 +20,25 @@
       "include": "#compile-time"
     },
     {
-      "include": "#member-access"
-    },
-    {
-      "include": "#qualified-names"
-    },
-    {
       "include": "#declarations"
     },
     {
       "include": "#keywords"
     },
     {
-      "include": "#types"
+      "include": "#qualified-names"
     },
     {
-      "include": "#builtin-functions"
+      "include": "#member-intrinsics"
+    },
+    {
+      "include": "#member-access"
+    },
+    {
+      "include": "#intrinsics"
+    },
+    {
+      "include": "#types"
     },
     {
       "include": "#operators"
@@ -87,7 +90,11 @@
           "name": "keyword.control.compile-time.franko"
         },
         {
-          "match": "#(inline|noinline|generic)\\b",
+          "match": "#generic\\b",
+          "name": "storage.modifier.generic.franko"
+        },
+        {
+          "match": "#(inline|noinline)\\b",
           "name": "storage.modifier.inline.franko"
         },
         {
@@ -95,7 +102,7 @@
           "name": "support.constant.compile-time.franko"
         },
         {
-          "match": "#(is_primitive|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|what_type|strcat|strcmp|panic|warning|is_matchable|is_comparable|is_assignable|is_value_assignable)\\b",
+          "match": "#(is_primitive|is_enum|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|is_matchable|is_comparable|is_assignable|is_value_assignable|what_type|strcat|strcmp|panic|warning)\\b",
           "name": "support.function.builtin.compile-time.franko"
         },
         {
@@ -103,6 +110,96 @@
           "name": "punctuation.definition.compile-time.franko"
         }
       ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(import)\\b",
+          "name": "keyword.other.declaration.franko"
+        },
+        {
+          "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.function.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.type.struct.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(enum)\\s*(<[^>]*>)?\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "storage.type.primitive.franko"
+            },
+            "3": {
+              "name": "entity.name.type.enum.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(namespace)\\s+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.franko"
+            },
+            "2": {
+              "name": "entity.name.namespace.franko"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(return|if|else|while|for|break|continue)\\b",
+          "name": "keyword.control.franko"
+        },
+        {
+          "match": "\\bconst\\b",
+          "name": "storage.modifier.const.franko"
+        },
+        {
+          "match": "\\bself\\b",
+          "name": "variable.language.self.franko"
+        },
+        {
+          "match": "\\bnull\\b",
+          "name": "constant.language.null.franko"
+        }
+      ]
+    },
+    "qualified-names": {
+      "match": "\\b(?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*",
+      "name": "entity.name.namespace.franko"
+    },
+    "member-intrinsics": {
+      "match": "(\\.)(init_zero|init|resize|uninit|memset|memcpy|memmove|length|memcmp|memchr|memmem|read_bit|write_bit|flip_bit|bitwise_not_mask|bitwise_xor_mask|bitwise_and_mask|bitwise_or_mask|shift_bits_left|shift_bits_right|count_set_bits|(?:read|write)_(?:u?int(?:16|32|64))_(?:LE|BE))(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.dot.franko"
+        },
+        "2": {
+          "name": "support.function.builtin.array.franko"
+        }
+      }
     },
     "member-access": {
       "patterns": [
@@ -130,92 +227,7 @@
         }
       ]
     },
-    "qualified-names": {
-      "match": "\\b(?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*",
-      "name": "entity.name.namespace.franko"
-    },
-    "declarations": {
-      "patterns": [
-        {
-          "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.other.declaration.franko"
-            },
-            "2": {
-              "name": "entity.name.function.franko"
-            }
-          }
-        },
-        {
-          "match": "\\b(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.other.declaration.franko"
-            },
-            "2": {
-              "name": "entity.name.type.struct.franko"
-            }
-          }
-        },
-        {
-          "match": "\\b(namespace)\\s+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
-          "captures": {
-            "1": {
-              "name": "keyword.other.declaration.franko"
-            },
-            "2": {
-              "name": "entity.name.namespace.franko"
-            }
-          }
-        },
-        {
-          "match": "\\b(import)\\b",
-          "name": "keyword.other.declaration.franko"
-        }
-      ]
-    },
-    "keywords": {
-      "patterns": [
-        {
-          "match": "\\b(return|if|else|while|for|break|continue)\\b",
-          "name": "keyword.control.franko"
-        },
-        {
-          "match": "\\b(const)\\b",
-          "name": "storage.modifier.const.franko"
-        },
-        {
-          "match": "\\b(typename)\\b",
-          "name": "storage.type.generic.franko"
-        },
-        {
-          "match": "\\b(self)\\b",
-          "name": "variable.language.self.franko"
-        },
-        {
-          "match": "\\b(null)\\b",
-          "name": "constant.language.null.franko"
-        }
-      ]
-    },
-    "types": {
-      "patterns": [
-        {
-          "match": "\\b(void)\\b",
-          "name": "storage.type.void.franko"
-        },
-        {
-          "match": "\\b(int8|int16|int32|int64|uint8|uint16|uint32|uint64|int|uint|byte)\\b",
-          "name": "storage.type.primitive.franko"
-        },
-        {
-          "match": "\\b(ptr|mview|view)\\b",
-          "name": "storage.type.pointer.franko"
-        }
-      ]
-    },
-    "builtin-functions": {
+    "intrinsics": {
       "patterns": [
         {
           "match": "\\b(cast|unsafe_cast|getptr|getmview|getview)\\b",
@@ -228,6 +240,34 @@
         {
           "match": "\\?",
           "name": "keyword.operator.inferred-size.franko"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\bvoid\\b",
+          "name": "storage.type.void.franko"
+        },
+        {
+          "match": "\\b(int8|int16|int32|int64|uint8|uint16|uint32|uint64|int|uint|byte)\\b",
+          "name": "storage.type.primitive.franko"
+        },
+        {
+          "match": "\\b(ptr|mview|view)\\b",
+          "name": "storage.type.pointer.franko"
+        },
+        {
+          "match": "\\btypename\\b",
+          "name": "storage.type.generic.franko"
+        },
+        {
+          "match": "\\b[A-Z][a-z][A-Za-z0-9_]*(?=\\s*<)",
+          "name": "entity.name.type.generic.franko"
+        },
+        {
+          "match": "\\b[A-Z][a-z][A-Za-z0-9_]*\\b",
+          "name": "entity.name.type.franko"
         }
       ]
     },

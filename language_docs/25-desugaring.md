@@ -32,29 +32,14 @@ array literal through a pointer). See
 
 ## 25.2 Array and Aggregate Literal Values
 
-Array literals are not assignment shorthand: they are `view<[T, N]>` values
-over immutable constant storage, exactly like string literals. Their element
-type is inferred from the surrounding assignment, return, or call-argument
-context. See [Array Literals](22-array-literals.md).
-
-Aggregate literals are likewise ordinary values, not statement shorthand: they
-construct a temporary struct or tuple value. See
+Array literals and aggregate literals are ordinary values, not declaration
+shorthand. See [Array Literals](22-array-literals.md) and
 [Aggregate Literals](30-aggregate-literals.md).
 
 ## 25.3 String Literal Values
 
-Every string literal is a read-only `view<[byte, N]>` over immutable
-storage holding its UTF-8 bytes. No null terminator is added, and
-identical literal texts share the same storage:
-
-```franko
-stdout($("ABC")[0]);
-```
-
-The literal has type `view<[byte, 3]>` and can be indexed after a
-dereference. Because a string literal is a view value, it cannot
-initialize or assign an array: copy the bytes with `memcpy` instead. See
-[String Literals](24-string-literals.md).
+String literals are read-only `view<[byte, N]>` values over immutable UTF-8
+storage. See [String Literals](24-string-literals.md).
 
 ## 25.4 Braceless Control-Flow Bodies
 
@@ -158,30 +143,8 @@ pointers, non-literal initializers) is rejected. See
 
 ## 25.7 Constant Expression Evaluation
 
-Constant expressions are evaluated at compile time in every
-constant-expression position:
-
-```franko
-[int32, 0x10] xs;   // size becomes 16
-int8 g = 1 + 2;          // initializer becomes 3 (globals)
-struct S {                 // field default becomes 8
-    int32 n = 1 << 3
-}
-```
-
-Static array sizes, global initializers, struct field defaults, and
-`break N` levels are reduced to concrete values. The values are then
-validated in context (positive sizes, `uint32` range, initializer fit)
-without folding anything again.
-
-Evaluation failures are compile errors:
-
-```franko
-[int32, 10 / 0] b;   // invalid: Division by zero in constant expression
-```
-
-Constant expressions inside ordinary code are also folded at compile
-time. See [Constant Folding](08-constant-folding.md).
+Constant-expression evaluation and folding are documented in
+[Constant Folding](08-constant-folding.md).
 
 ## 25.8 Increment and Decrement Equivalence
 

@@ -1,0 +1,46 @@
+import "franko/stdio"
+
+struct ByteBox {
+    uint8 value
+}
+
+func pick(int8 value) -> int32 {
+    return 1
+}
+
+func pick(int16 value) -> int32 {
+    return 2
+}
+
+func pick(uint8 value) -> int32 {
+    return 3
+}
+
+func pick(int32 value) -> int32 {
+    return 4
+}
+
+func returns_byte() -> uint8 {
+    return 200
+}
+
+func main() -> int32 {
+    stdout(pick(1))
+    stdout(pick(200))
+    stdout(pick(50000))
+
+    uint8 a = 255
+    int16 b = -32768
+    uint64 c = 18446744073709551615
+    int32 d = 1 + 2
+    stdout(a)
+    stdout(b)
+    stdout(c)
+    stdout(d)
+
+    stdout(returns_byte())
+    ByteBox box = ByteBox { value = 200 }
+    stdout(box.value)
+    stdout(cast<uint8>(200))
+    return 0
+}

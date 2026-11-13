@@ -105,7 +105,7 @@ receiver is an lvalue reached through an inner pointer (for example
 `$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
 pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
 array, struct, or tuple; see
-[Owning Pointers in Aggregates](26-pointers.md#2513-owning-pointers-in-aggregates-are-forbidden).
+[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
 
 Rules:
 
@@ -272,4 +272,4 @@ The `other` parameter is call-scoped: it may only be used during the operator
 call. Storing it into caller-owned or global storage is rejected; storing it
 in a local variable is allowed because the local dies before the operator
 call returns (see
-[Memory Safety Checking](32-memory-safety-checking.md#299-dangling-pointer-checking)).
+[Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)).

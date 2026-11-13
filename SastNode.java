@@ -22,6 +22,7 @@ final class SastNode {
     int levels;
     boolean temporary;
     boolean checked;
+    boolean untypedConstant;
 
     SastNode target;
     SastNode value;
@@ -397,7 +398,9 @@ final class SastNode {
 
     SastNode copyStaticDefault() {
         if (kind == SastKind.INT_LITERAL) {
-            return intLiteral(span, type, constantValue, rawValue);
+            SastNode copy = intLiteral(span, type, constantValue, rawValue);
+            copy.untypedConstant = untypedConstant;
+            return copy;
         }
 
         if (kind == SastKind.NULL_LITERAL) {

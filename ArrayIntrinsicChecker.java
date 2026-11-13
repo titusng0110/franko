@@ -95,7 +95,10 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemcmpIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 4) {
             diagnostics.error("Array intrinsic 'memcmp' expects either 1 or 4 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memcmp has separate whole-array and ranged forms, so any other"
+                    + " argument count has no defined meaning. Pass one source pointer, or"
+                    + " add destination start, source start, and count.");
             return;
         }
 
@@ -112,11 +115,18 @@ final class ArrayIntrinsicChecker {
         )) {
             if (!(sourcePtr.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memcmp() source must be an pointer to an array, got "
-                        + types.describeSafe(sourcePtr.type));
+                        + types.describeSafe(sourcePtr.type)
+                        + ". memcmp reads the source through a pointer so it can use the"
+                        + " array's element type and length. Pass getview(array),"
+                        + " getptr(array), or an existing pointer/view instead of the"
+                        + " array value.");
             } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcmp() source must be an pointer to an array, got ptr<"
                         + types.describeSafe(sourcePtr.type.referencedType)
-                        + ">");
+                        + ">. memcmp needs a pointer whose referent is an array, because"
+                        + " a pointer to one value has no length or element stride to"
+                        + " compare. Pass a pointer/view of the whole array, such as"
+                        + " getview(array), rather than a pointer to one element.");
             } else {
                 sourceArrayType = sourcePtr.type.referencedType;
             }
@@ -133,12 +143,20 @@ final class ArrayIntrinsicChecker {
                 diagnostics.error("memcmp() requires source and target arrays to have identical element types, got "
                         + targetElem.describe()
                         + " and "
-                        + sourceElem.describe());
+                        + sourceElem.describe()
+                        + ". memcmp compares elements at a shared stride, so both sides"
+                        + " must interpret the bytes with the same element layout."
+                        + " Compare arrays with the same element type, or copy both into"
+                        + " [byte] buffers and compare those.");
             }
 
             if (sourceElem != null && !types.isMemcpySafe(sourceElem)) {
                 diagnostics.error("memcmp() source array element type is not memcpy-safe: "
-                        + sourceElem.describe());
+                        + sourceElem.describe()
+                        + ". memcmp examines raw bytes, which is only well-defined for"
+                        + " types with no managed storage or construction state. Use a"
+                        + " memcpy-safe element type, or compare dynamic-array elements"
+                        + " individually.");
             }
         }
 
@@ -172,7 +190,10 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemchrIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memchr' expects either 1 or 3 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memchr has separate whole-array and ranged search forms, so any"
+                    + " other argument count has no defined meaning. Pass the value alone,"
+                    + " or add start and count.");
             return;
         }
 
@@ -202,7 +223,10 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemmemIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memmem' expects either 1 or 3 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memmem has separate whole-array and ranged search forms, so any"
+                    + " other argument count has no defined meaning. Pass the needle"
+                    + " pointer alone, or add start and count.");
             return;
         }
 
@@ -214,18 +238,29 @@ final class ArrayIntrinsicChecker {
         if (types.ensureValueExpression(needle, "memmem() needle pointer")) {
             if (!(needle.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memmem() needle must be an pointer to an array, got "
-                        + types.describeSafe(needle.type));
+                        + types.describeSafe(needle.type)
+                        + ". memmem reads the needle through a pointer so it can use the"
+                        + " pattern array's byte length and data. Pass getview(pattern),"
+                        + " getptr(pattern), or an existing pointer/view instead of the"
+                        + " array value.");
             } else if (!types.isArrayType(needle.type.referencedType)) {
                 diagnostics.error("memmem() needle must be an pointer to an array, got ptr<"
                         + types.describeSafe(needle.type.referencedType)
-                        + ">");
+                        + ">. memmem needs a pointer whose referent is an array, because"
+                        + " a pointer to one byte has no needle length. Pass a pointer/view"
+                        + " of the whole byte array, such as getview(pattern), rather than"
+                        + " a pointer to one element.");
             } else {
                 SastType needleElem =
                         types.elementTypeOfArray(needle.type.referencedType);
 
                 if (needleElem != null && !TypeChecker.isByteType(needleElem)) {
                     diagnostics.error("memmem() needle array element type must be byte, got "
-                            + types.describeSafe(needleElem));
+                            + types.describeSafe(needleElem)
+                            + ". memmem searches a byte pattern, so each needle element"
+                            + " must be exactly one byte. Store the pattern in a [byte] or"
+                            + " [byte, N] array, or search other element types element by"
+                            + " element.");
                 }
             }
         }
@@ -250,7 +285,10 @@ final class ArrayIntrinsicChecker {
             diagnostics.error("Array intrinsic '"
                     + node.intrinsicKind.runtimeName
                     + "' expects exactly 1 argument, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". A read_* intrinsic extracts exactly one fixed-width value from"
+                    + " one offset, so extra arguments have no meaning. Pass the offset as"
+                    + " the only argument.");
             return;
         }
 
@@ -279,7 +317,10 @@ final class ArrayIntrinsicChecker {
             diagnostics.error("Array intrinsic '"
                     + node.intrinsicKind.runtimeName
                     + "' expects exactly 2 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". A write_* intrinsic stores exactly one fixed-width value at one"
+                    + " offset, so extra arguments have no meaning. Pass the offset and the"
+                    + " value as the only two arguments.");
             return;
         }
 
@@ -318,7 +359,10 @@ final class ArrayIntrinsicChecker {
                     + "' expects "
                     + node.intrinsicKind.arityDescription()
                     + " arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". Each bit intrinsic has one fixed argument list, so missing or"
+                    + " extra arguments cannot form a valid call. Pass exactly the"
+                    + " documented arguments.");
             return;
         }
 
@@ -351,13 +395,20 @@ final class ArrayIntrinsicChecker {
         if (node.intrinsicKind.requiresStorageLValue()
                 && !owner.isStorageBackedLValue(node.receiver)) {
             diagnostics.error(node.intrinsicKind.runtimeName
-                    + "() receiver must be a storage-backed lvalue");
+                    + "() receiver must be a storage-backed lvalue. This intrinsic"
+                    + " writes through the receiver, so a temporary or call result would"
+                    + " lose the update. Bind the array to a variable, field, or $(ptr)"
+                    + " expression and call the intrinsic on that lvalue.");
         }
 
         if (!types.isArrayType(node.receiver.type)) {
             diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be an array, got "
-                    + types.describeSafe(node.receiver.type));
+                    + types.describeSafe(node.receiver.type)
+                    + ". Array intrinsics read the receiver's element type and length,"
+                    + " so non-array values have no elements to operate on. Use a dynamic"
+                    + " array ([T]) or static array ([T, N]); dereference an array"
+                    + " pointer with $(...) first.");
             return;
         }
 
@@ -374,7 +425,13 @@ final class ArrayIntrinsicChecker {
                 if (!types.isMemsetSafe(elementType)) {
                     diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type is not memset-safe: "
-                            + elementType.describe());
+                            + elementType.describe()
+                            + ". Byte-wise memset cannot initialize enums, pointers, or"
+                            + " dynamic arrays correctly, because those types require valid"
+                            + " representations or managed storage that a repeated byte"
+                            + " cannot guarantee. Use a memset-safe element type (a"
+                            + " primitive integer, static array, or struct of such fields),"
+                            + " or fill the elements explicitly.");
                 }
             }
 
@@ -382,7 +439,11 @@ final class ArrayIntrinsicChecker {
                 if (!types.isMemcpySafe(elementType)) {
                     diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type is not memcpy-safe: "
-                            + elementType.describe());
+                            + elementType.describe()
+                            + ". Byte-wise copying would duplicate managed storage in"
+                            + " dynamic arrays and aggregates that contain them. Use a"
+                            + " memcpy-safe element type, or copy the elements with a"
+                            + " loop that handles inner arrays explicitly.");
                 }
             }
 
@@ -390,7 +451,11 @@ final class ArrayIntrinsicChecker {
                 if (!TypeChecker.isByteType(elementType)) {
                     diagnostics.error(node.intrinsicKind.runtimeName
                             + "() receiver element type must be byte, got "
-                            + types.describeSafe(elementType));
+                            + types.describeSafe(elementType)
+                            + ". This operation addresses the receiver as raw bytes, so"
+                            + " each element must occupy exactly one byte. Use a [byte]"
+                            + " or [byte, N] array, or convert the data to byte storage"
+                            + " first.");
                 }
             }
         }
@@ -401,19 +466,29 @@ final class ArrayIntrinsicChecker {
             diagnostics.error("Array intrinsic '"
                     + node.intrinsicKind.runtimeName
                     + "' expects exactly 1 argument, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". An init, init_zero, or resize call is fully described by one"
+                    + " element count, so extra arguments have no meaning. Pass exactly one"
+                    + " size argument.");
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
             diagnostics.error(node.intrinsicKind.runtimeName
-                    + "() receiver must be a storage-backed lvalue");
+                    + "() receiver must be a storage-backed lvalue. init, init_zero,"
+                    + " and resize allocate or resize storage owned by the receiver, so"
+                    + " they must update a durable variable, field, or $(ptr) target."
+                    + " Bind the dynamic array to such an lvalue before calling it.");
         }
 
         if (!types.isDynamicArrayType(node.receiver.type)) {
             diagnostics.error(node.intrinsicKind.runtimeName
                     + "() receiver must be a dynamic array, got "
-                    + types.describeSafe(node.receiver.type));
+                    + types.describeSafe(node.receiver.type)
+                    + ". init, init_zero, and resize manage a runtime length and owned"
+                    + " heap storage, which static arrays do not have. Declare the"
+                    + " receiver as a dynamic array ([T]), or use a static array without"
+                    + " init/resize.");
         }
 
         owner.ensureArraySizeCompatible(
@@ -430,17 +505,25 @@ final class ArrayIntrinsicChecker {
     private void visitArrayUninitIntrinsic(SastNode node) {
         if (node.args.size() != 0) {
             diagnostics.error("Array intrinsic 'uninit' expects exactly 0 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". uninit releases the whole dynamic array and takes no options or"
+                    + " ranges. Call it with no arguments.");
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error("uninit() receiver must be a storage-backed lvalue");
+            diagnostics.error("uninit() receiver must be a storage-backed lvalue. This"
+                    + " intrinsic frees storage owned by the receiver, so it must update"
+                    + " a durable variable, field, or $(ptr) target. Bind the dynamic"
+                    + " array to such an lvalue before calling it.");
         }
 
         if (!types.isDynamicArrayType(node.receiver.type)) {
             diagnostics.error("uninit() receiver must be a dynamic array, got "
-                    + types.describeSafe(node.receiver.type));
+                    + types.describeSafe(node.receiver.type)
+                    + ". uninit() frees element storage owned by a dynamic array, so"
+                    + " there is nothing to free on a static array. Declare the receiver"
+                    + " as [T], or drop uninit() for fixed-size storage.");
         }
 
         ensureArrayIntrinsicReturnType(
@@ -452,12 +535,18 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemsetIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memset' expects either 1 or 3 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memset fills the whole array or one element range, so those are"
+                    + " the only valid call shapes. Pass the fill value alone, or the"
+                    + " value, start, and count.");
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error("memset() receiver must be a storage-backed lvalue");
+            diagnostics.error("memset() receiver must be a storage-backed lvalue. This"
+                    + " intrinsic writes through the receiver, so a temporary or call"
+                    + " result would lose the fill. Bind the array to a variable, field,"
+                    + " or $(ptr) expression and call memset() on that lvalue.");
         }
 
         types.ensureArrayType(
@@ -469,7 +558,13 @@ final class ArrayIntrinsicChecker {
 
         if (elementType != null && !types.isMemsetSafe(elementType)) {
             diagnostics.error("memset() receiver element type is not memset-safe: "
-                    + elementType.describe());
+                    + elementType.describe()
+                    + ". Byte-wise memset cannot initialize enums, pointers, or dynamic"
+                    + " arrays correctly, because those types require valid"
+                    + " representations or managed storage that a repeated byte cannot"
+                    + " guarantee. Use a memset-safe element type (a primitive"
+                    + " integer, static array, or struct of such fields), or fill the"
+                    + " elements explicitly.");
         }
 
         SastNode value = node.args.get(0);
@@ -513,12 +608,18 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemcpyIntrinsic(SastNode node) {
         if (node.args.size() != 1 && node.args.size() != 4) {
             diagnostics.error("Array intrinsic 'memcpy' expects either 1 or 4 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memcpy copies the whole source or one source range, so those"
+                    + " are the only valid call shapes. Pass the source pointer alone, or"
+                    + " add destination start, source start, and count.");
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error("memcpy() target must be a storage-backed lvalue");
+            diagnostics.error("memcpy() target must be a storage-backed lvalue. memcpy"
+                    + " writes into the target, so a temporary or call result would"
+                    + " discard the copied bytes. Bind the target to a variable, field,"
+                    + " or $(ptr) expression first.");
         }
 
         types.ensureArrayType(
@@ -537,11 +638,18 @@ final class ArrayIntrinsicChecker {
         )) {
             if (!(sourcePtr.type.kind == SastTypeKind.PTR)) {
                 diagnostics.error("memcpy() source must be an pointer to an array, got "
-                        + types.describeSafe(sourcePtr.type));
+                        + types.describeSafe(sourcePtr.type)
+                        + ". memcpy reads the source through a pointer so it can use the"
+                        + " array's element type and length. Pass getview(source),"
+                        + " getptr(source), or an existing pointer/view instead of the"
+                        + " array value.");
             } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcpy() source must be an pointer to an array, got ptr<"
                         + types.describeSafe(sourcePtr.type.referencedType)
-                        + ">");
+                        + ">. memcpy needs a pointer whose referent is an array, because"
+                        + " a pointer to one value has no array length or element stride"
+                        + " to copy. Pass a pointer/view of the whole array; to copy one"
+                        + " element, assign it directly.");
             } else {
                 sourceArrayType = sourcePtr.type.referencedType;
             }
@@ -558,17 +666,29 @@ final class ArrayIntrinsicChecker {
                 diagnostics.error("memcpy() requires source and target arrays to have identical element types, got "
                         + targetElem.describe()
                         + " and "
-                        + sourceElem.describe());
+                        + sourceElem.describe()
+                        + ". memcpy copies elements at the destination's stride, so"
+                        + " mismatched element layouts would corrupt values. Copy"
+                        + " between arrays with the same element type, or copy both into"
+                        + " [byte] buffers first.");
             }
 
             if (targetElem != null && !types.isMemcpySafe(targetElem)) {
                 diagnostics.error("memcpy() target array element type is not memcpy-safe: "
-                        + targetElem.describe());
+                        + targetElem.describe()
+                        + ". A byte-wise copy would duplicate managed storage in dynamic"
+                        + " arrays and their containing aggregates. Use a memcpy-safe"
+                        + " target element type, or copy elements individually with a"
+                        + " loop.");
             }
 
             if (sourceElem != null && !types.isMemcpySafe(sourceElem)) {
                 diagnostics.error("memcpy() source array element type is not memcpy-safe: "
-                        + sourceElem.describe());
+                        + sourceElem.describe()
+                        + ". A byte-wise copy would duplicate managed storage in dynamic"
+                        + " arrays and their containing aggregates. Use a memcpy-safe"
+                        + " source element type, or copy elements individually with a"
+                        + " loop.");
             }
         }
 
@@ -619,12 +739,19 @@ final class ArrayIntrinsicChecker {
     private void visitArrayMemmoveIntrinsic(SastNode node) {
         if (node.args.size() != 3) {
             diagnostics.error("Array intrinsic 'memmove' expects exactly 3 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". memmove moves one range within the receiver and needs every"
+                    + " endpoint explicitly. Pass destination start, source start, and"
+                    + " count.");
             return;
         }
 
         if (!owner.isStorageBackedLValue(node.receiver)) {
-            diagnostics.error("memmove() receiver must be a storage-backed lvalue");
+            diagnostics.error("memmove() receiver must be a storage-backed lvalue."
+                    + " memmove writes through the receiver, so a temporary or call"
+                    + " result would lose the moved elements. Bind the array to a"
+                    + " variable, field, or $(ptr) expression and call memmove() on that"
+                    + " lvalue.");
         }
 
         types.ensureArrayType(
@@ -637,7 +764,11 @@ final class ArrayIntrinsicChecker {
 
         if (receiverElem != null && !types.isMemcpySafe(receiverElem)) {
             diagnostics.error("memmove() receiver array element type is not memcpy-safe: "
-                    + receiverElem.describe());
+                    + receiverElem.describe()
+                    + ". memmove copies bytes within the receiver, which would duplicate"
+                    + " managed storage in dynamic arrays and their containing"
+                    + " aggregates. Use a memcpy-safe element type, or move inner arrays"
+                    + " element by element.");
         }
 
         SastNode dstStart = node.args.get(0);
@@ -685,7 +816,9 @@ final class ArrayIntrinsicChecker {
     private void visitArrayLengthIntrinsic(SastNode node) {
         if (node.args.size() != 0) {
             diagnostics.error("Array intrinsic 'length' expects exactly 0 arguments, got "
-                    + node.args.size());
+                    + node.args.size()
+                    + ". length() describes the whole array and takes no parameters or"
+                    + " range. Call it with no arguments.");
             return;
         }
 

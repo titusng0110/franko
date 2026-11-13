@@ -612,7 +612,12 @@ public final class DanglingPointerChecker {
                     diagnostics.error(
                             INTRA
                             + "Cannot store a view of frame or operator-borrowed"
-                            + " storage into a global or caller-owned location",
+                            + " storage into a global or caller-owned location"
+                            + ". The frame storage is destroyed when the current"
+                            + " function returns, leaving the global or caller"
+                            + " with a dangling pointer. Store a copy in"
+                            + " longer-lived storage, or keep the view local to"
+                            + " the function.",
                             "dangling.store"
                     );
                 }
@@ -749,7 +754,11 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Cannot dereference pointer to "
                             + formatDeadOrigins(origins, state.mustDead)
-                            + " after its scope ended",
+                            + " after its scope ended"
+                            + ". The referenced storage's lifetime has ended,"
+                            + " so the pointer is dangling. Copy the value out"
+                            + " before the scope ends, or keep the pointee in"
+                            + " longer-lived storage.",
                             "dangling.deref"
                     );
                 }
@@ -783,7 +792,11 @@ public final class DanglingPointerChecker {
                             INTRA
                             + "Cannot use pointer to "
                             + formatDeadOrigins(origins, state.mustDead)
-                            + " after its scope ended",
+                            + " after its scope ended"
+                            + ". The referenced storage's lifetime has ended,"
+                            + " so the pointer is dangling. Stop using the"
+                            + " pointer after the pointee's scope ends, or move"
+                            + " the pointee to longer-lived storage.",
                             "dangling.use"
                     );
                 }
@@ -862,7 +875,12 @@ public final class DanglingPointerChecker {
                         + formatDeadOrigins(origins, state.mustDead)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (dangling after return)",
+                        + "' (dangling after return)"
+                        + ". The referenced storage is destroyed when the"
+                        + " function returns, so the caller would receive a"
+                        + " dangling pointer. Return a pointer to caller-owned,"
+                        + " global, or otherwise longer-lived storage, or return"
+                        + " the value by copy.",
                         "dangling.return"
                 );
                 return;
@@ -888,7 +906,12 @@ public final class DanglingPointerChecker {
                         + formatFrameOrigins(origins)
                         + " from function '"
                         + functionName(node.function)
-                        + "' (dangling after return)",
+                        + "' (dangling after return)"
+                        + ". The frame storage is destroyed when the function"
+                        + " returns, so the caller would receive a dangling"
+                        + " pointer. Return a pointer to caller-owned, global,"
+                        + " or otherwise longer-lived storage, or return the"
+                        + " value by copy.",
                         "dangling.return"
                 );
             } else if (origins.hasFrame()) {
@@ -1360,7 +1383,12 @@ public final class DanglingPointerChecker {
                     diagnostics.error(
                             INTER
                             + "Call to '" + function + "' stores a view of frame"
-                            + " storage into " + sink,
+                            + " storage into " + sink
+                            + ". The captured view points into frame storage"
+                            + " that is destroyed when the caller returns,"
+                            + " leaving the sink dangling. Pass storage that"
+                            + " outlives the call, or have the callee copy the"
+                            + " data instead of retaining the view.",
                             "dangling.capture"
                     );
                 }

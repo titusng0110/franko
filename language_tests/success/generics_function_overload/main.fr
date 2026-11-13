@@ -1,0 +1,45 @@
+import "franko/stdio"
+
+#generic func tag<typename T>(T value) -> int32 {
+    return 1
+}
+
+#generic func tag<typename T>(T first, T second) -> int32 {
+    return 2
+}
+
+#generic func tag<int32 N>(int32 value) -> int32 {
+    return N
+}
+
+#generic func tag<int32 N, int32 M>(int32 first, int32 second) -> int32 {
+    return N + M
+}
+
+#generic func which<typename T>(int32 value) -> int32 {
+    return 10
+}
+
+#generic func which<int32 N>(int32 value) -> int32 {
+    return N
+}
+
+#generic func narrow<int32 N>(int32 value) -> int32 {
+    return N
+}
+
+#generic func narrow<uint8 N>(int32 value) -> int32 {
+    return N + 100
+}
+
+func main() -> int32 {
+    stdout(tag<int32>(7))
+    stdout(tag<int32>(7, 8))
+    stdout(tag<3>(7))
+    stdout(tag<3, 4>(7, 8))
+    stdout(which<int32>(0))
+    stdout(which<7>(0))
+    stdout(narrow<5>(0))
+    stdout(narrow<200>(0))
+    return 0
+}
