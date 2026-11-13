@@ -1064,6 +1064,7 @@ final class GenericsResolver {
                     node.span
             );
             candidates = preferNarrowestValueFit(candidates);
+            candidates = preferRawPointerPermissions(candidates, args);
 
             String group = genericGroupKey(
                     callee,
@@ -1242,6 +1243,65 @@ final class GenericsResolver {
         }
 
         return preferred;
+    }
+
+    private List<Candidate> preferRawPointerPermissions(
+            List<Candidate> candidates,
+            List<AstNode> args
+    ) {
+        if (candidates.size() <= 1) {
+            return candidates;
+        }
+
+        int best = Integer.MAX_VALUE;
+
+        for (Candidate candidate : candidates) {
+            best = Math.min(
+                    best,
+                    rawPointerPermissionCost(candidate.template, args)
+            );
+        }
+
+        List<Candidate> preferred = new ArrayList<>();
+
+        for (Candidate candidate : candidates) {
+            if (rawPointerPermissionCost(candidate.template, args) == best) {
+                preferred.add(candidate);
+            }
+        }
+
+        return preferred;
+    }
+
+    private static int rawPointerPermissionCost(
+            Template template,
+            List<AstNode> args
+    ) {
+        List<AstNode> parameters = template.declaration.parameters;
+        int count = Math.min(parameters.size(), args.size());
+        int cost = 0;
+
+        for (int i = 0; i < count; i++) {
+            AstNode argument = args.get(i);
+            AstNode parameterType = parameters.get(i).type;
+
+            if (argument.kind != AstKind.GET_PTR
+                    || parameterType == null
+                    || parameterType.kind != AstKind.PTR_TYPE) {
+                continue;
+            }
+
+            PtrPermission argumentPermission = argument.permission;
+            PtrPermission parameterPermission = parameterType.permission;
+
+            if (parameterPermission.ordinal() < argumentPermission.ordinal()) {
+                return Integer.MAX_VALUE;
+            }
+
+            cost += parameterPermission.ordinal() - argumentPermission.ordinal();
+        }
+
+        return cost;
     }
 
     private BoundArguments bindArguments(
@@ -1732,10 +1792,27 @@ final class GenericsResolver {
             List<AstNode> args,
             Substitution env
     ) {
-        return calleeDisplayName(callee)
+        return calleeSimpleName(callee)
                 + "<"
                 + genericArgsKey(args, env)
                 + ">";
+    }
+
+    private static String calleeSimpleName(AstNode callee) {
+        if (callee == null) {
+            return "<unknown>";
+        }
+
+        if (callee.kind == AstKind.VAR) {
+            return callee.name;
+        }
+
+        if (callee.kind == AstKind.QUALIFIED_NAME
+                && !callee.names.isEmpty()) {
+            return callee.names.get(callee.names.size() - 1);
+        }
+
+        return callee.kind.jsonName();
     }
 
     private String genericArgsDisplay(

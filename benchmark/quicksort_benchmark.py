@@ -174,15 +174,18 @@ def main() -> int:
                         help="seed for the per-round run-order shuffle")
     parser.add_argument("--no-shuffle", action="store_true",
                         help="run modes in a fixed order each round")
+    parser.add_argument("--only-franko", action="store_true",
+                        help="time only the Franko implementation")
     args = parser.parse_args()
 
     pin_cpu(args.cpu)
-    labels = [mode.label for mode in MODES]
+    modes = (MODES[0],) if args.only_franko else MODES
+    labels = [mode.label for mode in modes]
     rng = random.Random(args.seed)
 
     with tempfile.TemporaryDirectory(prefix="franko-quicksort-") as tmp:
         out_dir = Path(tmp)
-        binaries = {mode.label: build(mode, out_dir) for mode in MODES}
+        binaries = {mode.label: build(mode, out_dir) for mode in modes}
         sizes = {label: path.stat().st_size for label, path in binaries.items()}
 
         for size, count, _reps, _chunk in SIZES:
@@ -241,10 +244,11 @@ def main() -> int:
         print()
         print_mean_table(results, labels)
         print()
-        print_slowdown_table(results, labels)
-        print()
-        print_wins(results, labels)
-        print()
+        if not args.only_franko:
+            print_slowdown_table(results, labels)
+            print()
+            print_wins(results, labels)
+            print()
         print_per_key_table(results, labels)
         print()
         print_chunk_table(chunk_totals, labels)

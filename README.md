@@ -235,6 +235,6 @@ installation instructions.
   are in [`language_docs/`](language_docs/).
 * **[Compiler Internals](compiler_docs.md)** — the compiler pipeline,
   C++14 generation, runtime, and build/test tooling.
-* **[Library Reference](library_docs/)** — `franko/error`, `franko/stdio`,
-  `franko/limit`, `franko/os`, `franko/pool`, `franko/string`, and
-  `franko/time`.
+* **[Library Reference](library_docs/)** — `franko/algorithm`,
+  `franko/error`, `franko/stdio`, `franko/limit`, `franko/os`, `franko/pool`,
+  `franko/string`, and `franko/time`.

@@ -76,8 +76,9 @@ Franko is a small statically typed language with:
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
 - FFI modules described by sidecar manifests and C++ bridge blocks (see
   [Foreign Function Interface](34-foreign-function-interface.md));
-- standard modules including `franko/error`, `franko/stdio`, `franko/os`,
-  `franko/pool`, `franko/limit`, `franko/string`, and `franko/time`;
+- standard modules including `franko/algorithm`, `franko/error`,
+  `franko/stdio`, `franko/os`, `franko/pool`, `franko/limit`,
+  `franko/string`, and `franko/time`;
 - compiler checks for pointer null state, dangling frame pointers, dynamic
   array lifecycle, unused pointer permissions, and private identifier access
   (see [Memory Safety Checking](32-memory-safety-checking.md) and

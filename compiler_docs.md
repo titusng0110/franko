@@ -1120,16 +1120,18 @@ match exactly **or be a pointer conversion** (permission downgrade or
 array-view decay), ambiguity is an
 error; generated generic functions are filtered by `Symbol.genericGroup`,
 with ordinary calls selecting only null-group functions and generic calls
-selecting only the matching group; among applicable overloads exact permission matches win over
-downgrading ones, then pure downgrades, then decays, then a constant-fit
-preference (an explicitly typed constant prefers its exact parameter type;
-an untyped constant, or a typed constant without an exact match, uses the
-narrowest fitting type with signed before unsigned at equal width — so
-`stdout(1)` selects `stdout(int8)` and `stdout(5000000000)` selects
-`stdout(int64)`), then the fewest-default-fills
-preference (an overload needing no defaults wins over an otherwise equal one),
-then ambiguity —
-the fewest-downgrades tally weights a decay twice a pure downgrade). Call
+selecting only the matching group; among applicable overloads exact permission
+matches win over downgrading ones, then `OverloadResolution.pointerConversionCost`
+scores array-view decay as the primary penalty and capability downgrades as
+the secondary penalty, so `ptr<[T,N]> -> mview<[T,N]>` beats
+`ptr<[T,N]> -> ptr<[T]>`. Constant
+arguments then use a constant-fit preference (an explicitly typed constant
+prefers its exact parameter type; an untyped constant, or a typed constant
+without an exact match, uses the narrowest fitting type with signed before
+unsigned at equal width — so `stdout(1)` selects `stdout(int8)` and
+`stdout(5000000000)` selects `stdout(int64)`), then the
+fewest-default-fills preference (an overload needing no defaults wins over an
+otherwise equal one), then ambiguity. Call
 applicability is binding-based through `OverloadResolution.bindArguments`, so
 optional parameters may be omitted; named and positional arguments are mapped
 to parameters before type applicability is checked. Method overload
@@ -3994,7 +3996,8 @@ parameter's inner referenced type (one level), and array-literal shape
 matching against that inner type. Preference is constant-fit first (an
 explicitly typed constant prefers its exact natural type; an untyped constant
 uses narrowest fitting with signed before unsigned), then inner
-permission/decay cost (decay 2, plain conversion 1), then ambiguity.
+permission/decay cost (array-view decay is the primary penalty, capability
+downgrade the secondary penalty), then ambiguity.
 Array literals are lowered with the selected inner referenced type and then
 borrowed.
 

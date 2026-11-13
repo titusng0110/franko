@@ -221,6 +221,7 @@ The import prefix `franko/` is reserved for those standard modules:
 
 ```franko
 import "franko/stdio"
+import "franko/algorithm"
 import "franko/os"
 import "franko/pool"
 ```

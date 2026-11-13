@@ -109,10 +109,13 @@ where `mview`/`view` of `[T]` is expected; see
 For folded integer constants, the constant may match a primitive integer parameter if its value fits that parameter type. An untyped constant uses the narrowest fitting parameter type, with signed preferred over unsigned at equal width; an explicitly typed constant prefers an exact parameter type before falling back to that rule. See [Fluid Integer Constants](07-fluid-integer-constants.md).
 
 Overload preference: among applicable overloads, ones matched without any
-conversion win over converting ones, and among the rest the ones relying
-on the fewest conversions win, with a decay counted heavier than a pure
-permission downgrade. Constant arguments then prefer the lowest constant-fit cost (exact type first for typed constants, otherwise narrowest, signed first). If several overloads remain
-tied, the call is ambiguous and is rejected.
+conversion win over converting ones. Pointer fitting avoids static-to-dynamic
+array-view decay first, then minimizes capability downgrades. A capability
+downgrade is therefore preferred over a decay, so `ptr<[T, N]>` matches
+`mview<[T, N]>` before the decayed `ptr<[T]>`. Constant arguments then prefer
+the lowest constant-fit cost (exact type first for typed constants, otherwise
+narrowest, signed first). If several overloads remain tied, the call is
+ambiguous and is rejected.
 
 ## 19.7 Bare Function Names
 

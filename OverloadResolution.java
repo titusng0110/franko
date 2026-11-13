@@ -435,11 +435,9 @@ final class OverloadResolution {
 
             if (!TypeChecker.sameType(arg.lowered.type, parameterType)
                     && arg.lowered.type.kind == SastTypeKind.PTR) {
-                count += PointerPermissions.isStaticArrayViewDecay(
+                count += pointerConversionCost(
                         arg.lowered.type,
-                        parameterType)
-                        ? 2
-                        : 1;
+                        parameterType);
             }
         }
 
@@ -579,14 +577,34 @@ final class OverloadResolution {
 
         if (arg.lowered.type.kind == SastTypeKind.PTR
                 && referenced.kind == SastTypeKind.PTR) {
-            return PointerPermissions.isStaticArrayViewDecay(
-                    arg.lowered.type,
-                    referenced)
-                    ? 2
-                    : 1;
+            return pointerConversionCost(arg.lowered.type, referenced);
         }
 
         return 0;
+    }
+
+    static int pointerConversionCost(
+            SastType source,
+            SastType target
+    ) {
+        if (TypeChecker.sameType(source, target)) {
+            return 0;
+        }
+
+        if (source.kind != SastTypeKind.PTR
+                || target.kind != SastTypeKind.PTR) {
+            return 0;
+        }
+
+        int permissionCost = target.permission.ordinal()
+                - source.permission.ordinal();
+        int decayCost = PointerPermissions.isStaticArrayViewDecay(
+                source,
+                target)
+                ? 1
+                : 0;
+
+        return decayCost * 1000 + Math.max(0, permissionCost);
     }
 
     static boolean isArgumentApplicableToParameter(

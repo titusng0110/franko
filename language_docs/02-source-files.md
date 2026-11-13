@@ -105,6 +105,7 @@ those standard modules:
 
 ```franko
 import "franko/stdio"
+import "franko/algorithm"
 import "franko/os"
 import "franko/pool"
 import "franko/time"

@@ -1,0 +1,28 @@
+import "franko/stdio"
+
+func h(view<[byte, 3]> x) -> void {
+    stdout(1)
+}
+
+func h(mview<[byte]> x) -> void {
+    stdout(2)
+}
+
+func k(mview<[byte, 3]> x) -> void {
+    stdout(3)
+}
+
+func k(view<[byte, 3]> x) -> void {
+    stdout(4)
+}
+
+func main() -> int32 {
+    [byte, 3] buf
+    buf.memset(0)
+    mview<[byte, 3]> m = getmview(buf)
+    ptr<[byte, 3]> p = getptr(buf)
+
+    h(m)
+    k(p)
+    return 0
+}
