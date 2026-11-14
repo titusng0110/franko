@@ -201,6 +201,10 @@ public class Desugarer {
     }
 
     private AstNode desugarStructMember(AstNode item) {
+        if (item.kind == AstKind.FUNCTION_DECL && item.isGeneric) {
+            return item;
+        }
+
         if (item.kind == AstKind.STRUCT_FIELD_DECL) {
             if (item.isConst) {
                 diagnostics.error("Struct fields cannot be const. A struct is "
@@ -425,6 +429,10 @@ public class Desugarer {
         node.genericGroup = fn.genericGroup;
         node.genericHash = fn.genericHash;
         return node;
+    }
+
+    AstNode desugarSpecializationMethod(AstNode method) {
+        return desugarFunctionDecl(method);
     }
 
     private AstNode desugarParameter(AstNode param) {

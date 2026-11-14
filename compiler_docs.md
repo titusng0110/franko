@@ -59,6 +59,7 @@ import-resolved AstDocument             -> <base>.imports.ast.json
    │    │    └─ SpecializationDesugarer (per-instance full desugar)
    │    ├─ PostGenericsCompileTimeFolder (remaining constant-only folding)
    │    ├─ DeclarationSelector.postGenerics
+   │    ├─ GenericsResolver.expandMethods (generic methods -> concrete methods)
    │    ├─ normal registration/lowering
    │    │    ├─ parameter-default resolution (after registration,
    │    │    │   before function/method body lowering)
@@ -568,8 +569,10 @@ normally.
 #### `SpecializationDesugarer`
 `Desugarer` subclass used by `GenericsResolver`. It desugars one cloned,
 already-substituted concrete declaration through
-`desugarSingleTopLevelItem` and shares the hoisted-string table so repeated
-literals across specializations produce one `STRLIT_<hash>` global.
+`desugarSingleTopLevelItem` and a concrete generic method through
+`desugarSpecializationMethod` (which forwards to the function declaration
+desugar path), and shares the hoisted-string table so repeated literals across
+specializations produce one `STRLIT_<hash>` global.
 
 #### `PreGenericsCompileTimeFolder`
 `AstRewriter` subclass run by `SemanticAnalyzer` after import resolution and
@@ -598,23 +601,51 @@ diagnostics and never hoists strings; those remain the semantic adapter's
 responsibility.
 
 #### `GenericsResolver`
-AST-to-AST explicit-instantiation engine owned by `SemanticAnalyzer`. It
-collects struct/function templates into per-name overload groups, validates
-generic parameter lists, rejects duplicate signatures (name + ordered generic
-parameter types + ordered ordinary parameter types; return type excluded),
-generic `main`, independent generic methods, and generic struct/concrete type
-collisions. A use or call binds its explicit type/value arguments, filters
-templates by argument kind and value fit, applies the narrowest-value-fit
-preference (signed first at equal width), and then instantiates the remaining
-candidates. Function candidates keep the source base name and carry a
-canonical `genericGroup` marking the call's generic-argument list; struct
-instances receive a unique internal name plus `genericHash`/`genericBaseName`
-metadata. Instances are cached by template signature plus canonical
-arguments, cloned/substituted with `AstNode.copyShallow`, desugared by
+AST-to-AST explicit-instantiation engine owned by `SemanticAnalyzer`. It runs
+in two phases with `DeclarationSelector`/`PostGenericsCompileTimeFolder`
+between them:
+
+- `expand` expands generic struct/function templates;
+- `expandMethods` expands generic method templates after post-selection.
+
+`expand` collects struct/function templates into per-name overload groups,
+validates generic parameter lists, rejects duplicate signatures (name + ordered
+generic parameter types + ordered ordinary parameter types; return type
+excluded), generic `main`, and generic struct/concrete type collisions. It
+preserves generic method declarations inside structs unchanged for the second
+phase. A use or call binds its explicit type/value arguments, filters templates
+by argument kind and value fit, applies the narrowest-value-fit preference
+(signed first at equal width), and then instantiates the remaining candidates.
+Function candidates keep the source base name and carry a canonical
+`genericGroup` marking the call's generic-argument list; struct instances
+receive a unique internal name plus `genericHash`/`genericBaseName` metadata.
+Instances are cached by template signature plus canonical arguments,
+cloned/substituted with `AstNode.copyShallow`, desugared by
 `SpecializationDesugarer`, and inserted into their template namespaces.
 Substitution includes `PARAMETER.defaultValue`, reconstructed calls preserve
-`argumentNames` and `genericGroup`, and `containsGenericUse` inspects
-defaults. Limits are 1024 instances and depth 64. See §4.31.
+`argumentNames` and `genericGroup`, and `containsGenericUse` inspects defaults.
+Member calls with generic arguments are preserved through phase 1. A bare
+generic-struct self reference is a declaration error; `Box<T>`/`Box<U>` resolve
+through the normal template machinery and compare canonical arguments against
+the owner instance. Limits are 1024 instances and depth 64. See §4.31.
+
+`expandMethods` collects generic method templates from concrete structs
+(including generated generic struct instances and struct-member `#if` selected
+methods), validates them, and removes them from the struct's `methods` and
+`members`. Method-template identity is owner + method name + ordered generic
+parameter kinds + ordered user parameter types, with `self` excluded and owner
+bindings canonicalized (`ptr<Box<T>>` becomes the current generated instance).
+It builds a raw-type index (struct nodes, concrete field types, concrete method
+names, globals), walks free functions and methods with a lexical raw-type
+environment, resolves receivers from declarations (`VAR`, `QUALIFIED_NAME`,
+`MEMBER_ACCESS`, `ARRAY_ACCESS`, `DEREF`), and rewrites member calls with
+generic arguments into ordinary calls with `genericGroup` set. Method instance
+cache keys include owner, method name, template signature, and canonical
+arguments; instances inherit owner bindings/depth, substitute the declaration,
+run `SpecializationDesugarer.desugarSpecializationMethod`, and are appended to
+the owner's `methods`/`members`. The fixed-point loop re-collects templates and
+bodies, drains the struct/function instance queue, and re-inserts generated
+declarations until no work remains. See §4.31.
 
 #### `ImportResolver`
 Consumes an already-desugared `AstDocument`. For each surviving `AstKind.IMPORT`
@@ -667,7 +698,10 @@ folded to a canonical `AstKind.INT` (`null` is preserved for implicit
 variants); top-level and namespace enum declarations flow through the same
 top-level item list, so selected `#if` branches are desugared
 automatically. `desugarFunctionDecl` rebuilds each function declaration with
-its `inlineMode` unchanged; `desugarParameter` desugars an optional default
+its `inlineMode` unchanged; a generic method member is returned unchanged so
+its own parameters and body stay raw until `GenericsResolver.expandMethods`
+instantiates it. `desugarSpecializationMethod` is the method-specific
+specialization entry point used after substitution. `desugarParameter` desugars an optional default
 expression with the ordinary expression path (string defaults hoist to
 `STRLIT_` globals, array/aggregate literals stay raw for semantic lowering),
 and every reconstructed `CALL` preserves `argumentNames`. `ImportResolver`
@@ -801,7 +835,9 @@ lists. A selection pass then walks global and namespace items in source
 order, evaluates each condition with `ExpressionAnalyzer`, splices the
 selected declarations into the enclosing scope, and registers newly
 selected declarations (including selected conditional enums) for later conditions. Unselected branches never enter
-the symbol table. Selection diagnostics are merged into the semantic pass.
+the symbol table. Generic method declarations are preserved in the rebuilt
+struct's `methods` and `members` in both pre- and post-generics modes but are
+never registered or type-resolved by the selector; phase 2 owns them. Selection diagnostics are merged into the semantic pass.
 Declaration-level compile-time items are restricted to `#panic` and
 `#warning`; both are evaluated through
 `ExpressionAnalyzer.analyzeCompileTimeDirective`, so they report into the
@@ -812,8 +848,10 @@ The lowering hub: converts the desugared raw AST into the typed,
 symbol-resolved Semantic AST. It deliberately does **not** enforce full
 language correctness (that is the legality cluster's job). Entry:
 `analyze(AstDocument)` → `PassResult` (a `SastDocument` plus diagnostics). Ordinary
-user errors are returned as diagnostics rather than thrown. Program
-analysis runs eight internal phases:
+user errors are returned as diagnostics rather than thrown. After pre-selection,
+`GenericsResolver.expand`, post-generics folding, and post-selection, the
+analyzer calls `GenericsResolver.expandMethods` so only concrete methods reach
+`analyzeProgram`. Program analysis runs eight internal phases:
 1. collect namespaces,
 2. create enum symbols (`analyzeEnumDecl`),
 3. create struct shells,
@@ -825,7 +863,7 @@ analysis runs eight internal phases:
    structs+methods, globals, function bodies).
 
 Registration copies `AstNode.genericGroup`/`genericHash` onto generated
-function symbols and `AstNode.genericHash`/`genericBaseName` onto generated
+function symbols and generated method symbols, and `AstNode.genericHash`/`genericBaseName` onto generated
 `StructSymbol` shells. The same metadata is applied to fallback symbols when
 registration recovered from an error.
 
@@ -1075,10 +1113,14 @@ arguments inside `<...>` and drives the `GEN_` emitted-name prefix.
 - `METHOD` — adds `owner: StructSymbol`; emitted as
   `METH_<name>_OFSTRUCT_<Struct>_<hex>` free functions taking a
   `Franko_Thin_Pointer<STRUCT_X>` for `PARAM_self` (the self permission is
-  compile-time only). **Method overload identity excludes the `self`
-  parameter's type**: name + the remaining parameter types must be unique, so
-  a struct may not carry both a `view<X> self` and an `mview<X> self` method
-  with otherwise identical signatures.
+  compile-time only). A generic method instance is emitted as
+  `GEN_<generic-hash>_METH_<name>_OFSTRUCT_<Struct>_<hex>`, where the generic
+  hash covers only the canonical arguments inside `<...>`. **Method overload
+  identity excludes the `self` parameter's type**: name + the remaining
+  parameter types must be unique within one generic group, so a struct may not
+  carry both a `view<X> self` and an `mview<X> self` method with otherwise
+  identical signatures. Methods with the same user signature but different
+  `genericGroup` values coexist.
 
 `qualifiedName()`, `returnType()`, `parameterTypes()`, `arity()`,
 `signatureString()`, and `fullSignatureString()` dispatch on `kind`.
@@ -1139,7 +1181,13 @@ identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
 `getptr`/`getmview`/`getview` matching the resolved method's declared self
 type (an under-privileged receiver then fails the ordinary creation-intrinsic
-permission rule); `CallArg` (a lowered expression or a not-yet-lowered
+permission rule). Method groups mirror function groups: `declareMethod`
+includes `genericGroup` in duplicate identity, and
+`resolveMethodWithLiterals(..., genericGroup)` filters overloads by
+`Objects.equals(symbol.genericGroup, requestedGroup)`; ordinary calls request
+`null`, generic method calls request their generated group, and
+`methodOverloadsNamed(owner, name, group)` provides the same filtered list for
+diagnostics. `CallArg` (a lowered expression or a not-yet-lowered
 `AstKind.ARRAY_LITERAL`) so overload resolution can run before a literal
 argument's element type is inferred — a pending literal is applicable to
 a `view<[...]>` parameter whose shape matches the literal's
@@ -1212,6 +1260,8 @@ calls whose hidden self argument is synthesized as
 `getptr`/`getmview`/`getview(receiver)` **matching the method's declared self
 type** (pointer receivers need explicit `$(p).method(...)`; the creation
 intrinsic's permission rule is what rejects an under-qualified receiver);
+method resolution passes `AstNode.genericGroup` and uses the same filtered
+overload list for the no-match diagnostic;
 `getptr`/`getmview`/`getview` lower to `SastNode.GET_PTR` with the
 corresponding pointer permission; qualified `ns::name` references first try
 enum variant resolution (`Enum::Variant`, returning
@@ -2787,7 +2837,9 @@ struct field/method tables, then AST nodes. `StructSymbol.methods` is
 serialized explicitly so overload groups survive; `methodDeclSymbols` /
 `functionDeclSymbols` are analysis-only and never serialized. Generated
 generic metadata is serialized as optional `genericGroup`/`genericHash` on
-function symbols and `genericHash`/`genericBaseName` on struct symbols. Enum symbols
+function symbols and `genericHash`/`genericBaseName` on struct symbols. Method
+symbols serialize the same optional `inlineMode`/`genericGroup`/`genericHash`
+fields as function symbols. Enum symbols
 serialize as kind `enum` with `name`, `namespace`, `backing`, and `variants`
 (`name`/`value` decimal strings), since variants are embedded rather than
 registered separately. Semantic types add kind `enum` (`symbol`), nodes add
@@ -3052,7 +3104,8 @@ Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
 `function` (`name`, `namespace`,
 `parameters`, `returnType`, `isBuiltin`, optional `inlineMode`, optional
 `genericGroup`/`genericHash`), `method` (function fields plus
-`owner`), `parameter` (`name`, `index`, `type`, optional `const`), `variable`
+`owner`, and the same optional `inlineMode`/`genericGroup`/`genericHash`),
+`parameter` (`name`, `index`, `type`, optional `const`), `variable`
 (`name`, `namespace`, `type`, optional `const`), `global` (variable fields
 plus `compileTimeConstantValue`, `literalBytes`, `literalValues`, optional
 `const`). Declarations also carry optional `const` in the raw AST JSON for
@@ -3164,6 +3217,9 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   `GEN_<generic-hash>_FUNC_<name>_<8hex>`. The `generic-hash` is the 8-hex
   FNV-1a hash of the canonical generic arguments inside `<...>` only, not the
   template signature, base name, or return type.
+- A generated generic method is
+  `GEN_<generic-hash>_METH_<name>_OFSTRUCT_<Struct>_<8hex>`; the owner name and
+  the ordinary method signature hash stay in their usual positions.
 - A generated generic struct's emitted C++ type is
   `GEN_<generic-hash>_STRUCT_<base-name>`, using the same argument-only hash.
   Its semantic `StructSymbol.name` remains a unique internal
@@ -3944,7 +4000,8 @@ methods (`OPERATOR_EQ`, `OPERATOR_NEQ`, `OPERATOR_GT`, `OPERATOR_LT`,
 (`OPERATOR_MOV`, `OPERATOR_ADDMOV`, `OPERATOR_SUBMOV`, `OPERATOR_MULMOV`,
 `OPERATOR_DIVMOV`, `OPERATOR_MODMOV`, `OPERATOR_ORMOV`, `OPERATOR_ANDMOV`,
 `OPERATOR_XORMOV`); the tables live in `OperatorMethods`. A free function
-with a reserved name is rejected.
+with a reserved name is rejected, and a generic method template with a
+reserved name is rejected during method-template collection.
 
 **Signatures.** Comparisons are exactly
 `func OPERATOR_XXX(view<X> self, view<X> other) -> uint8`; assignments are
@@ -4683,6 +4740,27 @@ language_tests/failure/functions/inline_method_recursion.fr
 language_tests/failure/functions/inline_recursion_through_noinline.fr
 ```
 
+Generic-method fixtures:
+
+```text
+language_tests/success/generics_methods/
+language_tests/success/generics_methods_independent/
+language_tests/success/generics_methods_inherited/
+language_tests/success/generics_methods_receivers/
+language_tests/success/generics_methods_compile_time/
+language_tests/failure/generics/generic_method_missing_args.fr
+language_tests/failure/generics/generic_method_unknown.fr
+language_tests/failure/generics/generic_method_arity.fr
+language_tests/failure/generics/generic_method_value_fit.fr
+language_tests/failure/generics/generic_method_duplicate_template.fr
+language_tests/failure/generics/generic_method_operator.fr
+language_tests/failure/generics/generic_method_shadow_struct_param.fr
+language_tests/failure/generics/generic_method_self_not_first.fr
+language_tests/failure/generics/generic_method_nonconstant_arg.fr
+language_tests/failure/generics/generic_struct_bare_self.fr
+language_tests/failure/generics/generic_struct_bare_field.fr
+```
+
 Named and optional argument fixtures:
 
 ```text
@@ -4726,6 +4804,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Add syntax | `Franko.g4` + `FrankoASTVisitor` + a node in `AstNode.java` + `ASTSerializer` |
 | Add a function declaration modifier | `Franko.g4` (`functionModifier`) + `FrankoASTVisitor` + `InlineMode`/`AstNode.inlineMode` + `ASTSerializer` + `Desugarer` + `Symbol.inlineMode`/`SemanticAnalyzer` + `CompileTimeLegalityChecker` + `Cpp14Codegen.emitFunctionHeader` + §4.30 |
 | Add or change generics | `Franko.g4` (`HASH_GENERIC`, `TYPENAME`, `genericParamList`, `genericArgList`, `genericCallSuffix`) + `FrankoASTVisitor` + `AstNode`/`AstKind` + `ASTSerializer` + `PreGenericsDesugarer`/`SpecializationDesugarer` + `GenericsResolver` + `DeclarationSelector` modes + `SymbolTable` group filtering + §4.31 |
+| Add or change generic methods | `GenericsResolver.expandMethods` + `Desugarer.desugarSpecializationMethod` + `DeclarationSelector` generic-member preservation + `SemanticAnalyzer` group metadata + `SymbolTable` group-aware method registration/resolution + `Symbol.mangledName` + `SastSymbolSupport` + §4.31 |
 | Add an early constant-only intrinsic | `CompileTimeIntrinsicCore` + `PreGenericsCompileTimeFolder`/`PostGenericsCompileTimeFolder` + §4.31 |
 | Add a compile-time directive | `DeferredDirectives` + `CompileTimeIntrinsics` + `SemanticAnalyzer` flush + §4.31 |
 | Change aggregate literal syntax or unnamed-tuple positional rules | `Franko.g4` (`aggregateLiteral`/`initItem`/`declSuffix`) + `FrankoASTVisitor` + `Desugarer` (field-wise form) + `ExpressionAnalyzer.lowerAggregateLiteral` + `ExpressionChecker.visitAggregateLiteral` + §4.26 |
@@ -4869,7 +4948,9 @@ its base name plus ordered generic parameter types; a function template
 signature adds the ordered ordinary parameter types. Return types, parameter
 names, generic parameter names, fields, and bodies are excluded. Duplicate
 signatures, generic-struct/concrete-type collisions, generic `main`,
-invalid parameter lists, and independent generic methods are rejected.
+invalid parameter lists, and generic operator method templates are rejected.
+Generic method declarations are preserved raw through phase 1 and expanded by
+the separate `expandMethods` pass.
 `expand` then:
 1. rewrites non-generic items, dropping templates;
 2. normalizes each `STRUCT_TYPE.genericArgs` and `CALL.genericArgs` into
@@ -4906,10 +4987,39 @@ binding substitutes outer value parameters, folds with
 typed INT node. Limits are `MAX_INSTANCES = 1024` and `MAX_DEPTH = 64`;
 instances carry their nesting depth.
 
-Self references: inside a generic struct, a bare template name and a use with
-the current canonical arguments both rewrite to the generated instance name;
-other arguments instantiate a different instance. A method's `self` type is
-rewritten by the same type substitution.
+Self references: inside a generic struct, every use of the generic struct name
+must spell its arguments explicitly. A bare template name is a declaration
+error; a use whose canonical arguments equal the owner's canonical arguments
+rewrites to the generated instance name, and other arguments instantiate a
+different instance. A method's `self` type is rewritten by the same type
+substitution.
+
+**Generic methods.** `expandMethods` runs after
+`DeclarationSelector.selectPostGenerics` and before semantic registration. It
+collects `MethodTemplate` records from every concrete struct (ordinary,
+generated generic instance, and newly generated during the fixed point),
+validating non-empty/unique generic parameters, primitive value parameters,
+collisions with enclosing struct parameters, reserved operator names, and
+duplicate method-template signatures. It removes templates from the struct's
+`methods` and `members`. A method-template signature is owner + method name +
+ordered generic parameter kinds + ordered user parameter types; `self` is
+excluded and owner-bound references are canonicalized against the instance
+bindings (`ptr<Box<T>>` becomes the current instance). A raw receiver-type
+environment records parameters and local declaration types, scopes blocks and
+control flow, resolves `VAR`/`QUALIFIED_NAME`/`MEMBER_ACCESS`/`ARRAY_ACCESS`/
+`DEREF` receivers, and walks aggregate-literal field values. Calls with
+generic arguments bind them with the ordinary kind/fit/narrowest-value and
+raw-permission preferences (user-parameter offset one), instantiate every
+surviving template, and rewrite the call to an ordinary method call with
+`genericArgs` cleared and `genericGroup` set to
+`owner.method<canonical-arguments>`. Method-instance cache keys include owner,
+method name, template signature, and canonical arguments; instances inherit
+owner type/value bindings and depth, substitute defaults and bodies, run
+`SpecializationDesugarer.desugarSpecializationMethod`, and are appended to the
+owner struct. A fixed-point loop reprocesses bodies, drains the phase-1
+instance queue, re-inserts generated declarations, and re-collects templates
+from newly generated struct instances. Expansion limits are shared with
+struct/function instances.
 
 `substituteNode` also folds `COMPILE_TIME_IF`/`DECL_IF` conditions when the
 substituted condition is a constant under `CompileTimeIntrinsicCore`. The
@@ -4938,7 +5048,9 @@ a fallback type rather than reporting an unknown type; the post mode resolves
 them concretely. `selectPostGenerics` re-runs the ordinary selector on the
 concrete expanded program, which resolves remaining struct-member and
 global/namespace `#if` conditions. Both modes share the same
-condition/splice helpers.
+condition/splice helpers. Generic method members are preserved in rebuilt
+structs but never registered or type-resolved; method templates are validated
+and expanded only after post-selection.
 
 **Deferred directives.** `DeferredDirectives` records `PANIC`/`WARNING`
 entries (message, span) and flushes them sorted by source position.

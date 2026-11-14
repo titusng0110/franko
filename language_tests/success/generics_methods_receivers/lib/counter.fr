@@ -1,0 +1,24 @@
+namespace util {
+    struct Counter {
+        int32 value
+
+        #generic func add<int32 N>(ptr<Counter> self) -> void {
+            $(self).value = $(self).value + N
+            return
+        }
+
+        #generic func forward<int32 N>(ptr<Counter> self) -> void {
+            $(self).add<N>()
+            return
+        }
+
+        #generic func bounded<int32 N>(ptr<Counter> self) -> int32 {
+            #if (N <= 0) {
+                return $(self).value
+            } #else {
+                $(self).add<1>()
+                return $(self).bounded<N - 1>()
+            }
+        }
+    }
+}

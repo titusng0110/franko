@@ -1,0 +1,36 @@
+import "franko/stdio"
+
+struct Box {
+    int32 value
+
+    func pick(ptr<Box> self, int32 v) -> int32 {
+        return v + 1
+    }
+
+    #generic func pick<typename T>(ptr<Box> self, T v) -> T {
+        return v
+    }
+
+    #generic func add<int32 N>(ptr<Box> self, int32 a, int32 b = N) -> int32 {
+        return a + b
+    }
+
+    #generic #inline func twice<typename T>(ptr<Box> self, T v) -> T {
+        return v
+    }
+
+    #generic func first<typename T>(ptr<Box> self, T a, T b) -> T {
+        return a
+    }
+}
+
+func main() -> int32 {
+    Box b
+    stdout(b.pick(10))
+    stdout(b.pick<uint8>(10))
+    stdout(b.add<5>(1))
+    stdout(b.add<5>(a = 2, b = 3))
+    stdout(b.twice<int32>(7))
+    stdout(b.first<uint8>(3, 4))
+    return 0
+}

@@ -1,0 +1,10 @@
+#generic struct Box<typename T> {
+    T value
+    Box next
+}
+
+func main() -> int32 {
+    Box<int32> b
+    b.value = 1
+    return 0
+}

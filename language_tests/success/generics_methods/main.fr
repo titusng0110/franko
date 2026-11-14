@@ -4,17 +4,17 @@ import "franko/stdio"
     T value
     int32 step = N
 
-    func add(ptr<Counter> self, T v) -> void {
+    func add(ptr<Counter<T, N>> self, T v) -> void {
         $(self).value = $(self).value + v
         return
     }
 
-    func add(ptr<Counter> self, T a, T b) -> void {
+    func add(ptr<Counter<T, N>> self, T a, T b) -> void {
         $(self).value = $(self).value + a + b
         return
     }
 
-    func get(view<Counter> self) -> T {
+    func get(view<Counter<T, N>> self) -> T {
         return $(self).value
     }
 }

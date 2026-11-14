@@ -223,10 +223,13 @@ are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- independent generic methods (methods with their own `#generic` parameter
-  list);
+- generic operator methods;
 - runtime generic representation, type erasure, vtables, or generic function
   values.
+
+A generic struct name must carry explicit arguments in every type position,
+including inside its own body. Write `Node<T>`, not `Node`. A non-generic
+struct is still written bare.
 
 Expansion is limited to 1024 generic instances per compilation and an
 instantiation depth of 64.

@@ -1901,7 +1901,12 @@ public final class ExpressionAnalyzer {
                 true
         );
 
-        Symbol method = ctx.resolveMethodWithLiterals(owner, mac.name, callArgs);
+        Symbol method = ctx.resolveMethodWithLiterals(
+                owner,
+                mac.name,
+                callArgs,
+                call.genericGroup
+        );
 
         List<SastNode> userArgs = finalizeCallArgs(
                 callArgs,
@@ -1916,7 +1921,11 @@ public final class ExpressionAnalyzer {
             if (shapeValid) {
                 explained = reportCallBindingProblem(
                         displayName,
-                        owner.getMethods(mac.name),
+                        ctx.methodOverloadsNamed(
+                                owner,
+                                mac.name,
+                                call.genericGroup
+                        ),
                         callArgs,
                         true
                 );

@@ -1,0 +1,56 @@
+import "franko/stdio"
+
+struct Tools {
+    int32 value
+
+    #if (#IS_LINUX) {
+        #generic func platform<int32 N>(ptr<Tools> self) -> int32 {
+            return N
+        }
+    } #else {
+        #generic func platform<int32 N>(ptr<Tools> self) -> int32 {
+            return N
+        }
+    }
+
+    #generic func kind<typename T>(ptr<Tools> self) -> int32 {
+        #if (#is_primitive(T)) {
+            return 1
+        } #else {
+            return 0
+        }
+    }
+
+    #generic func spelling<typename T>(ptr<Tools> self) -> view<[byte]> {
+        return #what_type(T)
+    }
+
+    #generic func matches<typename T>(ptr<Tools> self) -> int32 {
+        return #strcmp(#what_type(T), "int32")
+    }
+
+    #generic func sized<int32 N>(ptr<Tools> self) -> uint32 {
+        [int32, N] data
+        data.memset(0)
+        return data.length()
+    }
+
+    #generic func broken<typename T>(ptr<Tools> self, T value) -> T {
+        return value + value
+    }
+}
+
+struct Point {
+    int32 x
+}
+
+func main() -> int32 {
+    Tools t
+    stdout(t.kind<int32>())
+    stdout(t.kind<Point>())
+    stdout(t.spelling<int32>())
+    stdout(t.matches<int32>())
+    stdout(t.sized<4>())
+    stdout(t.platform<7>())
+    return 0
+}

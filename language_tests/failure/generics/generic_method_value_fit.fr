@@ -1,0 +1,13 @@
+struct S {
+    int32 value
+
+    #generic func f<uint8 N>(ptr<S> self) -> uint8 {
+        return N
+    }
+}
+
+func main() -> int32 {
+    S s
+    stdout(s.f<256>())
+    return 0
+}

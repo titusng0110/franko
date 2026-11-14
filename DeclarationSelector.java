@@ -346,7 +346,7 @@ final class DeclarationSelector {
         }
 
         if (member.kind == AstKind.FUNCTION_DECL) {
-            if (preGenerics && member.isGeneric) {
+            if (member.isGeneric) {
                 return;
             }
 

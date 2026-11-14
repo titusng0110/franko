@@ -1,0 +1,12 @@
+struct S {
+    int32 value
+
+    #generic func OPERATOR_EQ<typename T>(view<S> self, view<T> other) -> uint8 {
+        return 0
+    }
+}
+
+func main() -> int32 {
+    S s
+    return 0
+}

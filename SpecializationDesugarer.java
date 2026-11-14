@@ -12,4 +12,8 @@ public final class SpecializationDesugarer extends Desugarer {
     AstNode desugarSpecialization(AstNode item) {
         return desugarSingleTopLevelItem(item);
     }
+
+    AstNode desugarSpecializationMethod(AstNode method) {
+        return super.desugarSpecializationMethod(method);
+    }
 }

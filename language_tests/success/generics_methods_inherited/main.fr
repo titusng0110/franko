@@ -1,0 +1,32 @@
+import "franko/stdio"
+
+#generic struct Box<typename T> {
+    T value
+
+    #generic func replace<typename U>(ptr<Box<T>> self, U value) -> U {
+        return value
+    }
+
+    #generic func copy_from<typename U>(ptr<Box<T>> self, view<Box<U>> other) -> U {
+        return $(other).value
+    }
+
+    func get(view<Box<T>> self) -> T {
+        return $(self).value
+    }
+}
+
+func main() -> int32 {
+    Box<int32> a
+    Box<uint8> b
+    a.value = 5
+    b.value = 7
+
+    stdout(a.replace<uint8>(200))
+    stdout(b.replace<int32>(300))
+    stdout(a.copy_from<uint8>(getview(b)))
+    stdout(a.copy_from<int32>(getview(a)))
+    stdout(a.get())
+    stdout(b.get())
+    return 0
+}

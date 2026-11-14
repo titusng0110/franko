@@ -4,8 +4,13 @@ struct S {
     #generic func f<typename T>(ptr<S> self, T v) -> T {
         return v
     }
+
+    #generic func f<typename U>(ptr<S> self, U v) -> U {
+        return v
+    }
 }
 
 func main() -> int32 {
+    S s
     return 0
 }

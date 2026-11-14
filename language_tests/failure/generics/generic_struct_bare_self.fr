@@ -1,0 +1,13 @@
+#generic struct Box<typename T> {
+    T value
+
+    func get(view<Box> self) -> T {
+        return $(self).value
+    }
+}
+
+func main() -> int32 {
+    Box<int32> b
+    b.value = 1
+    return 0
+}

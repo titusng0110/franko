@@ -18,8 +18,8 @@ Franko is a small statically typed language with:
 - named and optional function arguments (`f(name = value)` and
   `func f(T x = default)`, see
   [Functions](19-functions.md#1915-named-and-optional-arguments));
-- generics with explicit type and value arguments on structs and functions
-  (see [Generics](20-generics.md));
+- generics with explicit type and value arguments on structs, functions, and
+  struct methods (see [Generics](20-generics.md));
 - function calls inside function bodies;
 - function inlining modifiers `#inline` and `#noinline` (see
   [Functions](19-functions.md));

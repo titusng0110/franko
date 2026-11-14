@@ -1,0 +1,13 @@
+#generic struct Box<typename T> {
+    T value
+
+    #generic func shadow<typename T>(ptr<Box<T>> self, T v) -> T {
+        return v
+    }
+}
+
+func main() -> int32 {
+    Box<int32> b
+    b.value = 1
+    return 0
+}

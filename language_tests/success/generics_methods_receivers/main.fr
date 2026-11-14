@@ -1,0 +1,42 @@
+import "franko/stdio"
+import "./lib/counter"
+
+struct Holder {
+    util::Counter counter
+
+    #generic func bump<int32 N>(ptr<Holder> self) -> void {
+        $(self).counter.forward<N>()
+        return
+    }
+}
+
+func main() -> int32 {
+    util::Counter c
+    c.value = 0
+    c.add<2>()
+    stdout(c.value)
+
+    Holder h
+    h.counter.value = 0
+    h.bump<3>()
+    stdout(h.counter.value)
+
+    [util::Counter, 2] arr
+    arr[0].value = 0
+    arr[1].value = 10
+    arr[0].add<4>()
+    arr[1].add<5>()
+    stdout(arr[0].value)
+    stdout(arr[1].value)
+
+    util::Counter d
+    d.value = 100
+    ptr<util::Counter> p = getptr(d)
+    $(p).add<7>()
+    stdout(d.value)
+
+    util::Counter e
+    e.value = 0
+    stdout(e.bounded<5>())
+    return 0
+}

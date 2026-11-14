@@ -264,12 +264,18 @@ final class Symbol {
 
     String mangledName() {
         if (kind == SymbolKind.METHOD) {
-            return "METH_"
+            String base = "METH_"
                     + name
                     + "_OFSTRUCT_"
                     + owner.name
                     + "_"
                     + Mangler.hashHex(type.signatureKey());
+
+            if (genericHash != null) {
+                return "GEN_" + genericHash + "_" + base;
+            }
+
+            return base;
         }
 
         String signatureHash = Mangler.hashHex(type.signatureKey());

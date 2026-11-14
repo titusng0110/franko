@@ -252,9 +252,11 @@ FFI-bridged functions are provided by their bridge and ignore them.
 
 ## 19.14 Generic Functions
 
-A function declaration may be a `#generic` template. Generic function
-declarations, explicit type/value arguments, overload signatures, and call
-resolution are documented in [Generics](20-generics.md).
+A function declaration may be a `#generic` template. Struct methods may also
+carry their own `#generic` parameter list and are called as
+`obj.method<T>(...)`. Generic function and method declarations, explicit
+type/value arguments, overload signatures, and call resolution are documented
+in [Generics](20-generics.md).
 
 ## 19.15 Named and Optional Arguments
 

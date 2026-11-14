@@ -90,10 +90,13 @@ public final class SemanticAnalyzer {
             DeclarationSelector.Selection postSelection =
                     postSelector.selectPostGenerics(expanded);
 
+            AstNode methodExpanded =
+                    resolver.expandMethods(postSelection.program);
+
             symbolTable.diagnostics().addAll(preSelection.diagnostics);
             symbolTable.diagnostics().addAll(postSelection.diagnostics);
 
-            result = analyzeProgram(postSelection.program);
+            result = analyzeProgram(methodExpanded);
         } else if (root != null && root.kind == AstKind.FUNCTION_DECL) {
 
             registerFunctionSignature(root);
@@ -935,6 +938,8 @@ public final class SemanticAnalyzer {
         );
 
         symbol.inlineMode = methodNode.inlineMode;
+        symbol.genericGroup = methodNode.genericGroup;
+        symbol.genericHash = methodNode.genericHash;
         symbolTable.declareMethod(owner, methodNode, symbol);
     }
 
@@ -1384,6 +1389,8 @@ public final class SemanticAnalyzer {
             );
 
             symbol.inlineMode = methodNode.inlineMode;
+            symbol.genericGroup = methodNode.genericGroup;
+            symbol.genericHash = methodNode.genericHash;
         }
 
         Symbol savedFunction = currentFunction;

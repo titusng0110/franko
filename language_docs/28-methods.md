@@ -174,6 +174,34 @@ Rules:
 - Duplicate method signatures are rejected: `Duplicate declaration of method 'X.foo(...)' in struct 'X'`.
 - Ambiguous arguments are rejected like free-function ambiguity: `Ambiguous call to overloaded method 'X.foo(...)': multiple overloads match equally well (argument constants fit several signatures, or arguments rely on the same number of pointer permission downgrades)`.
 
+### Generic Methods
+
+A method may carry its own `#generic` parameter list and is called with
+explicit type/value arguments after the method name:
+
+```franko
+struct Plain {
+    int32 value
+
+    #generic func convert<typename T>(ptr<Plain> self, T value) -> T {
+        return value
+    }
+}
+
+Plain p
+stdout(p.convert<int32>(7))
+```
+
+Inside a generic struct, the receiver binds the struct's parameters while the
+call's angle brackets bind only the method's own parameters. Concrete and
+generic overloads with the same name coexist: a call without angle brackets
+selects concrete methods, and a call with angle brackets selects the matching
+generic template group. Generic methods follow the same named/default argument,
+inlining, reflection, recursion, and expansion-limit rules as generic
+functions. Operator methods are fixed-shape and cannot be generic.
+
+See [Generics](20-generics.md#204-generic-methods) for the complete rules.
+
 ## 28.6 `self` Is a Reserved Keyword
 
 `self` is a lexer keyword, reserved everywhere:

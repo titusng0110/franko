@@ -2,7 +2,7 @@ import "franko/stdio"
 
 #generic struct Node<typename T> {
     T value
-    view<Node> next
+    view<Node<T>> next
 }
 
 #generic struct List<typename T> {

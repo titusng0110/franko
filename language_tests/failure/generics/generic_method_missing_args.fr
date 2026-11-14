@@ -1,0 +1,13 @@
+struct S {
+    int32 value
+
+    #generic func f<typename T>(ptr<S> self, T v) -> T {
+        return v
+    }
+}
+
+func main() -> int32 {
+    S s
+    stdout(s.f(1))
+    return 0
+}

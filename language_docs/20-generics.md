@@ -142,53 +142,103 @@ rejected later if they are used as a static array size.
 
 ## 20.4 Generic Methods
 
-Methods of a generic struct use the struct's parameters directly:
-
-```franko
-#generic struct Counter<typename T> {
-    T value
-
-    func add(ptr<Counter> self, T amount) -> void {
-        $(self).value = $(self).value + amount
-        return
-    }
-
-    func get(view<Counter> self) -> T {
-        return $(self).value
-    }
-}
-
-Counter<int32> c
-c.add(5)
-stdout(c.get())
-```
-
-A method cannot declare its own independent generic parameter list in this
-version:
+A method may declare its own `#generic` parameter list. Generic methods are
+declared inside a struct body and are called with member syntax:
 
 ```franko
 struct Plain {
     int32 value
 
-    #generic func bad<typename T>(ptr<Plain> self, T v) -> T { return v }
-    // error: independent generic methods are not supported
+    #generic func convert<typename T>(ptr<Plain> self, T value) -> T {
+        return value
+    }
 }
+
+Plain p
+stdout(p.convert<int32>(7))
 ```
 
-Method overload resolution, `self` permissions, and operator methods work
-exactly as they do on concrete structs. The generated concrete instance is an
-ordinary struct.
+The method's parameters are bound explicitly at each call; there is no
+inference. A method may combine its own generic parameters with the parameters
+of its enclosing generic struct:
+
+```franko
+#generic struct Box<typename T> {
+    T value
+
+    #generic func replace<typename U>(ptr<Box<T>> self, U value) -> U {
+        return value
+    }
+}
+
+Box<int32> b
+stdout(b.replace<uint8>(7))   // T = int32 from the receiver; U = uint8
+```
+
+Inside a generic struct, the receiver's concrete type binds the struct
+parameters, and the angle brackets at the call bind only the method's own
+parameters. The method may use both sets in its signature, body, defaults, and
+compile-time reflection. Different concrete struct instances produce distinct
+concrete methods.
+
+The method's generic parameter names must be unique and must not reuse an
+enclosing generic struct parameter name. Value parameters use one of the eight
+primitive integer types. A generic method must declare at least one generic
+parameter.
+
+Call syntax supports named and optional arguments, and defaults are resolved
+after the method is instantiated:
+
+```franko
+struct Counter {
+    int32 value
+
+    #generic func add<int32 N>(ptr<Counter> self, int32 amount = N) -> void {
+        $(self).value = $(self).value + amount
+        return
+    }
+}
+
+Counter c
+c.add<3>()
+c.add<3>(amount = 5)
+```
+
+Generic and concrete methods with the same name coexist; a call without angle
+brackets selects only concrete methods, and a call with angle brackets selects
+the matching generic template group. `#inline` and `#noinline` apply to generic
+methods exactly as they do to generic functions, and `#generic` must precede
+the inlining modifier.
+
+Operator methods are fixed-shape and cannot be generic. `#generic` on a
+reserved `OPERATOR_*` method is rejected.
+
+A method template that is never instantiated is never checked and never
+emitted. Expansion limits and recursion behavior match generic functions: at
+most 1024 generic instances per compilation and an instantiation depth of 64.
 
 ## 20.5 Self References
 
-Inside a generic struct body, the bare struct name and a use with the current
-arguments both mean the current instantiation:
+Inside a generic struct body, every use of the generic struct name must spell
+its type and value arguments explicitly. There is no injected-class-name
+shorthand and no inference:
 
 ```franko
 #generic struct Node<typename T> {
     T value
-    view<Node> next          // view<Node<T>>
-    [Node<T>] children       // dynamic array of the same instance
+    view<Node<T>> next          // the current instance
+    [Node<T>] children          // dynamic array of the same instance
+}
+```
+
+A bare `Node` is rejected in every type position, including the receiver type
+of a non-generic method:
+
+```franko
+#generic struct Node<typename T> {
+    T value
+    view<Node> next                 // error: generic Node needs arguments
+    func get(view<Node> self) -> T { return $(self).value }   // error
 }
 ```
 
@@ -201,8 +251,26 @@ A self reference with different arguments means a different instance:
 }
 ```
 
-Self references are resolved before the generated declaration is checked, so
-`view<Node>` in `Node<int32>` refers to that same concrete instance.
+The current instance is always written with the struct's own parameters, such
+as `Node<T>` or `Box<T, N>`. Concrete arguments such as `Link<uint8>` select the
+corresponding instance. This distinction also applies inside generic methods:
+
+```franko
+#generic struct Box<typename T> {
+    T value
+
+    #generic func link<typename U>(ptr<Box<T>> self, ptr<Box<U>> other) -> void {
+        return
+    }
+}
+```
+
+Here `Box<T>` is the receiver's instance, while `Box<U>` is the instance
+selected by the method's `U`. When `U = T`, both spellings resolve to the same
+generated struct type; otherwise they are different instances.
+
+A normal non-generic struct is still written bare. Thus `ptr<Box>` always
+means a non-generic `Box`, while `ptr<Box<T>>` means a generic instance.
 
 ## 20.6 Nested Generic Types
 
@@ -446,7 +514,7 @@ The following are not supported in this version:
 - a generic `main`;
 - generic FFI-bridged functions;
 - type-argument inference;
-- independent generic methods (methods with their own parameter list);
+- generic operator methods;
 - runtime generic representation, type erasure, vtables, or generic function
   values.
 
@@ -482,7 +550,7 @@ import "franko/stdio"
     A first
     B second
 
-    func sum(view<Pair> self) -> A {
+    func sum(view<Pair<A, B>> self) -> A {
         return $(self).first
     }
 }

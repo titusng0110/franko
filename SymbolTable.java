@@ -484,9 +484,10 @@ public final class SymbolTable {
         List<Symbol> overloads = overloadList(owner.methods, method.name);
 
         for (Symbol existing : overloads) {
-            if (OverloadResolution.sameMethodUserParameterSignature(
-                    existing.parameters,
-                    method.parameters)) {
+            if (Objects.equals(existing.genericGroup, method.genericGroup)
+                    && OverloadResolution.sameMethodUserParameterSignature(
+                            existing.parameters,
+                            method.parameters)) {
                 error("Duplicate declaration of method '"
                         + method.signatureString()
                         + "' in struct '"
@@ -530,9 +531,29 @@ public final class SymbolTable {
             String name,
             List<CallArg> userArgs
     ) {
-        List<Symbol> overloads = owner.methods.get(name);
+        return resolveMethodWithLiterals(owner, name, userArgs, null);
+    }
+
+    public Symbol resolveMethodWithLiterals(
+            StructSymbol owner,
+            String name,
+            List<CallArg> userArgs,
+            String genericGroup
+    ) {
+        List<Symbol> overloads = filterByGenericGroup(
+                owner.methods.get(name),
+                genericGroup
+        );
 
         return resolveMethodFromOverloads(owner, name, overloads, userArgs);
+    }
+
+    public List<Symbol> methodOverloadsNamed(
+            StructSymbol owner,
+            String name,
+            String genericGroup
+    ) {
+        return filterByGenericGroup(owner.methods.get(name), genericGroup);
     }
 
     public Symbol resolveOperatorMethodWithLiterals(

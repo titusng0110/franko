@@ -155,6 +155,14 @@ final class SastSymbolSupport {
                 if (sym.inlineMode != InlineMode.DEFAULT) {
                     obj.put("inlineMode", sym.inlineMode.name());
                 }
+
+                if (sym.genericGroup != null) {
+                    obj.put("genericGroup", sym.genericGroup);
+                }
+
+                if (sym.genericHash != null) {
+                    obj.put("genericHash", sym.genericHash);
+                }
             } else if (sym.kind == SymbolKind.FUNCTION) {
                 obj.put("kind", "function");
                 obj.put("name", sym.name);
@@ -369,6 +377,8 @@ final class SastSymbolSupport {
                         isBuiltin
                 );
                 method.inlineMode = inlineMode;
+                method.genericGroup = obj.optString("genericGroup");
+                method.genericHash = obj.optString("genericHash");
                 registry.registerWithId(entry.getKey(), method);
             } else {
                 Symbol function = Symbol.function(
