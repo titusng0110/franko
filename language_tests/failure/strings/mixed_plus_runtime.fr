@@ -1,0 +1,11 @@
+// Failure fixture: runtime values cannot be concatenated with a string
+// literal. String constants fold only with other compile-time strings.
+
+import "franko/string"
+
+func main() -> int32 {
+    std::String s;
+    s = "hello";
+    std::String result = s + "!";
+    return 0;
+}

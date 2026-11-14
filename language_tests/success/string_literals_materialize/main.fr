@@ -1,0 +1,33 @@
+// LANGUAGE TEST: string literals materialize in value positions
+
+import "franko/stdio"
+
+view<[byte, 5]> GLOBAL_TEXT = "he" + "llo"
+
+func take(view<[byte, 5]> s) -> uint32 {
+    return $(s).length()
+}
+
+func give() -> view<[byte, 5]> {
+    return "hello"
+}
+
+func with_default(view<[byte, 4]> s = "a" + "bcd") -> uint32 {
+    return $(s).length()
+}
+
+func main() -> int32 {
+    stdout($(GLOBAL_TEXT).length())
+    stdout(take("hello"))
+
+    view<[byte, 5]> local = "hello"
+    stdout($(local).length())
+    stdout($(give()).length())
+    stdout(with_default())
+
+    [view<[byte, 5]>, 1] slots
+    slots[0] = "hello"
+    stdout($(slots[0]).length())
+
+    return 0
+}

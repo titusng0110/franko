@@ -1,0 +1,6 @@
+// Failure fixture: #strcmp was removed in favour of comparison operators.
+
+func main() -> int32 {
+    int32 v = #strcmp("a", "b");
+    return 0;
+}

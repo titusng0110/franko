@@ -1,0 +1,9 @@
+// Failure fixture: only '+' and comparisons are defined on compile-time
+// string constants.
+
+import "franko/stdio"
+
+func main() -> int32 {
+    stdout("a" * 2);
+    return 0;
+}

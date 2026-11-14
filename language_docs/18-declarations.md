@@ -65,13 +65,14 @@ The initializer must be a constant expression built from literals, so it is fold
 
 **Static address initializers.** A pointer-typed global may be
 initialized with `null`, with `getptr`/`getmview`/`getview` over another
-global variable, or with a string literal (which is a view over
-immutable constant storage; see [String Literals](24-string-literals.md)):
+global variable, or with a materialized string expression (which folds and
+becomes a view over immutable constant storage; see
+[String Literals](24-string-literals.md)):
 
 ```franko
 [byte, 5] greeting
 view<[byte, 5]> v = getview(greeting)
-view<[byte, 5]> s = "hello"
+view<[byte, 5]> s = "he" + "llo"
 ptr<[byte, 5]> p = null
 ```
 
@@ -190,7 +191,7 @@ The rules:
    implicitly const; writing `const self` is allowed but redundant.
 8. **Const globals are allowed** for value-assignable types, using the
    existing global initializer forms (constant initializer, static address,
-   string literal, or array literal through a pointer type). A const global
+   string expression, or array literal through a pointer type). A const global
    cannot be assigned from any function.
 
 `#is_value_assignable` is exactly the type predicate `const` requires.

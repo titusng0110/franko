@@ -40,8 +40,8 @@ A nonnegative value above the `int64` maximum uses `uint64`. A value that fits
 no primitive integer type is a compile error.
 
 Compile-time intrinsic results are already typed: predicates and `#IS_*`
-constants are `uint8`, and `#strcmp` is `int32`. These typed results keep
-their declared result type rather than becoming context-inferred literals.
+constants are `uint8`. These typed results keep their declared result type
+rather than becoming context-inferred literals.
 
 ## 7.1 Overload Resolution
 

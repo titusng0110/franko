@@ -49,7 +49,7 @@ raw AstDocument                         -> <base>.raw.ast.json
 desugared AstDocument                   -> <base>.desugared.ast.json
    │  ImportResolver      (recursively loads imports through
    │                       Frontend.loadDesugared, splices desugared items,
-   │                       deduplicates hoisted STRLIT_ globals)
+   │                       deduplicates diamond imports)
    ▼
 import-resolved AstDocument             -> <base>.imports.ast.json
    │  SemanticAnalyzer
@@ -229,7 +229,8 @@ flowchart TD
     FfiHandler --> Symbol
     Symbol --> Mangler
     Desugarer --> ConstExpressionEvaluator
-    Desugarer --> StringLiteralDecoder
+    Desugarer --> StringLiteralFolder
+    StringLiteralFolder --> StringLiteralDecoder
     FrankoASTVisitor --> StringLiteralDecoder
     JsonArtifacts --> ASTSerializer
     JsonArtifacts --> SastSerializer
@@ -249,7 +250,8 @@ flowchart TD
 | `ASTSerializer` | `AstNode`, `AstDocument`, `SourceTable`, `Json`, `JsonAstSupport` |
 | `JsonArtifacts` | `ASTSerializer`, `SastSerializer`, `Json`, `JsonAstSupport`, filesystem |
 | `SastSerializer` | `SastNode`, `SastDocument`, `SymbolRegistry`, `SourceTable`, `Json` |
-| `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralDecoder`, `DiagnosticBag`, `AstNode` |
+| `Desugarer` | `ConstExpressionEvaluator`, `StringLiteralFolder`, `DiagnosticBag`, `AstNode` |
+| `StringLiteralFolder` | `AstNode`, `StringLiteralDecoder`, `StringConstantOps` |
 | `SemanticAnalyzer` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `ConstExpressionEvaluator`, `PreGenericsCompileTimeFolder`, `DeclarationSelector`, `GenericsResolver`, `PostGenericsCompileTimeFolder`, `DeferredDirectives`, `Mangler` (static-string global names) |
 | `GenericsResolver` | `AstNode`, `SpecializationDesugarer`, `CompileTimeIntrinsicCore`, `ConstExpressionEvaluator`, `TypeChecker`, `Mangler` |
 | `CompileTimeIntrinsics` | `CompileTimeIntrinsicCore`, `DeferredDirectives`, `StaticStringHoister`, `SemanticTypeResolver` |
@@ -386,9 +388,10 @@ targets rejected by the semantic checker). Array literals are ordinary `primary`
 expressions (an array literal is a `view<[T, N]>` value, §4.13). Aggregate
 literals are ordinary expressions but are constrained to specific
 value-consuming contexts during semantic analysis (§4.26).
-Global initializers accept `constExpr`, a
-string literal, an array literal, a `getptr`/`getmview`/`getview` over a
-global, or `null`. `varDecl` carries a parse-time guard that reports
+Global initializers parse a full expression; semantic analysis accepts a
+`constExpr`, a string expression, an array literal, a
+`getptr`/`getmview`/`getview` over a global, or `null`, and rejects runtime
+expressions. `varDecl` carries a parse-time guard that reports
 `unexpected '(' after variable declaration` when the declarator is followed
 by `(`; without it, the parser would split the suffix into a separate
 parenthesized expression statement.
@@ -466,12 +469,14 @@ positional argument and the parameter name for a named one. `copyShallow()`
 copies all slots, including the generic metadata; `hasNamedArguments()`
 reports whether any name is set.
 
-`GlobalVarDecl.literalBytes` is non-null only for string-literal globals
-hoisted by the Desugarer (§4.10): a literal-backed `[byte, N]` whose value is
-the decoded UTF-8 payload. Array-literal globals hoisted during semantic
-analysis carry `Symbol.literalValues` (row-major flat) instead (§4.13);
-nesting is derived from the declared static array shape. The slot layout is
-the ABI between all raw-AST phases.
+`AstNode.literalBytes` is non-null on a folded `STRING_LITERAL` produced by
+`StringLiteralFolder`: the decoded UTF-8 payload of a `+` concatenation. The
+`GLOBAL_VAR_DECL` slot is retained for raw-AST compatibility but is not
+produced by the current desugar path; literal-backed globals are created
+during semantic analysis from `Symbol.literalBytes`. Array-literal globals
+hoisted during semantic analysis carry `Symbol.literalValues` (row-major
+flat) instead (§4.13); nesting is derived from the declared static array
+shape. The slot layout is the ABI between all raw-AST phases.
 
 Lifecycle rules that used to live as comments here:
 - `FOR` and `INC_DEC` are **pre-desugaring sugar**: neither may reach
@@ -573,8 +578,9 @@ normally.
 already-substituted concrete declaration through
 `desugarSingleTopLevelItem` and a concrete generic method through
 `desugarSpecializationMethod` (which forwards to the function declaration
-desugar path), and shares the hoisted-string table so repeated literals across
-specializations produce one `STRLIT_<hash>` global.
+desugar path). String expressions remain raw and are folded/hoisted later by
+semantic analysis, so repeated literals across specializations deduplicate at
+the semantic hoister.
 
 #### `PreGenericsCompileTimeFolder`
 `AstRewriter` subclass run by `SemanticAnalyzer` after import resolution and
@@ -597,10 +603,10 @@ the queue at the end of semantic analysis, sorted by source position, into
 #### `CompileTimeIntrinsicCore`
 Shared constant-only core for the early folders: target-name lookup, raw type
 spelling for primitives/pointers/arrays/tuples, the predicate matrix,
-`#what_type`/`#strcat`/`#strcmp` bytes, and result primitive selection
-(`uint8` for predicates/targets, `int32` for `#strcmp`). It never emits
-diagnostics and never hoists strings; those remain the semantic adapter's
-responsibility.
+`#what_type` bytes, literal-only string `+`/comparison folding, and result
+primitive selection (`uint8` for predicates, targets, and string
+comparisons). It never emits diagnostics and never hoists strings; those
+remain the semantic adapter's responsibility.
 
 #### `GenericsResolver`
 AST-to-AST explicit-instantiation engine owned by `SemanticAnalyzer`. It runs
@@ -658,8 +664,9 @@ then splices that document's top-level items in source order into the merged
 extension is rejected; relative paths resolve against the importing file;
 unqualified paths search the `-p` search dir (default `./import`) before the
 importing file's directory; real-path canonicalization dedups diamonds; files
-are marked processed *before* loading so import cycles terminate. Hoisted
-`STRLIT_` globals are deduplicated by name + bytes + type while splicing.
+are marked processed *before* loading so import cycles terminate. Literal
+storage is hoisted later during semantic analysis, after all files are
+merged, so the resolver performs no `STRLIT_` deduplication.
 Returns an `ImportResult` with the merged document, import graph, and
 accumulated diagnostics. There is no reserved import path and no special
 module lookup: compile-time reflection is built directly into the grammar
@@ -672,8 +679,7 @@ The per-file desugaring pass (run by `Frontend` before import resolution).
 `ImportResolver`. Every synthetic node copies the originating source
 construct's span (declarations/assignments from `n.span`, generated `1`
 literals from the compound statement span, inferred `?` sizes from the
-`AstKind.INFERRED_SIZE` span, hoisted string globals and their replacement
-`getview` from the literal span, canonicalized constants from the original
+`AstKind.INFERRED_SIZE` span, canonicalized constants from the original
 constant expression). Lowers
 syntactic sugar to a small core AST. Declaration initialization is **not**
 lowered: a plain initializer stays one `AstKind.VAR_DECL_INIT` and a field-wise
@@ -685,15 +691,16 @@ named entries) and desugars each field value. `x++/--` →
 `x += 1`, `for` → block + `while` (update as while-epilogue so `continue` is
 C-like), `?` array sizes in `view<[...]>` declarations → concrete
 constants via the rectangle rule (array
-literals only), string literals → hoisted literal-backed globals plus a
-`getview(<global>)` expression of type `view<[byte, N]>` (§4.10), and
+literals only), and
 every `constExpr` slot it owns (array sizes, global const initializers,
 field defaults) → a canonical decimal `AstKind.INT` via
 `ConstExpressionEvaluator`; `break N` levels are folded later during
-semantic analysis. An empty string literal `""` is rewritten to
-`AstKind.NULL`, and an empty array literal `[]` is likewise rewritten to
-`AstKind.NULL`; both denote the null view. Non-empty array literals are
-passed through untouched
+semantic analysis. String literals are **not** hoisted here: they survive
+desugaring as `AstKind.STRING_LITERAL` and are folded/materialized during
+semantic analysis (§4.10). An empty array literal `[]` is rewritten to
+`AstKind.NULL`; an empty string literal stays a literal until folding decides
+whether the final result is empty. Non-empty array literals are passed through
+untouched
 (§4.13). `AstKind.ENUM_DECL` is desugared in place (`desugarEnumDecl`): the
 backing `AstNode` is desugared and every explicit variant `constExpr` is
 folded to a canonical `AstKind.INT` (`null` is preserved for implicit
@@ -704,8 +711,8 @@ its `inlineMode` unchanged; a generic method member is returned unchanged so
 its own parameters and body stay raw until `GenericsResolver.expandMethods`
 instantiates it. `desugarSpecializationMethod` is the method-specific
 specialization entry point used after substitution. `desugarParameter` desugars an optional default
-expression with the ordinary expression path (string defaults hoist to
-`STRLIT_` globals, array/aggregate literals stay raw for semantic lowering),
+expression with the ordinary expression path (string expressions stay raw for
+semantic folding, array/aggregate literals stay raw for semantic lowering),
 and every reconstructed `CALL` preserves `argumentNames`. `ImportResolver`
 needs no special handling; it splices
 top-level items generically. `AstKind.COMPILE_TIME_IF` is preserved: its condition is desugared
@@ -726,21 +733,38 @@ compile-time producers such as `#what_type` stay evaluable as
 compile-time values while analyzing the call. Global initializers pass
 through the statically
 representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
-an array literal) and reject everything else. Error-recovery style: it accumulates diagnostics in
+string expressions, an array literal) and reject everything else, including
+global aggregate literals. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure); `Frontend`/`Main` check
 the returned diagnostics. Private control-flow signal: `InferenceFailure`
 (a `RuntimeException`) for `?`-size failures, converted to a diagnostic.
+
+#### `StringLiteralFolder`
+Bottom-up raw-AST folder run at the start of `Desugarer.desugar` and
+`Desugarer.desugarSingleTopLevelItem`. Folds literal-only `"a" + "b"` into a
+`STRING_LITERAL` carrying decoded `literalBytes`, and literal-only string
+comparisons into a typed `uint8` `INT`. This makes folded string comparisons
+usable in `constExpr` slots and global initializers. It never hoists storage.
+`isStringExpression` also recognizes `#what_type(...)` and nested `+` so global
+initializers can defer their final fold to semantic analysis.
+
+#### `StringConstantOps`
+Package-private static helpers shared by `StringLiteralFolder`,
+`CompileTimeIntrinsicCore`, `CompileTimeIntrinsics`, and
+`ExpressionAnalyzer`: UTF-8 byte concatenation, lexicographic comparison,
+string-operator classification, and comparison folding to `BigInteger`
+`0`/`1`.
 
 #### `StringLiteralDecoder`
 Static utility: decodes Franko string-literal escapes
 (`\\ \" \a \b \f \n \r \t \v`; rejects `\u \x \0` and unknown/trailing escapes
 with `RuntimeException`) and converts a `AstKind.STRING_LITERAL` into its UTF-8
-byte payload (`toUtf8Bytes`, unsigned bytes, no null terminator) for the
-hoisted string globals. An empty payload is not hoisted: the Desugarer turns
-an empty string literal into `AstKind.NULL` (the null view). Called by
-`Desugarer` (string hoisting),
-`CompileTimeIntrinsics` (compile-time string arguments), and `FrankoASTVisitor`
-(import paths).
+byte payload (`toUtf8Bytes`, unsigned bytes, no null terminator). Folded
+literals carry `literalBytes`; the decoder returns those directly. An empty
+payload materializes as the null view during semantic lowering. Called by
+`StringLiteralFolder`/`CompileTimeIntrinsicCore`/`CompileTimeIntrinsics`
+(compile-time string arguments), `ExpressionAnalyzer` (materialization), and
+`FrankoASTVisitor` (import paths).
 
 #### `TargetInfo`
 Immutable compilation target (canonical `<os>-<arch>` pair). Key API:
@@ -931,12 +955,11 @@ and dropped before ordinary statement lowering, so they also never enter the
 SAST (§4.18).
 It also owns semantic static-string hoisting for `#what_type`
 (`hoistStaticStringGlobal`, wired into `CompileTimeIntrinsics` through its
-`StaticStringHoister`): when a `what_type` result is used as an ordinary
-expression, its UTF-8 spelling bytes become a literal-backed `STRLIT_<hash>`
-`[byte, N]` global, reused when an identical desugared string global already
-exists, and prepended alongside hoisted array literals. When the result is
-consumed by another compile-time intrinsic (for example
-`#strcmp(#what_type(x), "int32")`), it stays a compile-time
+`StaticStringHoister`): when a `what_type` result is used as a value, its
+UTF-8 spelling bytes become a literal-backed `STRLIT_<hash>` `[byte, N]`
+global, reused when an identical literal already exists, and prepended
+alongside hoisted array literals. When the result is consumed by a `+`
+fold, a string comparison, `#panic`, or `#warning`, it stays a compile-time
 string and no global is hoisted.
 The entry-point signature must remain exactly `view<[[byte]]>`
 (read-only) for the raw-args `main`; the template marshals argv behind a
@@ -1274,7 +1297,21 @@ strictly against declared namespaces, and compile-time constants
 and `#IS_*` target names fold into integer literals; `#name(...)` calls are
 delegated to `CompileTimeIntrinsics` before ordinary function resolution
 (identifier, type, and string-literal arguments are inspected, not
-lowered). Literal `INT` nodes start with `untypedConstant = true` and a
+lowered). String constant expressions are folded before ordinary binary
+lowering: `StringLiteralFolder` has already folded literal-only `+` and
+comparisons on the raw AST, and `ExpressionAnalyzer` folds `#what_type`,
+nested `+`, and comparisons through
+`CompileTimeIntrinsics.evaluateStringExpression`. A binary whose operands are
+both compile-time strings folds to one materialized literal view for `+` or a
+typed `uint8` `1`/`0` for a comparison. Mixed string/runtime operands and
+unsupported string operators are diagnosed. `STRING_LITERAL` and string
+results from `#what_type` materialize only through `analyzeValueExpr`
+(assignment values, call arguments, returns, defaults, aggregate field
+values); `analyzeExpr` reports that a string literal has no type. A cast
+operand is analyzed through `analyzeExpr`, so string constants cannot be
+cast. `CompileTimeIntrinsics.materializeStringConstant` turns empty final
+bytes into `SastNode.NULL_LITERAL` and non-empty bytes into a hoisted
+`STRLIT_<hash>` view. Literal `INT` nodes start with `untypedConstant = true` and a
 concrete default type from `TypeChecker.defaultConstantPrimitive`; explicitly
 typed folds and generic value bindings start typed. `inferBinaryResultType`
 keeps a constant-only expression untyped, takes the typed side when exactly
@@ -1352,9 +1389,10 @@ to the selected `view<...>` parameter type. The hidden `self` argument is
 Compile-time reflection analyzer for `#name` and `#name(...)` expressions.
 Wired into `ExpressionAnalyzer` through `ExpressionLowering`. `analyzeCall`
 and `analyzeName` evaluate the requested intrinsic and materialize the
-outermost result. The private `StaticValue` model is one tagged final class with
-`StaticValueKind` `INT`, `STRING`, or `VOID` and the fields `value`, `type`,
-and `bytes`. Evaluation owns all intrinsic semantics:
+outermost result when the call site permits materialization. The private
+`StaticValue` model is one tagged final class with `StaticValueKind` `INT`,
+`STRING`, or `VOID` and the fields `value`, `type`, and `bytes`. Evaluation
+owns all intrinsic semantics:
 
 - target names (`#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`, `#IS_X86_64`,
   `#IS_ARM64`) → `StaticValueKind.INT` `uint8`, from `TargetInfo`;
@@ -1364,22 +1402,18 @@ and `bytes`. Evaluation owns all intrinsic semantics:
   0/1 with type `uint8`;
 - `what_type` → `StaticValueKind.STRING` containing the canonical UTF-8
   `mangleKey()` type spelling (no spaces after commas);
-- `strcat` → `StaticValueKind.STRING` containing the concatenated bytes;
-- `strcmp` → `StaticValueKind.INT` `int32` (lexicographic UTF-8 byte
-  comparison);
 - `panic` → reports a `USER_PANIC` diagnostic through
   `DiagnosticBag.panic` and returns `StaticValueKind.VOID`;
 - `warning` → reports a `USER_WARNING` diagnostic through
   `DiagnosticBag.userWarning` and returns `StaticValueKind.VOID`.
 
-String consumers call `evaluateStaticStringArgument`, which accepts a raw
-`AstKind.STRING_LITERAL` (decoded through `StringLiteralDecoder`), `#what_type`,
-or a nested `#strcat` result. Other compile-time results
-and runtime expressions are rejected as not being compile-time strings.
-`strcmp`, `strcat`, `panic`, and `warning` share this path, so any future
-string producer is accepted without consumer-specific logic. Empty
-compile-time strings are rejected with the `N >= 1` rule; ordinary source
-string literals desugar empty text to the null view instead. Type and value
+String consumers call `evaluateStaticStringArgument`, which delegates to
+`evaluateStringExpression`. That helper accepts a raw/folded
+`AstKind.STRING_LITERAL`, `#what_type`, or a nested `+` concatenation.
+Other compile-time results and runtime expressions are rejected as not being
+compile-time strings. Empty compile-time strings are rejected with the
+`N >= 1` rule; ordinary source string literals that materialize as values
+become the null view instead. Type and value
 arguments are resolved through `resolveTypeOrValueArgument`: variables are
 resolved first, bare struct names fall back to struct types and then enum
 types, qualified names fall back to variable/struct/enum types with enum
@@ -1392,9 +1426,13 @@ turns a `StaticValueKind.INT` into `SastNode.INT_LITERAL`, a
 `StaticValueKind.STRING` into the hoisted `STRLIT_<hash>` `[byte, N]` global
 wrapped in a read-only `SastNode.GET_PTR` of type `view<[byte, N]>` via the
 `StaticStringHoister` class owned by `SemanticAnalyzer`, and a null value into
-the ordinary integer fallback. Because
+the ordinary integer fallback. `analyzeCall` takes an
+`allowStringMaterialization` flag: string results materialize only in
+assignment values, function arguments, and return expressions. A string
+result reached through `analyzeExpr` instead reports that a compile-time
+string has no type. Because
 materialization happens only for the outer call, a `what_type` consumed by
-`strcmp` or `panic` never hoists a global.
+`+`, a comparison, or `panic` never hoists a global.
 
 `#panic` and `#warning` never become semantic nodes. `ExpressionAnalyzer`
 exposes `analyzeCompileTimeDirective`, which calls
@@ -3207,14 +3245,17 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   initializers, and field defaults) are folded here to a canonical decimal
   `AstKind.INT` — later phases see only integers. `break N` levels are folded
   during semantic analysis by `ConstExpressionEvaluator`.
-- String literals are hoisted to literal-backed globals and replaced with
-  `getview(<global>)` everywhere (§4.10), except direct arguments of
-  `#<name>` calls, which remain raw literals for compile-time
-  evaluation; array literals get the same treatment during semantic
-  analysis (§4.13).
-- Empty string literals (`""`) and empty array literals (`[]`) are rewritten
-  to `AstKind.NULL` (the null view) and never hoisted. A non-empty array
-  literal keeps its elements; `[]` has no element type or length of its own.
+- String literals remain raw `AstKind.STRING_LITERAL` nodes through
+  desugaring. Literal-only `+`/comparison folding happens in
+  `StringLiteralFolder`; remaining folds happen in `ExpressionAnalyzer`; the
+  final non-empty bytes are hoisted to a literal-backed global and replaced
+  with `getview(<global>)` only when they materialize (§4.10). Array literals
+  get the same hoisting treatment during semantic analysis (§4.13).
+- Empty string literals are not rewritten to `AstKind.NULL` during
+  desugaring: emptiness is decided after string folding. An empty final
+  result materializes as the null view. Empty array literals (`[]`) are
+  rewritten to `AstKind.NULL` and never hoisted. A non-empty array literal
+  keeps its elements; `[]` has no element type or length of its own.
 
 ### 4.2 Fluid integer constants
 Constant values are carried as `BigInteger` on raw-AST `AstKind.INT` nodes and
@@ -3384,25 +3425,33 @@ type; an under-qualified receiver then fails the creation-intrinsic rule.
 Method overload identity excludes `self`'s type. The self parameter symbol is
 always const (§4.28).
 
-## 4.10 String literal hoisting (Desugarer)
+## 4.10 String literal folding and hoisting (semantic analysis)
 
-`Desugarer` hoists each distinct string literal to a literal-backed
-`[byte, N]` global named `STRLIT_<16hex-content-hash>` (the language-facing
-rules are in `23-string-literals.md`). Identical literals share one global.
-An empty literal is not hoisted: `hoistStringLiteral` returns
-`AstKind.NULL`/`SastNode.NULL_LITERAL`, so `""` is the null view and writes
-no text bytes. C++ emission is a
+String literals are untyped compile-time constants. `StringLiteralFolder`
+folds literal-only `+` and comparisons on the raw AST. `ExpressionAnalyzer`
+folds the remaining compile-time string expressions (`#what_type`, nested
+`+`, comparisons) before materializing them. A string expression materializes
+only in an assignment value, a declaration/global/field initializer, a
+function/intrinsic argument, a parameter default, or a return expression.
+
+When the final folded bytes are non-empty, `StaticStringHoister` hoists them
+to a literal-backed `[byte, N]` global named `STRLIT_<16hex-content-hash>`
+(the language-facing rules are in `24-string-literals.md`). Identical literals
+share one global. An empty final result materializes as
+`SastNode.NULL_LITERAL`; `"" + "hello"` is non-empty, while `"" + ""` is the
+null view. C++ emission is a
 `const uint8_t STRLIT_<hash>[N] = {…}` constant initializer, so declaration
 and static-init order never matter. The literal expression is a mode-2 fat
 pointer over that storage (`franko_make_fat_pointer(STRLIT_<hash>, N, 2)`);
 decaying it to `view<[byte]>` copies the same fat pointer unchanged.
 
-Direct string-literal arguments of any `#<name>` call are deliberately not
-hoisted; they remain raw `AstKind.STRING_LITERAL`s so `CompileTimeIntrinsics`
-can inspect them. A `what_type` result consumed by another compile-time
-intrinsic stays a compile-time string and never materializes a
-`STRLIT_<hash>` global. Downstream behavior (array-assignment diagnostics,
-`?` inference, pointer globals, printing) follows from the view
+No intermediate string is hoisted. A `what_type` result consumed by `+`, a
+compile-time comparison, `#panic`, or `#warning` stays a compile-time string
+and never materializes a `STRLIT_<hash>` global. A string expression reached
+through `analyzeExpr` instead of `analyzeValueExpr` (deref, member/index
+access, cast, unary operator, condition, mixed runtime comparison) reports
+that a string literal has no type. Downstream behavior (array-assignment
+diagnostics, `?` inference, pointer globals, printing) follows from the view
 representation handled by the ordinary expression and array paths.
 
 ## 4.11 Runtime array and allocation semantics
@@ -3837,18 +3886,18 @@ arguments of every `#` call so the evaluator can inspect them; nested `#`
 calls remain evaluable. `materialize` turns only the outer result into a
 semantic node: integers become folded semantic literals, strings become a
 hoisted `STRLIT_<hash>` literal global wrapped in a read-only
-`SastNode.GET_PTR`, and `#panic`/`#warning` report into the diagnostic bag and
-are discarded. String consumers accept raw literals, `#what_type`,
-and `#strcat`; runtime views are rejected.
+`SastNode.GET_PTR` in value contexts, and `#panic`/`#warning` report into the
+diagnostic bag and are discarded. String consumers accept raw literals,
+`#what_type`, and `+` concatenations; runtime views are rejected.
 
 **Intrinsic set.** The type predicates are `is_primitive`,
 `is_memcpy_safe`, `has_default_value`, `is_memset_safe`, `is_matchable`,
 `is_comparable`, `is_assignable`, `is_value_assignable`, and
 `is_same_type`. Each accepts a type or a value; `#what_type` prints the
 canonical `SastType.mangleKey()` spelling (no spaces after commas,
-matching function signature hashing keys). `#strcat` accepts one or more
-compile-time strings and concatenates their decoded UTF-8 bytes.
-`#strcmp` compares decoded UTF-8 bytes lexicographically. `#panic` reports
+matching function signature hashing keys). String literals themselves have
+no type; `+` concatenates compile-time strings and `+`-free comparison
+operators fold two compile-time strings to `uint8` `0`/`1`. `#panic` reports
 its compile-time string as a user-defined panic; `#warning` reports it as a
 user-defined warning and continues. Empty compile-time string arguments are
 rejected with the `N >= 1` rule. A nested `#panic`/`#warning` argument has compile-time
@@ -3866,9 +3915,10 @@ different targets.
 **Slot restrictions.** `CompileTimeIntrinsics` is reachable only from
 expression lowering; it has no value representation and is rejected in
 `constExpr`-only slots. String consumers accept only compile-time string
-producers (raw literals, `#what_type`, `#strcat`), not runtime views. The
-grammar/selector reject `#if` in a `for` header and declaration-level `#if`
-around imports; see `34-compile-time-reflection.md` for the language rules.
+producers (raw literals, `#what_type`, `+` concatenations), not runtime
+views. The grammar/selector reject `#if` in a `for` header and
+declaration-level `#if` around imports; see `34-compile-time-reflection.md`
+for the language rules.
 
 ## 4.19 Tuples
 Tuple representation is documented with `SemanticTypeResolver`, `SastType`, and
@@ -4484,7 +4534,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Add a runtime intrinsic | runtime header + `SemanticArrayIntrinsicKind` signature descriptor + `ArrayLowerer`/`ArrayIntrinsicChecker` validation + `Cpp14ExpressionEmitter` emission |
 | Add an FFI module or function | `<module>.module.json` (`functions`) + bridge block named after the Franko qualified name; select targets with `#if` (§4.18) |
 | Add/adjust a pointer permission rule | the region rule lives in `PointerPermissions`; enforce it in the relevant checker (`ExpressionChecker`/`StatementChecker`) and teach use-site attribution to `PointerPermissionChecker` (§4.9) |
-| Change how string literals are represented | `Desugarer` (hoisting, §4.10) + `StringLiteralDecoder` + `Symbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
+| Change how string literals are represented | `StringLiteralFolder` (early `+`/comparison folding) + `ExpressionAnalyzer` (semantic folding and materialization) + `StringLiteralDecoder` + `CompileTimeIntrinsics` (§4.10) + `Symbol.literalBytes` + `Cpp14Codegen.emitVarDecl` |
 | Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `Symbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |
 | Change summary fields | the relevant checker + `MemoryTemplate` (§4.21) |
 | Change BFS budget or memoization | `MemorySummaryBfs` (§4.21) |
@@ -4581,9 +4631,9 @@ compile-time work that needs no declarations, imports, or type analysis.
 generic declarations unchanged; namespace recursion still desugars ordinary
 items. It does not hoist strings, lower `for`/`x++`, infer `?`, or fold const
 slots inside templates. `SpecializationDesugarer` extends `Desugarer` and
-desugars one cloned concrete declaration at a time. Both share a hoisted
-string table; `GenericsResolver` collects the new `STRLIT_` globals and
-prepends them once, deduplicating by generated name.
+desugars one cloned concrete declaration at a time. String expressions remain
+raw in templates and specialized bodies; literal storage is hoisted later by
+semantic analysis after expansion.
 
 **GenericsResolver.** `GenericsResolver` is an AST-to-AST engine owned by
 `SemanticAnalyzer`. It collects `Template` records into per-name overload
@@ -4612,8 +4662,9 @@ the separate `expandMethods` pass.
    `genericHash`/`genericGroup`, assign generated struct names and metadata,
    run `SpecializationDesugarer`, and insert the concrete declaration into
    the template namespace;
-6. appends generated declarations to the matching namespace nodes and adds
-   hoisted string globals.
+6. appends generated declarations to the matching namespace nodes. String
+   expressions remain raw in generated bodies; semantic analysis hoists any
+   final literal.
 
 Function instances keep the source base name. Every call site is rewritten to
 the base callee with `genericGroup` set to the canonical qualified base name
@@ -4761,9 +4812,10 @@ constant-only `#` calls inside defaults. `ASTSerializer` writes
 list has the same length as `args`.
 
 **Desugaring and generics.** `Desugarer.desugarParameter` desugars the default
-with the ordinary expression path; string defaults therefore become the
-existing hoisted `STRLIT_` global plus `getptr`, while array and aggregate
-literals stay raw until semantic lowering. `GenericsResolver.substituteNode`
+with the ordinary expression path; string defaults stay raw until
+`resolveParameterDefaults` folds and materializes them, while array and
+aggregate literals also stay raw until semantic lowering.
+`GenericsResolver.substituteNode`
 substitutes `defaultValue`, `containsGenericUse` inspects it, and every
 reconstructed call preserves `argumentNames`. A value-parameter default such
 as `b = N` is therefore a concrete typed integer literal after expansion.
@@ -4784,7 +4836,7 @@ field is analysis-only and is not serialized.
 - `NULL_LITERAL` for pointer parameters;
 - `ENUM_VARIANT` of the parameter's exact enum type;
 - `VAR_EXPR`/`GET_PTR` over a literal-backed global (`literalBytes` for
-  strings and `#what_type`/`#strcat`, `literalValues` for array literals);
+  strings and `#what_type`/`+` results, `literalValues` for array literals);
 - `AGGREGATE_LITERAL` whose type is a value-assignable struct, with every
   field value recursively using the same forms.
 

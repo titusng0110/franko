@@ -1,0 +1,6 @@
+// Failure fixture: #strcat was removed in favour of '+' folding.
+
+func main() -> int32 {
+    view<[byte, 3]> v = #strcat("ab", "c");
+    return 0;
+}

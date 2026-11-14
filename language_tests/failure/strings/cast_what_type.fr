@@ -1,0 +1,7 @@
+// Failure fixture: a compile-time #what_type string cannot be cast while it
+// is still a compile-time constant.
+
+func main() -> int32 {
+    view<[byte, 5]> v = cast<view<[byte, 5]>>(#what_type(int32));
+    return 0;
+}

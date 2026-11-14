@@ -525,6 +525,15 @@ final class AstNode {
         return node;
     }
 
+    static AstNode stringLiteralBytes(
+            SourceSpan span,
+            List<BigInteger> bytes
+    ) {
+        AstNode node = node(AstKind.STRING_LITERAL, span);
+        node.literalBytes = List.copyOf(bytes);
+        return node;
+    }
+
     static AstNode unary(SourceSpan span, String op, AstNode expr) {
         AstNode node = node(AstKind.UNARY, span);
         node.text = op;

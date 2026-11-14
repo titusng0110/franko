@@ -95,15 +95,15 @@ func main() -> int32 {
 - A C++14 compiler.
   * **Windows x86_64 / ARM64**: Visual Studio (or VS Build Tools) with
     the **Desktop development with C++** workload. The scripts find
-    `cl.exe` with `vswhere` and load the host-appropriate
-    `vcvars64.bat` / `vcvarsarm64.bat` environment automatically. A
-    MinGW `g++` or `clang++` on `PATH` is still accepted as a fallback
-    (set `CXX` to choose one explicitly); it does not support
-    AddressSanitizer, so those builds default to `-O`.
-  * **Linux x86_64 / arm64**: `g++` (default) or `clang++` on `PATH`
-    (set `CXX` to choose one explicitly).
-  * **macOS (x86_64 / arm64)**: `clang++` (default) or `g++` on `PATH`
-    (set `CXX` to choose one explicitly).
+    `cl.exe` with `vswhere` first and load the host-appropriate
+    `vcvars64.bat` / `vcvarsarm64.bat` environment automatically. If MSVC
+    is unavailable, a MinGW `g++` or `clang++` on `PATH` is accepted as a
+    fallback (MSVC, then `g++`, then `clang++`); the fallback does not
+    support AddressSanitizer, so those builds default to `-O`.
+  * **Linux x86_64 / arm64**: `g++` (default) or `clang++` on `PATH`.
+    `CXX` is checked first when set.
+  * **macOS (x86_64 / arm64)**: `clang++` (default) or `g++` on `PATH`.
+    `CXX` is checked first when set.
 - [uv](https://docs.astral.sh/uv/) with Python 3.13+.
 
 The repository already ships the ANTLR jar, the Franko runtime headers,
@@ -217,9 +217,8 @@ uv run python library_tests/run_library_tests.py
 
 `run_programs.py` builds and runs every program in both the default and
 `-Omax` modes. The language and library suites use the default build mode.
-On Windows, CI forces MSVC
-`cl.exe` (`CXX=cl`) and verifies that the selected compiler family is
-MSVC; the MinGW fallback remains available for local builds but is not
+On Windows, CI verifies that the selected compiler family is MSVC
+(`cl.exe`); the MinGW fallback remains available for local builds but is not
 used by CI.
 
 ## Editor support

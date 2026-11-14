@@ -1,35 +1,21 @@
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class Desugarer {
 
     private final DiagnosticBag diagnostics;
 
-    private final Map<String, AstNode> hoistedStringGlobals;
-
     public Desugarer() {
-        this(new DiagnosticBag(), new LinkedHashMap<>());
+        this(new DiagnosticBag());
     }
 
     public Desugarer(DiagnosticBag diagnostics) {
-        this(diagnostics, new LinkedHashMap<>());
-    }
-
-    public Desugarer(
-            DiagnosticBag diagnostics,
-            Map<String, AstNode> hoistedStringGlobals
-    ) {
         this.diagnostics = diagnostics == null
                 ? new DiagnosticBag()
                 : diagnostics;
-        this.hoistedStringGlobals = hoistedStringGlobals == null
-                ? new LinkedHashMap<>()
-                : hoistedStringGlobals;
     }
 
     private static final class InferenceFailure extends RuntimeException {
@@ -42,57 +28,16 @@ public class Desugarer {
     public AstNode desugar(AstNode root) {
         if (root == null) return null;
 
+        root = StringLiteralFolder.fold(root);
+
         if (root.kind == AstKind.PROGRAM) {
             List<AstNode> items =
                 desugarTopLevelItemList(root.items);
-
-            items.addAll(0, hoistedStringGlobals.values());
 
             return AstNode.program(root.span, items);
         }
 
         return desugarStmt(root);
-    }
-
-    private AstNode hoistStringLiteral(AstNode literal) {
-        List<BigInteger> bytes =
-            StringLiteralDecoder.toUtf8Bytes(literal);
-
-        if (bytes.isEmpty()) {
-            return AstNode.nullLiteral(literal.span);
-        }
-
-        StringBuilder contentKey = new StringBuilder();
-
-        for (BigInteger b : bytes) {
-            contentKey.append(b.toString(10)).append(',');
-        }
-
-        String key = contentKey.toString();
-
-        AstNode decl = hoistedStringGlobals.get(key);
-
-        if (decl == null) {
-            decl = AstNode.globalVarDecl(
-                literal.span,
-                AstNode.staticArrayType(
-                    literal.span,
-                    AstNode.primitiveType(literal.span, PrimitiveKind.UINT8),
-                    AstNode.intLiteral(literal.span, Integer.toString(bytes.size()))
-                ),
-                "STRLIT_" + Mangler.hashHex64(key),
-                null
-            );
-
-            decl.literalBytes = bytes;
-            hoistedStringGlobals.put(key, decl);
-        }
-
-        return AstNode.getPtr(
-            literal.span,
-            PtrPermission.READ_ONLY,
-            AstNode.var(literal.span, decl.name)
-        );
     }
 
     private List<AstNode> desugarTopLevelItemList(List<AstNode> items) {
@@ -106,13 +51,15 @@ public class Desugarer {
     }
 
     AstNode desugarSingleTopLevelItem(AstNode item) {
+        if (item == null) {
+            return null;
+        }
+
+        item = StringLiteralFolder.fold(item);
+
         List<AstNode> out = new ArrayList<>();
         appendDesugaredTopLevelItem(item, out);
         return out.isEmpty() ? null : out.get(0);
-    }
-
-    List<AstNode> hoistedStringGlobalNodes() {
-        return new ArrayList<>(hoistedStringGlobals.values());
     }
 
     protected void appendDesugaredTopLevelItem(AstNode item, List<AstNode> out) {
@@ -306,27 +253,22 @@ public class Desugarer {
         AstNode type = desugarType(n.type);
         AstNode init = n.value;
 
-        if (init != null && init.kind == AstKind.STRING_LITERAL) {
-            AstNode hoisted = hoistStringLiteral(init);
-
+        if (init != null && StringLiteralFolder.isStringExpression(init)) {
             if (type.kind != AstKind.PTR_TYPE) {
                 diagnostics.error("Global variable '"
                     + n.name
-                    + "': a string literal is a view<[byte, N]> value "
-                    + "and cannot initialize a non-pointer global. The global "
-                    + "itself needs pointer storage to hold the view produced "
-                    + "by the literal. Declare the global as a pointer type "
-                    + "such as view<[byte, N]> or initialize it with a value "
-                    + "of its declared type.");
+                    + "': a string expression materializes as a "
+                    + "view<[byte, N]> value and cannot initialize a "
+                    + "non-pointer global. The global itself needs pointer "
+                    + "storage to hold the view produced by the string. "
+                    + "Declare the global as a pointer type such as "
+                    + "view<[byte, N]> or initialize it with a value of its "
+                    + "declared type.");
 
                 return globalVarDecl(n, type, null);
             }
 
-            if (hoisted.kind == AstKind.NULL) {
-                return globalVarDecl(n, type, null);
-            }
-
-            return globalVarDecl(n, type, hoisted);
+            return globalVarDecl(n, type, desugarExpr(init));
         }
 
         if (init != null && init.kind == AstKind.ARRAY_LITERAL) {
@@ -378,6 +320,19 @@ public class Desugarer {
 
                 return globalVarDecl(n, type, null);
             }
+
+            return globalVarDecl(n, type, null);
+        }
+
+        if (init != null && init.kind == AstKind.AGGREGATE_LITERAL) {
+            diagnostics.error("Global variable '"
+                    + n.name
+                    + "': aggregate literals are local-only. Global scope is "
+                    + "declaration-only, so an aggregate literal has no runtime "
+                    + "point at which to construct its temporary value. "
+                    + "Initialize the global aggregate in an initializer "
+                    + "function called from main, or assign its fields "
+                    + "individually inside a function.");
 
             return globalVarDecl(n, type, null);
         }
@@ -1258,7 +1213,7 @@ public class Desugarer {
         }
 
         if (expr.kind == AstKind.STRING_LITERAL) {
-            return hoistStringLiteral(expr);
+            return expr;
         }
 
         if (expr.kind == AstKind.VAR) {

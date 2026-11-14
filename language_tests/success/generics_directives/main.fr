@@ -2,10 +2,10 @@ import "franko/stdio"
 
 #generic func check<typename T>() -> int32 {
     #if (#is_same_type(T, int32)) {
-        #warning(#strcat("instantiated ", #what_type(T)))
+        #warning("instantiated " + #what_type(T))
         return 1
     } #else {
-        #panic(#strcat("unsupported ", #what_type(T)))
+        #panic("unsupported " + #what_type(T))
     }
 }
 

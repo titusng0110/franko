@@ -65,5 +65,31 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 the value when one exists, and reports its own inference diagnostics
 otherwise (see [Shorthands and Equivalences](25-desugaring.md)).
 
+## 8.1 String Constants
+
+Compile-time string expressions are folded before they are materialized:
+
+```franko
+"a" + "b" + "c"          // folded to "abc"
+"" + "hello"             // folded to "hello"
+"" + ""                  // folded to "", which materializes as null
+"abc" == "abc"           // folded to 1 (uint8)
+"abc" < "abd"            // folded to 1
+#what_type(int32) + "!"  // folded to "int32!"
+```
+
+Concatenation uses UTF-8 bytes. Comparisons are lexicographic over UTF-8
+bytes and produce `uint8` `0` or `1`.
+
+A folded literal is hoisted to shared constant storage only once, after the
+whole string expression has been folded. Intermediate strings are never
+hoisted.
+
+String constant folding is available in constant-expression positions for
+literal-only operations, so a folded comparison can feed an integer constant
+context. `#what_type(...)` remains a compile-time reflection expression and is
+not allowed in literal-only positions such as static array sizes or field
+defaults.
+
 A static array `length()` call is a compile-time constant, not a runtime
 read (see [Array Intrinsics](23-array-intrinsics.md)).

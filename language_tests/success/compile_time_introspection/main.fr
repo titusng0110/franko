@@ -2,7 +2,7 @@
 // LANGUAGE TEST: compile-time reflection predicates
 // ============================================================
 // Covers: #is_primitive, is_memcpy_safe, has_default_value, is_memset_safe,
-// is_same_type, what_type, strcmp, panic, is_matchable, is_comparable,
+// is_same_type, what_type, string comparison folding, panic, is_matchable, is_comparable,
 // is_assignable, and is_value_assignable.
 //
 // Point declares OPERATOR_EQ and OPERATOR_LT and relies on built-in
@@ -84,9 +84,9 @@ func main() -> int32 {
 
     stdout(#what_type(i));
 
-    stdout(#strcmp("abc", "abd"));
-    stdout(#strcmp("abc", "abc"));
-    stdout(#strcmp("abd", "abc"));
+    stdout("abc" < "abd");
+    stdout("abc" == "abc");
+    stdout("abd" > "abc");
 
     stdout(#is_matchable(i));
     stdout(#is_matchable(ip));

@@ -455,6 +455,9 @@ public final class SemanticAnalyzer {
                     globalArrayLiteralInitializers.put(item, item.value);
                 } else if (item.value != null && item.value.kind == AstKind.GET_PTR) {
                     globalStaticInitializers.put(item, item.value);
+                } else if (item.value != null
+                        && StringLiteralFolder.isStringExpression(item.value)) {
+                    globalStaticInitializers.put(item, item.value);
                 } else if (item.value != null) {
                     globalInitializers.put(item, exprAnalyzer.preEvaluatedConstValue(
                             item.value,
@@ -553,6 +556,11 @@ public final class SemanticAnalyzer {
                                     exprAnalyzer.analyzeExprWithExpectedType(
                                             arrayLiteralInit,
                                             sym.type);
+                        }
+
+                        if (loweredStaticInit != null
+                                && loweredStaticInit.kind == SastKind.NULL_LITERAL) {
+                            loweredStaticInit = null;
                         }
 
                         loweredByNode.put(item, SastNode.varDecl(

@@ -51,9 +51,12 @@ JEMALLOC_ROOT = ROOT / "third_party" / "jemalloc"
 JEMALLOC_ARCHIVES = ROOT / "third_party" / "artifacts"
 ASAN_OPTIMIZE = "1"
 CXX_HINT = (
+    "Install g++ or clang++ on PATH, or set CXX to choose a compiler "
+    "explicitly."
+)
+WINDOWS_CXX_HINT = (
     "Install Visual Studio (or VS Build Tools) with the 'Desktop "
-    "development with C++' workload, or put g++/clang++ on PATH. "
-    "Set CXX to choose a compiler explicitly."
+    "development with C++' workload, or put g++/clang++ on PATH."
 )
 
 
@@ -169,28 +172,42 @@ def _find_msvc() -> Path | None:
     return Path(found) if found else None
 
 
+def _env_cxx() -> str | None:
+    value = os.environ.get("CXX")
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
 @cache
 def find_cxx() -> Path:
-    override = os.environ.get("CXX")
-    if override:
-        if Path(override).stem.lower() == "cl":
-            _msvc_environment()
-        return find_tool(override, CXX_HINT)
+    if not IS_WINDOWS:
+        override = _env_cxx()
+        if override:
+            return find_tool(override, CXX_HINT)
 
-    if IS_WINDOWS and (cl := _find_msvc()):
+        names = ("clang++", "g++") if host_os() == "macos" else ("g++", "clang++")
+
+        for name in names:
+            if found := shutil.which(name):
+                return Path(found)
+
+        raise ToolError(
+            f"required tool not found on PATH: g++ or clang++\n{CXX_HINT}"
+        )
+
+    if cl := _find_msvc():
         return cl
 
-    names = ("clang++", "g++") if host_os() == "macos" else ("g++", "clang++")
-    for name in names:
+    for name in ("g++", "clang++"):
         if found := shutil.which(name):
             return Path(found)
 
-    if IS_WINDOWS:
-        raise ToolError(
-            "required C++ compiler not found: cl.exe (Visual Studio) or "
-            f"g++/clang++ on PATH\n{CXX_HINT}"
-        )
-    raise ToolError(f"required tool not found on PATH: g++ or clang++\n{CXX_HINT}")
+    raise ToolError(
+        "required C++ compiler not found: cl.exe (Visual Studio) or "
+        f"g++/clang++ on PATH\n{WINDOWS_CXX_HINT}"
+    )
 
 
 @cache

@@ -306,7 +306,12 @@ public final class ASTSerializer {
             }
             case STRING_LITERAL -> {
                 obj.put("node", node.kind.jsonName());
-                obj.put("rawText", node.text);
+
+                if (node.literalBytes != null) {
+                    obj.put("literalBytes", JsonAstSupport.bigIntegerArray(node.literalBytes));
+                } else {
+                    obj.put("rawText", node.text);
+                }
             }
             case UNARY -> {
                 obj.put("node", node.kind.jsonName());
@@ -638,10 +643,19 @@ public final class ASTSerializer {
                     span,
                     nodesFromArray(obj.requireArray("elements"), sources)
             );
-            case STRING_LITERAL: return AstNode.stringLiteral(
-                    span,
-                    obj.requireString("rawText")
-            );
+            case STRING_LITERAL: {
+                if (obj.has("literalBytes")) {
+                    return AstNode.stringLiteralBytes(
+                            span,
+                            bigIntegersFromArray(obj.requireArray("literalBytes"))
+                    );
+                }
+
+                return AstNode.stringLiteral(
+                        span,
+                        obj.requireString("rawText")
+                );
+            }
             case UNARY: return AstNode.unary(
                     span,
                     obj.requireString("op"),

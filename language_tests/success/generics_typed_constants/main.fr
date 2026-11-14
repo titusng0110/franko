@@ -18,7 +18,7 @@ func pick(int64 v) -> int32 {
 
 func main() -> int32 {
     stdout(pick(#is_primitive(int32)))
-    stdout(pick(#strcmp("a", "b")))
+    stdout(pick(cast<int32>(#is_primitive(int32))))
     stdout(pick(#IS_LINUX))
 
     Holder<int32> h

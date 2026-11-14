@@ -333,8 +333,6 @@ All introspection calls use `#name(...)`.
 | `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Enums, pointers, and dynamic arrays are not. Field defaults do not affect this predicate. |
 | `#is_same_type(x, y)` | two types/values | `uint8` | `1` iff the types are exactly equal; tuple element order matters, names do not |
 | `#what_type(x)` | one type or value | compile-time string | canonical type spelling with no spaces after commas, including `(int32,int32)` for tuples; matches the function signature hashing key |
-| `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
-| `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#warning(message)` | one compile-time string | `void` | emits a compiler warning and continues |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
@@ -353,13 +351,13 @@ field defaults.
 
 ## 35.6 `#what_type` Spellings
 
-`#what_type` produces a compile-time string. When used as an ordinary
-expression, it materializes as a read-only `view<[byte, N]>` backed by
-constant storage. It can be printed, assigned to a byte view, or passed to
-a function accepting a byte view.
+`#what_type` produces a compile-time string. It folds with `+` and string
+comparison operators. When it is used in a value position, it materializes as
+a read-only `view<[byte, N]>` backed by constant storage. It can be printed,
+assigned to a byte view, or passed to a function accepting a byte view.
 
-When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
-string and no runtime string is created.
+When consumed by `#panic`, `#warning`, `+`, or a compile-time comparison, it
+stays a compile-time string and no runtime string is created.
 
 Spellings use canonical Franko type names. Commas are followed directly by
 the next item with no space, so the spelling matches the function signature
@@ -390,36 +388,36 @@ runtime value type and cannot be used in declarations or expressions, but
 
 ## 35.7 Compile-Time Strings
 
-`#strcmp`, `#panic`, `#warning`, and `#strcat` accept compile-time strings:
+`#panic` and `#warning` accept compile-time strings:
 
 - raw string literals;
 - `#what_type(...)`;
-- `#strcat(...)` results.
+- `+` concatenations of compile-time strings.
 
 Runtime `view<[byte]>` values and variables are rejected, even when they
 were initialized from a compile-time string. Compile-time string arguments
-and concatenation results must be non-empty (`N >= 1`); unlike ordinary
-source string literals, they do not become `null`.
+must be non-empty after folding (`N >= 1`); unlike ordinary source string
+literals, they do not become `null`.
 
-`#strcat` accepts one or more arguments and concatenates them:
+String literals have no type and support only `+` and the comparison
+operators at compile time:
 
 ```franko
-stdout(#strcat("Franko", " ", "reflection"))
-stdout(#strcat(#what_type(int32), "_", #what_type(uint8)))
+stdout("Franko" + " " + "reflection")
+stdout(#what_type(int32) + "_" + #what_type(uint8))
 
-#if (#strcmp(#strcat("a", "b"), "ab") == 0) {
+#if ("a" + "b" == "ab") {
     stdout("equal")
 }
+
+stdout("abc" == "abc")   // 1
+stdout("abc" < "abd")    // 1
+stdout("ab" < "abc")     // 1 (prefix sorts first)
 ```
 
-`#strcmp` compares decoded UTF-8 bytes lexicographically:
-
-```franko
-stdout(#strcmp("abc", "abd"));   // -1
-stdout(#strcmp("abc", "abc"));   // 0
-stdout(#strcmp("abd", "abc"));   // 1
-stdout(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
-```
+Comparisons produce `uint8` `0` or `1`. A string comparison cannot mix a
+compile-time string with a runtime view; materialize the literal first if
+pointer comparison is intended.
 
 `#panic` stops compilation with its message:
 
@@ -600,11 +598,12 @@ stdout(#is_comparable(p));     // 1
 - `#if` is statement-and-declaration only; it never produces a value.
 - `#` reflection functions are built-in compile-time functions, not
   callable values.
-- A runtime `view<[byte]>` variable cannot be passed to `#strcmp`,
-  `#strcat`, `#panic`, or `#warning`; those arguments must be compile-time
-  strings.
-- Empty string literals are rejected in `#strcmp`, `#strcat`, `#panic`,
-  and `#warning`.
+- A runtime `view<[byte]>` variable cannot be passed to `#panic` or
+  `#warning`; those arguments must be compile-time strings.
+- Empty compile-time strings are rejected in `#panic` and `#warning`.
+- A string literal has no type and supports only `+` and comparison operators
+  at compile time; it cannot be dereferenced, indexed, cast, or compared with
+  a runtime view.
 - `#panic` and `#warning` cannot be used as runtime values; they are only
   valid as expression statements, declaration-level items, or compile-time
   arguments to other `#` intrinsics.
@@ -652,9 +651,9 @@ A runtime view is not a compile-time string:
 
 ```franko
 view<[byte, 5]> spelling = #what_type(int32)
-#strcmp(spelling, "int32")    // invalid: not a compile-time string
+spelling == "int32"           // invalid: runtime view vs compile-time string
 #warning(spelling)            // invalid: not a compile-time string
-#strcmp(#what_type(int32), "int32") // valid
+#what_type(int32) == "int32"  // valid: folds to 1
 ```
 
 Remember that the unselected branch is still parsed. Its syntax must be
@@ -676,7 +675,7 @@ instantiated, so predicates see the concrete argument:
 ```
 
 `#what_type(T)` produces the concrete spelling (`"int32"`, `"Point"`), and
-`#strcmp(#what_type(T), "int32")` compares it at compile time. Predicates may
+`#what_type(T) == "int32"` compares it at compile time. Predicates may
 also be applied to a value whose type is a type parameter, such as
 `#has_default_value(value)`.
 

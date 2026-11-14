@@ -328,13 +328,7 @@ globalVarInitializer
     ;
 
 globalVarInitValue
-    : constExpr
-    | stringLiteral
-    | arrayLiteral
-    | getPtrExpr
-    | getViewExpr
-    | getMViewExpr
-    | nullLiteral
+    : expr
     ;
 
 // ---------- CONST DECLARATION INITIALIZERS ----------

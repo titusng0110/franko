@@ -32,6 +32,6 @@ type of packet: [uint8,64]
 type of header: PacketHeader
 is_memcpy_safe(packet): 1
 is_memcpy_safe(PacketHeader): 1
-strcat: packet=[uint8,64] header=PacketHeader
+strings: packet=[uint8,64] header=PacketHeader
 layout assertion: 1
 result: ok

@@ -355,8 +355,8 @@ Rules:
 - receiver element type must be `byte`;
 - `value` must be `byte`;
 - `needle` must be a pointer to a byte array (`ptr`/`mview`/`view` over
-  `[byte]` or `[byte, N]`), an array literal, or a string literal (strings
-  are already `view<[byte, N]>` values);
+  `[byte]` or `[byte, N]`), an array literal, or a string literal (the
+  literal materializes as a `view<[byte, N]>`);
 - `start` and `count` must be nonnegative constants fitting `uint32`, or
   nonconstant expressions of exactly type `uint32`; static ranges are
   checked at compile time;

@@ -306,13 +306,14 @@ Allowed default forms are:
 - integer constant expressions (`1 + 2`, `1 << 3`, `#IS_LINUX`, folded `#`
   predicates);
 - `null` for a pointer parameter;
-- string literals;
+- compile-time string expressions (`"hello"`, `"he" + "llo"`,
+  `#what_type(T) + "!"`);
 - array literals;
 - enum variant references;
 - aggregate struct literals whose struct is value-assignable.
 
 An aggregate literal default restricts each field initializer to the same
-static forms: constant expressions, `null`, string literals, array literals,
+static forms: constant expressions, `null`, compile-time string expressions, array literals,
 enum variants, folded `#` expressions, and nested value-assignable struct
 literals.
 

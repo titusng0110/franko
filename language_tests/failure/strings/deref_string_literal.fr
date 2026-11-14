@@ -1,0 +1,8 @@
+// Failure fixture: a string literal has no type and cannot be dereferenced.
+
+import "franko/stdio"
+
+func main() -> int32 {
+    stdout($("abc")[0]);
+    return 0;
+}

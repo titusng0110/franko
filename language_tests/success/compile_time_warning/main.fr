@@ -15,6 +15,9 @@ import "franko/stdio"
 
 func main() -> int32 {
     #warning("statement warning");
+    #warning("folded " + "warning");
+    #warning("type " + #what_type(int32));
+    #warning(#what_type(int32) + " suffix");
 
     #if (0) {
         #warning("dead statement warning");

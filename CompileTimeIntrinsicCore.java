@@ -75,7 +75,7 @@ final class CompileTimeIntrinsicCore {
     }
 
     static PrimitiveKind integerResultKind(String name) {
-        return "strcmp".equals(name) ? PrimitiveKind.INT32 : PrimitiveKind.UINT8;
+        return PrimitiveKind.UINT8;
     }
 
     static BigInteger tryEvaluateInt(AstNode expr, TargetInfo target) {
@@ -101,6 +101,14 @@ final class CompileTimeIntrinsicCore {
             return parsed == null ? null : RawValue.integer(parsed);
         }
 
+        if (expr.kind == AstKind.STRING_LITERAL) {
+            try {
+                return RawValue.string(StringLiteralDecoder.toUtf8Bytes(expr));
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+
         if (expr.kind == AstKind.UNARY) {
             BigInteger value = tryEvaluateInt(expr.expr, target);
 
@@ -117,22 +125,45 @@ final class CompileTimeIntrinsicCore {
         }
 
         if (expr.kind == AstKind.BINARY) {
-            BigInteger left = tryEvaluateInt(expr.left, target);
-            BigInteger right = tryEvaluateInt(expr.right, target);
+            RawValue left = tryEvaluate(expr.left, target);
+            RawValue right = tryEvaluate(expr.right, target);
 
             if (left == null || right == null) {
                 return null;
             }
 
+            if (left.kind == RawKind.STRING && right.kind == RawKind.STRING) {
+                if ("+".equals(expr.text)) {
+                    return RawValue.string(StringConstantOps.concat(
+                            left.bytes,
+                            right.bytes
+                    ));
+                }
+
+                if (StringConstantOps.isComparison(expr.text)) {
+                    return RawValue.integer(StringConstantOps.foldComparison(
+                            expr.text,
+                            left.bytes,
+                            right.bytes
+                    ));
+                }
+
+                return null;
+            }
+
+            if (left.kind != RawKind.INT || right.kind != RawKind.INT) {
+                return null;
+            }
+
             if (("/".equals(expr.text) || "%".equals(expr.text))
-                    && right.signum() == 0) {
+                    && right.value.signum() == 0) {
                 return null;
             }
 
             BigInteger folded = ConstExpressionEvaluator.tryFoldBinary(
                     expr.text,
-                    left,
-                    right
+                    left.value,
+                    right.value
             );
 
             return folded == null ? null : RawValue.integer(folded);
@@ -214,67 +245,6 @@ final class CompileTimeIntrinsicCore {
             }
 
             return RawValue.string(utf8Bytes(key));
-        }
-
-        if ("strcat".equals(name)) {
-            List<BigInteger> combined = new ArrayList<>();
-
-            for (AstNode arg : args) {
-                List<BigInteger> part = tryStaticString(arg, target);
-
-                if (part == null) {
-                    return null;
-                }
-
-                combined.addAll(part);
-            }
-
-            if (combined.isEmpty()) {
-                return null;
-            }
-
-            return RawValue.string(combined);
-        }
-
-        if ("strcmp".equals(name)) {
-            if (args.size() != 2) {
-                return null;
-            }
-
-            List<BigInteger> left = tryStaticString(args.get(0), target);
-            List<BigInteger> right = tryStaticString(args.get(1), target);
-
-            if (left == null || right == null) {
-                return null;
-            }
-
-            return RawValue.integer(BigInteger.valueOf(compareBytes(left, right)));
-        }
-
-        return null;
-    }
-
-    static List<BigInteger> tryStaticString(AstNode arg, TargetInfo target) {
-        if (arg == null) {
-            return null;
-        }
-
-        if (arg.kind == AstKind.STRING_LITERAL) {
-            try {
-                return StringLiteralDecoder.toUtf8Bytes(arg);
-            } catch (RuntimeException e) {
-                return null;
-            }
-        }
-
-        if (arg.kind == AstKind.COMPILE_TIME_CALL) {
-            RawValue value = tryEvaluateCall(arg, target);
-
-            if (value == null || value.kind != RawKind.STRING) {
-                return null;
-            }
-
-            return value.bytes;
         }
 
         return null;
@@ -544,23 +514,6 @@ final class CompileTimeIntrinsicCore {
 
         parts.add(text.substring(start));
         return parts;
-    }
-
-    private static int compareBytes(
-            List<BigInteger> left,
-            List<BigInteger> right
-    ) {
-        int common = Math.min(left.size(), right.size());
-
-        for (int i = 0; i < common; i++) {
-            int comparison = left.get(i).compareTo(right.get(i));
-
-            if (comparison != 0) {
-                return comparison < 0 ? -1 : 1;
-            }
-        }
-
-        return Integer.compare(left.size(), right.size());
     }
 
     static List<BigInteger> utf8Bytes(String text) {

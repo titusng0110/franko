@@ -4,7 +4,7 @@ import "franko/stdio"
     stdout(#what_type(T))
     stdout(#has_default_value(T))
     stdout(#is_primitive(v))
-    stdout(#strcmp(#what_type(T), "int32"))
+    stdout(#what_type(T) == "int32")
 
     #if (#is_same_type(T, int32)) {
         #if (#IS_LINUX || #IS_WINDOWS || #IS_MACOS) {

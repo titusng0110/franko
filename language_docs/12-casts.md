@@ -185,6 +185,9 @@ Raw integers can never be converted to pointers.
 ## 12.7 What Casts Do Not Cover
 
 - A tuple type can be written as a cast target because `cast<T>` accepts a full type, but tuple casts are rejected: `cast<(int32, int32)>(x)` is a compile error. Tuples have no conversion operations.
+- String literals and compile-time string expressions cannot be cast. They
+  have no type until materialized as a byte view; casts apply to typed values.
+  Materialize the literal first, then cast the resulting view or variable.
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.

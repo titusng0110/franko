@@ -3,3 +3,6 @@
 2. language_tests/success/compile_time_warning/main.fr:17:5:
 declaration warning
 statement warning
+folded warning
+type int32
+int32 suffix

@@ -23,7 +23,7 @@ func main() -> int32 {
     stdout($(p)[0]);
     stdout($(m)[1]);
     stdout($(s).length());
-    stdout($("hello")[0]);
+    stdout($(s)[0]);
 
     return 0;
 }

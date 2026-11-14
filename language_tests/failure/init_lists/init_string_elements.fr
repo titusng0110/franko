@@ -1,7 +1,6 @@
 // Failure fixture: init_lists/init_string_elements
-// Array literals only support integer element types: string
-// literals are view<[byte, M]> values and cannot be literal
-// elements.
+// A string literal has no type and cannot be used where an array
+// literal requires an integer constant element.
 func main() -> int32 {
     view<[int32, 2]> v = ["hi", "ok"];
     return 0;

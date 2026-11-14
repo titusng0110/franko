@@ -1,0 +1,8 @@
+// Failure fixture: #warning requires a non-empty compile-time string.
+// Empty literals fold to the null view, which has no bytes for a
+// compile-time directive to consume.
+
+func main() -> int32 {
+    #warning("" + "");
+    return 0;
+}

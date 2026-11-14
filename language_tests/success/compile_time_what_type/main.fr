@@ -6,7 +6,7 @@
 // string views. Spellings have no spaces after commas and match the
 // function signature hashing keys. The result is a real read-only view
 // backed by immutable static storage, and it is also a compile-time
-// string that can feed #strcmp.
+// string that can fold with '+' and comparison operators.
 // ============================================================
 
 import "franko/stdio"
@@ -38,12 +38,12 @@ func main() -> int32 {
     stdout(#what_type(text));
     stdout(#what_type(p));
 
-    stdout(#strcmp(#what_type(i), "int32"));
-    stdout(#strcmp("int32", #what_type(i)));
-    stdout(#strcmp(#what_type(i), #what_type(i)));
-    stdout(#strcmp(#what_type(i), "int64"));
+    stdout(#what_type(i) == "int32");
+    stdout("int32" == #what_type(i));
+    stdout(#what_type(i) == #what_type(i));
+    stdout(#what_type(i) == "int64");
 
-    #if (#strcmp(#what_type(i), "int32") == 0) {
+    #if (#what_type(i) == "int32") {
         stdout("int32 branch");
     } #else {
         stdout("wrong branch");

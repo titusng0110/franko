@@ -122,10 +122,17 @@ Struct comparison and assignment operators are overloadable through `OPERATOR_*`
 
 ## 36.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<[byte, N]>` value, not a byte-array
-value (see [String Literals](24-string-literals.md)). Arrays are not
-assignable, so a string literal cannot initialize or assign an array;
-copy the bytes with `memcpy` instead.
+A string literal materializes as a `view<[byte, N]>` value in value positions,
+not as a byte-array value (see [String Literals](24-string-literals.md)).
+Arrays are not assignable, so a string literal cannot initialize or assign an
+array; copy the bytes with `memcpy` instead.
+
+A string literal has no type of its own. It cannot be dereferenced, indexed,
+accessed as a member, cast, or compared with a runtime view. It supports only
+compile-time `+` concatenation and compile-time comparisons, and materializes
+only as an assignment value, a function argument, or a return value. The
+former `#strcat` and `#strcmp` intrinsics are removed; use `+` and the string
+comparison operators instead.
 
 Invalid:
 
@@ -133,6 +140,9 @@ Invalid:
 [byte, 6] s = "hello";    // invalid
 s = "hello";                   // invalid
 [byte, ?] s = "hello";    // invalid: '?' requires a view declaration
+$("hello");                    // invalid: no type to dereference
+"hello" == getview(s);         // invalid: runtime view comparison
+cast<view<[byte, 5]>>("hello"); // invalid: no string-literal casts
 ```
 
 Valid:

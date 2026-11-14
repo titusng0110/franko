@@ -107,11 +107,11 @@ public final class ExpressionAnalyzer {
     }
 
     public SastNode analyzeValueExpr(AstNode node) {
-        return analyzeExpr(node, true);
+        return analyzeExpr(node, true, true);
     }
 
     public SastNode analyzeExpr(AstNode node) {
-        return analyzeExpr(node, false);
+        return analyzeExpr(node, false, false);
     }
 
     public void analyzeCompileTimeDirective(AstNode call) {
@@ -131,11 +131,16 @@ public final class ExpressionAnalyzer {
 
     private SastNode analyzeExpr(
             AstNode node,
-            boolean allowAggregateLiteral
+            boolean allowAggregateLiteral,
+            boolean allowStringMaterialization
     ) {
         ctx.diagnostics().push(node.span);
         try {
-            return analyzeExprInner(node, allowAggregateLiteral);
+            return analyzeExprInner(
+                    node,
+                    allowAggregateLiteral,
+                    allowStringMaterialization
+            );
         } finally {
             ctx.diagnostics().pop();
         }
@@ -143,7 +148,8 @@ public final class ExpressionAnalyzer {
 
     private SastNode analyzeExprInner(
             AstNode node,
-            boolean allowAggregateLiteral
+            boolean allowAggregateLiteral,
+            boolean allowStringMaterialization
     ) {
         if (node.kind == AstKind.AGGREGATE_LITERAL) {
             AstNode lit = node;
@@ -231,7 +237,7 @@ public final class ExpressionAnalyzer {
                 );
             }
 
-            return staticIntrinsics.analyzeCall(n);
+            return staticIntrinsics.analyzeCall(n, allowStringMaterialization);
         }
 
         if (node.kind == AstKind.COMPILE_TIME_NAME) {
@@ -279,6 +285,79 @@ public final class ExpressionAnalyzer {
 
         if (node.kind == AstKind.BINARY) {
             AstNode n = node;
+            boolean leftString = StringLiteralFolder.isStringExpression(n.left);
+            boolean rightString = StringLiteralFolder.isStringExpression(n.right);
+
+            if (leftString || rightString) {
+                if (!StringConstantOps.isStringOperator(n.text)) {
+                    ctx.error("Operator '"
+                            + n.text
+                            + "' is not defined for compile-time string "
+                            + "expressions. A string literal has no type; "
+                            + "compile-time strings support only '+' "
+                            + "concatenation and the ==, !=, <, >, <=, and >= "
+                            + "comparisons, which fold at compile time. Use one "
+                            + "of those operators, or materialize the literal "
+                            + "as a byte view first.");
+                    return fallbackInt(node.span);
+                }
+
+                if (!leftString || !rightString) {
+                    if (StringConstantOps.isComparison(n.text)) {
+                        ctx.error("Cannot compare a compile-time string "
+                                + "expression with a runtime value. A string "
+                                + "literal has no type, so both operands of a "
+                                + "string comparison must be compile-time "
+                                + "strings; the comparison then folds to 1 or "
+                                + "0. Assign the literal to a byte view first "
+                                + "if you intended pointer equality.");
+                    } else {
+                        ctx.error("Cannot combine a compile-time string "
+                                + "expression with a runtime value using '"
+                                + n.text
+                                + "'. A string literal has no type and folds "
+                                + "only with another compile-time string. "
+                                + "Assign or pass the literal to a byte view "
+                                + "first, or use an explicit operation on that "
+                                + "typed value.");
+                    }
+
+                    return fallbackInt(node.span);
+                }
+
+                List<BigInteger> leftBytes = evaluateStringExpression(n.left);
+                List<BigInteger> rightBytes = evaluateStringExpression(n.right);
+
+                if (leftBytes == null || rightBytes == null) {
+                    return fallbackInt(node.span);
+                }
+
+                if ("+".equals(n.text)) {
+                    if (!allowStringMaterialization) {
+                        reportStringConstantWithoutType(node.span);
+                        return fallbackInt(node.span);
+                    }
+
+                    return staticIntrinsics.materializeStringConstant(
+                            StringConstantOps.concat(leftBytes, rightBytes),
+                            node.span
+                    );
+                }
+
+                BigInteger folded = StringConstantOps.foldComparison(
+                        n.text,
+                        leftBytes,
+                        rightBytes
+                );
+
+                return SastNode.intLiteral(
+                        node.span,
+                        BOOL_TYPE,
+                        folded,
+                        folded.toString(10)
+                );
+            }
+
             SastNode left = analyzeExpr(n.left);
             SastNode right = analyzeExpr(n.right);
 
@@ -475,6 +554,17 @@ public final class ExpressionAnalyzer {
         if (node.kind == AstKind.CAST) {
             AstNode n = node;
             SastType targetType = resolveAstNode(n.type);
+
+            if (StringLiteralFolder.isStringExpression(n.expr)) {
+                ctx.error("A string literal or compile-time string expression "
+                        + "has no type and cannot be cast. A string literal "
+                        + "materializes only as an assignment value, a function "
+                        + "argument, or a return value. Assign or pass it to a "
+                        + "byte view first; casts apply to typed values, not to "
+                        + "compile-time string constants.");
+                return fallbackInt(node.span);
+            }
+
             SastNode expr = analyzeExpr(n.expr);
 
             if (targetType.kind == SastTypeKind.PRIMITIVE) {
@@ -555,18 +645,23 @@ public final class ExpressionAnalyzer {
         }
 
         if (node.kind == AstKind.STRING_LITERAL) {
-            ctx.error("String literal is not a valid expression here; a "
-                    + "string literal is a view<[byte, N]> value. String "
-                    + "literals are read-only views over static byte storage, "
-                    + "not values this context can lower directly. Bind the "
-                    + "literal to a view<[byte, N]> variable and use that, or "
-                    + "pass it to a parameter that accepts a byte view.");
+            if (!allowStringMaterialization) {
+                reportStringConstantWithoutType(node.span);
+                return fallbackInt(node.span);
+            }
 
-            return SastNode.intLiteral(
-                    node.span,
-                    FALLBACK_TYPE,
-                    BigInteger.ZERO,
-                    "0"
+            List<BigInteger> bytes;
+
+            try {
+                bytes = StringLiteralDecoder.toUtf8Bytes(node);
+            } catch (RuntimeException e) {
+                ctx.error(e.getMessage());
+                return fallbackInt(node.span);
+            }
+
+            return staticIntrinsics.materializeStringConstant(
+                    bytes,
+                    node.span
             );
         }
 
@@ -1983,6 +2078,35 @@ public final class ExpressionAnalyzer {
                 method,
                 fullArgs
         );
+    }
+
+    private SastNode fallbackInt(SourceSpan span) {
+        return SastNode.intLiteral(
+                span,
+                FALLBACK_TYPE,
+                BigInteger.ZERO,
+                "0"
+        );
+    }
+
+    private List<BigInteger> evaluateStringExpression(AstNode expr) {
+        if (staticIntrinsics == null) {
+            ctx.error("Internal compiler error: no compile-time intrinsics "
+                    + "wired into ExpressionAnalyzer");
+            return null;
+        }
+
+        return staticIntrinsics.evaluateStringExpression(expr);
+    }
+
+    private void reportStringConstantWithoutType(SourceSpan span) {
+        ctx.error("A string literal has no type and cannot be used here. It "
+                + "materializes only as an assignment value, a function "
+                + "argument, or a return value. Use it in one of those "
+                + "positions, or fold it with another compile-time string "
+                + "using '+' or a comparison. A string literal cannot be "
+                + "dereferenced, indexed, accessed as a member, cast, or used "
+                + "in a condition.");
     }
 
     private SastType inferBinaryResultType(

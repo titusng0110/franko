@@ -218,8 +218,6 @@ final class GenericsResolver {
     private final List<Instance> queue = new ArrayList<>();
     private final Map<String, List<AstNode>> generatedByNamespace =
             new LinkedHashMap<>();
-    private final Map<String, AstNode> hoistedStringGlobals =
-            new LinkedHashMap<>();
     private final Map<String, AstNode> structNodes = new LinkedHashMap<>();
     private final Map<String, Map<String, AstNode>> structFieldTypes =
             new LinkedHashMap<>();
@@ -247,10 +245,7 @@ final class GenericsResolver {
     GenericsResolver(DiagnosticBag diagnostics, TargetInfo target) {
         this.diagnostics = diagnostics == null ? new DiagnosticBag() : diagnostics;
         this.target = target;
-        this.desugarer = new SpecializationDesugarer(
-                this.diagnostics,
-                hoistedStringGlobals
-        );
+        this.desugarer = new SpecializationDesugarer(this.diagnostics);
     }
 
     AstNode expand(AstNode program) {
@@ -265,7 +260,6 @@ final class GenericsResolver {
 
         List<AstNode> items = insertGenerated(rewritten.items, null);
         items = appendMissingGeneratedNamespaces(items);
-        items = addHoistedStringGlobals(items);
 
         return AstNode.program(program.span, items);
     }
@@ -2192,36 +2186,6 @@ final class GenericsResolver {
         return out;
     }
 
-    private List<AstNode> addHoistedStringGlobals(List<AstNode> items) {
-        if (hoistedStringGlobals.isEmpty()) {
-            return items;
-        }
-
-        Set<String> existingNames = new HashSet<>();
-
-        for (AstNode item : items) {
-            if (item.kind == AstKind.GLOBAL_VAR_DECL) {
-                existingNames.add(item.name);
-            }
-        }
-
-        List<AstNode> globals = new ArrayList<>();
-
-        for (AstNode global : hoistedStringGlobals.values()) {
-            if (existingNames.add(global.name)) {
-                globals.add(global);
-            }
-        }
-
-        if (globals.isEmpty()) {
-            return items;
-        }
-
-        List<AstNode> out = new ArrayList<>(globals);
-        out.addAll(items);
-        return out;
-    }
-
     AstNode expandMethods(AstNode program) {
         if (program == null || program.kind != AstKind.PROGRAM) {
             return program;
@@ -2232,14 +2196,12 @@ final class GenericsResolver {
             changed |= processVisibleBodies(program.items, null);
 
             int queueBefore = processedInstanceCount;
-            int hoistedBefore = hoistedStringGlobals.size();
             processQueue();
 
             boolean queueChanged = processedInstanceCount != queueBefore;
             boolean generated = !generatedByNamespace.isEmpty();
-            boolean hoistedChanged = hoistedStringGlobals.size() != hoistedBefore;
 
-            if (generated || hoistedChanged) {
+            if (generated) {
                 program = rebuildProgram(program);
                 changed = true;
             }
@@ -2255,7 +2217,6 @@ final class GenericsResolver {
     private AstNode rebuildProgram(AstNode program) {
         List<AstNode> items = insertGenerated(program.items, null);
         items = appendMissingGeneratedNamespaces(items);
-        items = addHoistedStringGlobals(items);
         return AstNode.program(program.span, items);
     }
 

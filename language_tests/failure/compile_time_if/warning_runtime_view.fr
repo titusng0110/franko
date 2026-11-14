@@ -1,0 +1,9 @@
+// Failure fixture: #warning rejects runtime views.
+// A runtime view is not a compile-time string even when it was initialized
+// from #what_type or a string literal.
+
+func main() -> int32 {
+    view<[byte, 5]> spelling = #what_type(int32);
+    #warning(spelling);
+    return 0;
+}

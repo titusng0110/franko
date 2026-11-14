@@ -1,0 +1,6 @@
+// Failure fixture: member access on a string literal has no type to work on.
+
+func main() -> int32 {
+    uint32 n = "abc".length();
+    return 0;
+}

@@ -1,0 +1,21 @@
+// LANGUAGE TEST: compile-time string concatenation with '+'
+
+import "franko/stdio"
+
+func main() -> int32 {
+    stdout("ab" + "cd" + "ef")
+    stdout("Franko" + " " + "reflection")
+    stdout(#what_type(int32) + "_" + #what_type(uint8))
+    stdout("a" + "b" == "ab")
+
+    #if (0) {
+        #panic("dead " + " branch")
+    }
+
+    view<[byte, 6]> v = "hel" + "lo" + "!"
+    stdout($(v)[0])
+
+    view<[byte]> empty = "" + ""
+    stdout(empty == null)
+    return 0
+}

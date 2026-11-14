@@ -1,6 +1,6 @@
 // Aggregate literals are local-only; global initializers are
 // restricted to constant expressions, statically representable
-// addresses, string literals, and array literals.
+// addresses, string expressions, and array literals.
 struct Literal {
     int32 x
 }

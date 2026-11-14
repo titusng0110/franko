@@ -251,8 +251,9 @@ func main() -> int32 {
 }
 ```
 
-A string literal is a `view<[byte, N]>`; byte buffers receive its
-content through `memcpy`. See [String Literals](24-string-literals.md).
+A string literal materializes as a `view<[byte, N]>` when passed to
+`memcpy`; byte buffers receive its content through that intrinsic. See
+[String Literals](24-string-literals.md).
 
 ## 38.12 Nested Static Array Grid
 

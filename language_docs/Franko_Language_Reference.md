@@ -36,7 +36,8 @@ Franko is a small statically typed language with:
 - `for`;
 - `break` and `continue` (with an optional `break N` level, see [Statements](17-statements.md));
 - `return`;
-- string literals as read-only `view<[byte, N]>` values;
+- untyped string literals that fold with `+` and compile-time comparisons,
+  and materialize as read-only `view<[byte, N]>` values in value positions;
 - array intrinsics:
   - `arr.init(size)`;
   - `arr.init_zero(size)`;
@@ -69,8 +70,8 @@ Franko is a small statically typed language with:
   - type predicates such as `#has_default_value`, `#is_memcpy_safe`,
     `#is_same_type`, and `#is_enum`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
-  - compile-time strings with `#strcat`, `#strcmp`, `#panic`, and
-    `#warning`
+  - compile-time strings with `+` and comparison operators, plus
+    `#panic` and `#warning`
     (see [Compile-Time Reflection](35-compile-time-reflection.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));
@@ -612,8 +613,8 @@ A nonnegative value above the `int64` maximum uses `uint64`. A value that fits
 no primitive integer type is a compile error.
 
 Compile-time intrinsic results are already typed: predicates and `#IS_*`
-constants are `uint8`, and `#strcmp` is `int32`. These typed results keep
-their declared result type rather than becoming context-inferred literals.
+constants are `uint8`. These typed results keep their declared result type
+rather than becoming context-inferred literals.
 
 ## 7.1 Overload Resolution
 
@@ -715,6 +716,32 @@ int32 x = 1 / 0;   // invalid: Division by zero in constant expression
 `?` array size inference uses the same evaluator quietly: it only needs
 the value when one exists, and reports its own inference diagnostics
 otherwise (see [Shorthands and Equivalences](25-desugaring.md)).
+
+## 8.1 String Constants
+
+Compile-time string expressions are folded before they are materialized:
+
+```franko
+"a" + "b" + "c"          // folded to "abc"
+"" + "hello"             // folded to "hello"
+"" + ""                  // folded to "", which materializes as null
+"abc" == "abc"           // folded to 1 (uint8)
+"abc" < "abd"            // folded to 1
+#what_type(int32) + "!"  // folded to "int32!"
+```
+
+Concatenation uses UTF-8 bytes. Comparisons are lexicographic over UTF-8
+bytes and produce `uint8` `0` or `1`.
+
+A folded literal is hoisted to shared constant storage only once, after the
+whole string expression has been folded. Intermediate strings are never
+hoisted.
+
+String constant folding is available in constant-expression positions for
+literal-only operations, so a folded comparison can feed an integer constant
+context. `#what_type(...)` remains a compile-time reflection expression and is
+not allowed in literal-only positions such as static array sizes or field
+defaults.
 
 A static array `length()` call is a compile-time constant, not a runtime
 read (see [Array Intrinsics](23-array-intrinsics.md)).
@@ -1166,6 +1193,9 @@ Raw integers can never be converted to pointers.
 ## 12.7 What Casts Do Not Cover
 
 - A tuple type can be written as a cast target because `cast<T>` accepts a full type, but tuple casts are rejected: `cast<(int32, int32)>(x)` is a compile error. Tuples have no conversion operations.
+- String literals and compile-time string expressions cannot be cast. They
+  have no type until materialized as a byte view; casts apply to typed values.
+  Materialize the literal first, then cast the resulting view or variable.
 - Casts do not appear in constant-expression slots (static array
   sizes, global initializers, struct field defaults): those contexts
   accept only plain integer literals and operators.
@@ -1243,6 +1273,9 @@ Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
 Operands must be integers. Arrays and pointers are invalid.
 
+`+` also concatenates two compile-time string expressions and folds to one
+string constant. `-`, `*`, `/`, and `%` reject compile-time strings.
+
 `%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
 
 ```franko
@@ -1289,6 +1322,23 @@ error. See [Enums](31-enums.md).
 Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
 The `null` literal may be compared with a pointer using `==` and `!=` only. `null` cannot be compared with non-pointer values, and `0` is not `null`.
+
+### String Constant Comparisons
+
+Two compile-time strings may be compared with `==`, `!=`, `<`, `>`, `<=`,
+and `>=`. Both operands must be compile-time strings (literals, `#what_type`,
+or `+` concatenations). The comparison folds at compile time and produces
+`uint8` `1` or `0`.
+
+```franko
+stdout("abc" == "abc")   // 1
+stdout("abc" < "abd")    // 1
+stdout(#what_type(int32) == "int32")   // 1
+```
+
+A string literal has no type, so it cannot be compared with a runtime value,
+including a materialized `view<[byte]>`. Materialize the literal into a view
+first if pointer equality is intended.
 
 ## 13.7 Logical Operators
 
@@ -2080,13 +2130,14 @@ The initializer must be a constant expression built from literals, so it is fold
 
 **Static address initializers.** A pointer-typed global may be
 initialized with `null`, with `getptr`/`getmview`/`getview` over another
-global variable, or with a string literal (which is a view over
-immutable constant storage; see [String Literals](24-string-literals.md)):
+global variable, or with a materialized string expression (which folds and
+becomes a view over immutable constant storage; see
+[String Literals](24-string-literals.md)):
 
 ```franko
 [byte, 5] greeting
 view<[byte, 5]> v = getview(greeting)
-view<[byte, 5]> s = "hello"
+view<[byte, 5]> s = "he" + "llo"
 ptr<[byte, 5]> p = null
 ```
 
@@ -2205,7 +2256,7 @@ The rules:
    implicitly const; writing `const self` is allowed but redundant.
 8. **Const globals are allowed** for value-assignable types, using the
    existing global initializer forms (constant initializer, static address,
-   string literal, or array literal through a pointer type). A const global
+   string expression, or array literal through a pointer type). A const global
    cannot be assigned from any function.
 
 `#is_value_assignable` is exactly the type predicate `const` requires.
@@ -2520,13 +2571,14 @@ Allowed default forms are:
 - integer constant expressions (`1 + 2`, `1 << 3`, `#IS_LINUX`, folded `#`
   predicates);
 - `null` for a pointer parameter;
-- string literals;
+- compile-time string expressions (`"hello"`, `"he" + "llo"`,
+  `#what_type(T) + "!"`);
 - array literals;
 - enum variant references;
 - aggregate struct literals whose struct is value-assignable.
 
 An aggregate literal default restricts each field initializer to the same
-static forms: constant expressions, `null`, string literals, array literals,
+static forms: constant expressions, `null`, compile-time string expressions, array literals,
 enum variants, folded `#` expressions, and nested value-assignable struct
 literals.
 
@@ -2938,8 +2990,8 @@ predicates see the concrete argument:
 `describe<int32>(1)` selects the first branch; `describe<Point>(p)` selects
 the second.
 
-The same applies to `#what_type`, `#is_same_type`, `#strcmp`, `#strcat`, and
-the `#IS_*` target constants:
+The same applies to `#what_type`, `#is_same_type`, string `+` folding, string
+comparisons, and the `#IS_*` target constants:
 
 ```franko
 #generic func spelling<typename T>() -> view<[byte]> {
@@ -2967,10 +3019,10 @@ they fire only for surviving selected paths of an instantiated template:
 ```franko
 #generic func check<typename T>() -> int32 {
     #if (#is_same_type(T, int32)) {
-        #warning(#strcat("instantiated ", #what_type(T)))
+        #warning("instantiated " + #what_type(T))
         return 1
     } #else {
-        #panic(#strcat("unsupported ", #what_type(T)))
+        #panic("unsupported " + #what_type(T))
     }
 }
 ```
@@ -3366,8 +3418,9 @@ Owning pointers are forbidden in arrays and other aggregates; see
 
 # 22. Array Literals
 
-Franko **array literals** are read-only views of static arrays, exactly
-like [string literals](24-string-literals.md) are views of byte arrays.
+Franko **array literals** are read-only views of static arrays. Like
+materialized [string literals](24-string-literals.md), they are read-only
+views over immutable byte storage.
 
 An array literal is written with square brackets:
 
@@ -3967,8 +4020,8 @@ Rules:
 - receiver element type must be `byte`;
 - `value` must be `byte`;
 - `needle` must be a pointer to a byte array (`ptr`/`mview`/`view` over
-  `[byte]` or `[byte, N]`), an array literal, or a string literal (strings
-  are already `view<[byte, N]>` values);
+  `[byte]` or `[byte, N]`), an array literal, or a string literal (the
+  literal materializes as a `view<[byte, N]>`);
 - `start` and `count` must be nonnegative constants fitting `uint32`, or
   nonconstant expressions of exactly type `uint32`; static ranges are
   checked at compile time;
@@ -4107,65 +4160,133 @@ stdout(flags.read_bit(10));       // 1
 
 # 24. String Literals
 
-Franko string literals are **read-only views of byte arrays**. A string
-literal is an ordinary expression whose type is `view<[byte, N]>`
-(see [Pointers](26-pointers.md)): a read-only pointer to a static byte
-array of `N` UTF-8 bytes, where `N` is the literal's byte length.
+Franko string literals are **untyped compile-time string constants**. A
+string literal has no type of its own until a value context materializes it.
+It then becomes a read-only `view<[byte, N]>` over immutable UTF-8 byte
+storage (see [Pointers](26-pointers.md)).
 
 ```franko
-"Franko"           // view<[byte, 6]>
-"Hello, World!"    // view<[byte, 13]>
+"Franko"           // 6 UTF-8 bytes when materialized
+"Hello, World!"    // 13 UTF-8 bytes when materialized
 ```
 
-## 24.1 A String Literal Is a View Value
+A compile-time string can also be produced by `#what_type(...)`.
 
-Each distinct literal is backed by immutable `[byte, N]` storage
-holding the UTF-8 bytes, and the literal expression is a read-only view
-over it. Identical literal texts share one backing store. No null
-terminator is appended: `N` is exactly the number of content bytes.
+## 24.1 Materialization
 
-Because the literal is a pointer, it must be dereferenced with `$(...)`
-to reach the bytes:
+A string literal materializes as a byte view only when it is used as:
 
-```franko
-stdout($("abc").length());   // 3
-stdout($("abc")[0]);         // 97
-```
-
-A string literal may appear anywhere an expression may appear:
+- the right-hand side of an assignment or declaration initializer;
+- a field value in an aggregate initializer;
+- an argument to a function, method, or compiler intrinsic;
+- a return value;
+- a parameter default value.
 
 ```franko
 view<[byte, 3]> s = "abc";     // declaration initializer
-s = "xyz";                          // assignment to a view variable
-stdout($("hi").length());            // print argument
-take("hi");                         // function argument
-return "hi";                        // return value (with a view return type)
+s = "xyz";                     // assignment
+take("hi");                    // function argument
+return "hi";                   // return value
+stdout("hello");               // function argument
+buf.memcpy("hello");           // intrinsic argument
 ```
 
-## 24.2 UTF-8 Bytes
+Every other **value** position rejects the literal because it has no type.
+Compile-time `+` and comparisons are separate folding contexts (see
+[24.2](#242-compile-time-concatenation-and-comparison)); they are not
+materialization. In particular, a literal cannot be dereferenced, indexed,
+accessed as a member, cast, or used in a condition:
+
+```franko
+$("abc")             // invalid: a string literal has no type
+"abc"[0]             // invalid
+"abc".length()       // invalid
+cast<view<[byte, 3]>>("abc")   // invalid
+if ("abc") { }       // invalid
+```
+
+To read the bytes of a literal, materialize it into a view first:
+
+```franko
+view<[byte, 3]> s = "abc";
+stdout($(s).length());   // 3
+stdout($(s)[0]);         // 97
+```
+
+Once materialized, the resulting view is an ordinary runtime value and
+follows the normal pointer rules.
+
+## 24.2 Compile-Time Concatenation and Comparison
+
+A string literal supports exactly two compile-time constant operations:
+
+- `+` concatenates UTF-8 bytes;
+- `==`, `!=`, `<`, `>`, `<=`, and `>=` compare UTF-8 bytes
+  lexicographically.
+
+Both operands must be compile-time strings. The operation folds before any
+materialization, so no intermediate byte storage is created.
+
+```franko
+stdout("hello" + " " + "world")        // hello world
+stdout("a" < "b")                      // 1
+stdout("abc" == "abc")                 // 1
+stdout("abc" != "abd")                 // 1
+```
+
+`#what_type(...)` is also a compile-time string and participates in the same
+folding:
+
+```franko
+stdout("type=" + #what_type(int32))    // type=int32
+stdout(#what_type(int32) == "int32")   // 1
+
+#if (#what_type(int32) == "int32") {
+    stdout("int32 branch")
+}
+```
+
+A comparison of a compile-time string with a runtime value is an error. A
+string literal has no type, so it is never inferred into a pointer
+comparison:
+
+```franko
+view<[byte, 3]> v = "abc"
+v == "abc"      // invalid: runtime view compared with a string literal
+```
+
+Compare two materialized views when pointer equality is intended, or compare
+two compile-time strings when byte equality is intended.
+
+Other operators, including `-`, `*`, `/`, `%`, bitwise operators, and logical
+operators, reject compile-time strings.
+
+## 24.3 UTF-8 Bytes
 
 A string literal stores the literal's **UTF-8 bytes**: one array element
 per byte. Multi-byte sequences expand accordingly:
 
 ```franko
-stdout($("你好").length());   // 6: 228 189 160 229 165 189
+view<[byte, 6]> s = "你好";
+stdout($(s).length());   // 6: 228 189 160 229 165 189
 ```
 
-## 24.3 Escapes
+## 24.4 Escapes
 
 The supported escape sequences are `\\ \" \a \b \f \n \r \t \v`.
 `\u`, `\x`, and `\0` are not supported, and a trailing backslash is
 invalid. Any other escape is a lex error.
 
 ```franko
-stdout($("\t\n\"\\"")[0]);   // 9
+view<[byte, 4]> s = "\t\n\"\\";
+stdout($(s)[0]);   // 9
 ```
 
-## 24.4 Strings and Byte Buffers
+## 24.5 Strings and Byte Buffers
 
 Arrays are value types and are **not assignable from strings**: a
 `view<[byte, N]>` cannot initialize or assign an array. Copy the
-bytes with the `memcpy` intrinsic instead — a string literal is a valid
+bytes with the `memcpy` intrinsic instead — a materialized string is a valid
 `memcpy` source:
 
 ```franko
@@ -4177,23 +4298,23 @@ stdout(buf[0]);            // 104
 For dynamic arrays, size the buffer first:
 
 ```franko
+view<[byte, 5]> hello = "hello";
 [byte] buf;
-buf.init($("hello").length());
-buf.memcpy("hello");
+buf.init($(hello).length());
+buf.memcpy(hello);
 ```
 
-For the same reason `[byte, ?]` cannot infer its size from a string
-literal; declare the size explicitly. (`?` size inference works in
-`view<[...]>` declarations with an array literal; see
-[Array Literals](22-array-literals.md).)
+`[byte, ?]` cannot infer its size from a string literal; declare the size
+explicitly. (`?` size inference works in `view<[...]>` declarations with an
+array literal; see [Array Literals](22-array-literals.md).)
 
-## 24.5 Global String Views
+## 24.6 Global String Views
 
-A pointer-typed global may be initialized with a string literal (or with
-`getptr`/`getmview`/`getview` over another global, or `null`):
+A pointer-typed global may be initialized with a string expression, including
+a folded concatenation:
 
 ```franko
-view<[byte, 5]> GREETING = "hello";
+view<[byte, 5]> GREETING = "he" + "llo";
 
 func main() -> int32 {
     stdout($(GREETING).length());   // 5
@@ -4201,21 +4322,33 @@ func main() -> int32 {
 }
 ```
 
-## 24.6 Empty Strings
+A non-pointer global cannot hold a string view.
 
-An empty string literal `""` is the `null` view: it is valid wherever a
-`view<[byte, ...]>` value is expected. It has no bytes and no element
-storage; dereferencing or indexing it is invalid until a non-null view is
-assigned.
+## 24.7 Empty Strings
+
+An empty compile-time string materializes as the `null` view. Emptiness is
+decided **after folding**:
 
 ```franko
-view<[byte]> empty = "";       // valid: null view
-view<[byte, 5]> nil = "";      // valid: null view
+view<[byte]> a = "";             // null view
+view<[byte]> b = "" + "";        // null view
+view<[byte, 5]> c = "" + "hello"; // "hello", not null
 ```
 
-Because `""` is `null`, `stdout("")` is ambiguous between the text and
-`std::String` overloads, just like `stdout(null)`. Use a typed null view or
+Because an empty result is `null`, `stdout("")` is ambiguous between the text
+and `std::String` overloads, just like `stdout(null)`. Use a typed null view or
 `stdout()` when a newline is intended.
+
+## 24.8 No Casting
+
+String literals and compile-time string expressions cannot be cast:
+
+```franko
+cast<view<[byte, 3]>>("abc")       // invalid
+unsafe_cast<int32>("abc")          // invalid
+```
+
+Materialize the literal into a byte view first; casts apply to typed values.
 
 ---
 
@@ -4247,7 +4380,7 @@ const Point p { x = 1 }
 Declaration initialization is evaluated once as part of the declaration; a
 `const` variable can therefore be initialized here and nowhere else. At
 global scope only the existing global initializer
-forms are valid (constant initializer, static address, string literal, or an
+forms are valid (constant initializer, static address, string expression, or an
 array literal through a pointer). See
 [Declarations](18-declarations.md#188-const-storage).
 
@@ -4259,8 +4392,10 @@ shorthand. See [Array Literals](22-array-literals.md) and
 
 ## 25.3 String Literal Values
 
-String literals are read-only `view<[byte, N]>` values over immutable UTF-8
-storage. See [String Literals](24-string-literals.md).
+String literals are untyped compile-time constants. They fold with `+` and
+comparisons and materialize as read-only `view<[byte, N]>` values over
+immutable UTF-8 storage in value positions. See
+[String Literals](24-string-literals.md).
 
 ## 25.4 Braceless Control-Flow Bodies
 
@@ -7737,8 +7872,6 @@ All introspection calls use `#name(...)`.
 | `#is_memset_safe(x)` | one type or value | `uint8` | `1` iff the type is safe to byte-fill with `memset`: primitives, static arrays of memset-safe elements, structs whose fields are all memset-safe, and tuples whose elements are all memset-safe. Enums, pointers, and dynamic arrays are not. Field defaults do not affect this predicate. |
 | `#is_same_type(x, y)` | two types/values | `uint8` | `1` iff the types are exactly equal; tuple element order matters, names do not |
 | `#what_type(x)` | one type or value | compile-time string | canonical type spelling with no spaces after commas, including `(int32,int32)` for tuples; matches the function signature hashing key |
-| `#strcat(a, b, ...)` | one or more compile-time strings | compile-time string | concatenates all arguments |
-| `#strcmp(a, b)` | two compile-time strings | `int32` | lexicographic byte comparison; negative, zero, or positive |
 | `#panic(message)` | one compile-time string | `void` | stops compilation with the message |
 | `#warning(message)` | one compile-time string | `void` | emits a compiler warning and continues |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
@@ -7757,13 +7890,13 @@ field defaults.
 
 ## 35.6 `#what_type` Spellings
 
-`#what_type` produces a compile-time string. When used as an ordinary
-expression, it materializes as a read-only `view<[byte, N]>` backed by
-constant storage. It can be printed, assigned to a byte view, or passed to
-a function accepting a byte view.
+`#what_type` produces a compile-time string. It folds with `+` and string
+comparison operators. When it is used in a value position, it materializes as
+a read-only `view<[byte, N]>` backed by constant storage. It can be printed,
+assigned to a byte view, or passed to a function accepting a byte view.
 
-When consumed by `#strcmp`, `#panic`, or `#strcat`, it stays a compile-time
-string and no runtime string is created.
+When consumed by `#panic`, `#warning`, `+`, or a compile-time comparison, it
+stays a compile-time string and no runtime string is created.
 
 Spellings use canonical Franko type names. Commas are followed directly by
 the next item with no space, so the spelling matches the function signature
@@ -7794,36 +7927,36 @@ runtime value type and cannot be used in declarations or expressions, but
 
 ## 35.7 Compile-Time Strings
 
-`#strcmp`, `#panic`, `#warning`, and `#strcat` accept compile-time strings:
+`#panic` and `#warning` accept compile-time strings:
 
 - raw string literals;
 - `#what_type(...)`;
-- `#strcat(...)` results.
+- `+` concatenations of compile-time strings.
 
 Runtime `view<[byte]>` values and variables are rejected, even when they
 were initialized from a compile-time string. Compile-time string arguments
-and concatenation results must be non-empty (`N >= 1`); unlike ordinary
-source string literals, they do not become `null`.
+must be non-empty after folding (`N >= 1`); unlike ordinary source string
+literals, they do not become `null`.
 
-`#strcat` accepts one or more arguments and concatenates them:
+String literals have no type and support only `+` and the comparison
+operators at compile time:
 
 ```franko
-stdout(#strcat("Franko", " ", "reflection"))
-stdout(#strcat(#what_type(int32), "_", #what_type(uint8)))
+stdout("Franko" + " " + "reflection")
+stdout(#what_type(int32) + "_" + #what_type(uint8))
 
-#if (#strcmp(#strcat("a", "b"), "ab") == 0) {
+#if ("a" + "b" == "ab") {
     stdout("equal")
 }
+
+stdout("abc" == "abc")   // 1
+stdout("abc" < "abd")    // 1
+stdout("ab" < "abc")     // 1 (prefix sorts first)
 ```
 
-`#strcmp` compares decoded UTF-8 bytes lexicographically:
-
-```franko
-stdout(#strcmp("abc", "abd"));   // -1
-stdout(#strcmp("abc", "abc"));   // 0
-stdout(#strcmp("abd", "abc"));   // 1
-stdout(#strcmp("ab", "abc"));    // -1 (prefix sorts first)
-```
+Comparisons produce `uint8` `0` or `1`. A string comparison cannot mix a
+compile-time string with a runtime view; materialize the literal first if
+pointer comparison is intended.
 
 `#panic` stops compilation with its message:
 
@@ -8004,11 +8137,12 @@ stdout(#is_comparable(p));     // 1
 - `#if` is statement-and-declaration only; it never produces a value.
 - `#` reflection functions are built-in compile-time functions, not
   callable values.
-- A runtime `view<[byte]>` variable cannot be passed to `#strcmp`,
-  `#strcat`, `#panic`, or `#warning`; those arguments must be compile-time
-  strings.
-- Empty string literals are rejected in `#strcmp`, `#strcat`, `#panic`,
-  and `#warning`.
+- A runtime `view<[byte]>` variable cannot be passed to `#panic` or
+  `#warning`; those arguments must be compile-time strings.
+- Empty compile-time strings are rejected in `#panic` and `#warning`.
+- A string literal has no type and supports only `+` and comparison operators
+  at compile time; it cannot be dereferenced, indexed, cast, or compared with
+  a runtime view.
 - `#panic` and `#warning` cannot be used as runtime values; they are only
   valid as expression statements, declaration-level items, or compile-time
   arguments to other `#` intrinsics.
@@ -8056,9 +8190,9 @@ A runtime view is not a compile-time string:
 
 ```franko
 view<[byte, 5]> spelling = #what_type(int32)
-#strcmp(spelling, "int32")    // invalid: not a compile-time string
+spelling == "int32"           // invalid: runtime view vs compile-time string
 #warning(spelling)            // invalid: not a compile-time string
-#strcmp(#what_type(int32), "int32") // valid
+#what_type(int32) == "int32"  // valid: folds to 1
 ```
 
 Remember that the unselected branch is still parsed. Its syntax must be
@@ -8080,7 +8214,7 @@ instantiated, so predicates see the concrete argument:
 ```
 
 `#what_type(T)` produces the concrete spelling (`"int32"`, `"Point"`), and
-`#strcmp(#what_type(T), "int32")` compares it at compile time. Predicates may
+`#what_type(T) == "int32"` compares it at compile time. Predicates may
 also be applied to a value whose type is a type parameter, such as
 `#has_default_value(value)`.
 
@@ -8215,10 +8349,17 @@ Struct comparison and assignment operators are overloadable through `OPERATOR_*`
 
 ## 36.13 String Literals Cannot Initialize Arrays
 
-A string literal is a `view<[byte, N]>` value, not a byte-array
-value (see [String Literals](24-string-literals.md)). Arrays are not
-assignable, so a string literal cannot initialize or assign an array;
-copy the bytes with `memcpy` instead.
+A string literal materializes as a `view<[byte, N]>` value in value positions,
+not as a byte-array value (see [String Literals](24-string-literals.md)).
+Arrays are not assignable, so a string literal cannot initialize or assign an
+array; copy the bytes with `memcpy` instead.
+
+A string literal has no type of its own. It cannot be dereferenced, indexed,
+accessed as a member, cast, or compared with a runtime view. It supports only
+compile-time `+` concatenation and compile-time comparisons, and materializes
+only as an assignment value, a function argument, or a return value. The
+former `#strcat` and `#strcmp` intrinsics are removed; use `+` and the string
+comparison operators instead.
 
 Invalid:
 
@@ -8226,6 +8367,9 @@ Invalid:
 [byte, 6] s = "hello";    // invalid
 s = "hello";                   // invalid
 [byte, ?] s = "hello";    // invalid: '?' requires a view declaration
+$("hello");                    // invalid: no type to dereference
+"hello" == getview(s);         // invalid: runtime view comparison
+cast<view<[byte, 5]>>("hello"); // invalid: no string-literal casts
 ```
 
 Valid:
@@ -8869,8 +9013,9 @@ func main() -> int32 {
 }
 ```
 
-A string literal is a `view<[byte, N]>`; byte buffers receive its
-content through `memcpy`. See [String Literals](24-string-literals.md).
+A string literal materializes as a `view<[byte, N]>` when passed to
+`memcpy`; byte buffers receive its content through that intrinsic. See
+[String Literals](24-string-literals.md).
 
 ## 38.12 Nested Static Array Grid
 

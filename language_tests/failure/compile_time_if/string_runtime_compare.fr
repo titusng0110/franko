@@ -1,0 +1,17 @@
+// ============================================================
+// FAILURE FIXTURE: comparing a runtime view with a string literal
+// ============================================================
+// A string literal has no type. Storing a what_type result in a view
+// variable makes it a runtime view, and comparing that variable with a
+// string literal is rejected instead of becoming pointer equality.
+// ============================================================
+
+
+func main() -> int32 {
+    int32 i = 1;
+    view<[byte, 5]> spelling = #what_type(i);
+
+    stdout(spelling == "int32");
+
+    return 0;
+}

@@ -567,31 +567,7 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
     public AstNode visitGlobalVarInitValue(
             FrankoParser.GlobalVarInitValueContext ctx
     ) {
-        if (ctx.constExpr() != null) {
-            return visit(ctx.constExpr());
-        }
-
-        if (ctx.stringLiteral() != null) {
-            return visit(ctx.stringLiteral());
-        }
-
-        if (ctx.arrayLiteral() != null) {
-            return visit(ctx.arrayLiteral());
-        }
-
-        if (ctx.getPtrExpr() != null) {
-            return visit(ctx.getPtrExpr());
-        }
-
-        if (ctx.getViewExpr() != null) {
-            return visit(ctx.getViewExpr());
-        }
-
-        if (ctx.getMViewExpr() != null) {
-            return visit(ctx.getMViewExpr());
-        }
-
-        return visit(ctx.nullLiteral());
+        return visit(ctx.expr());
     }
 
     @Override

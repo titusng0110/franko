@@ -49,6 +49,9 @@ Arithmetic operators: `+`, `-`, `*`, `/`, `%`.
 
 Operands must be integers. Arrays and pointers are invalid.
 
+`+` also concatenates two compile-time string expressions and folds to one
+string constant. `-`, `*`, `/`, and `%` reject compile-time strings.
+
 `%` is the modulus (remainder) operator. Integer division truncates toward zero, and the remainder takes the sign of the dividend:
 
 ```franko
@@ -95,6 +98,23 @@ error. See [Enums](31-enums.md).
 Pointer comparison is supported only between identical pointer types, and only with the equality operators `==` and `!=`. Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
 The `null` literal may be compared with a pointer using `==` and `!=` only. `null` cannot be compared with non-pointer values, and `0` is not `null`.
+
+### String Constant Comparisons
+
+Two compile-time strings may be compared with `==`, `!=`, `<`, `>`, `<=`,
+and `>=`. Both operands must be compile-time strings (literals, `#what_type`,
+or `+` concatenations). The comparison folds at compile time and produces
+`uint8` `1` or `0`.
+
+```franko
+stdout("abc" == "abc")   // 1
+stdout("abc" < "abd")    // 1
+stdout(#what_type(int32) == "int32")   // 1
+```
+
+A string literal has no type, so it cannot be compared with a runtime value,
+including a materialized `view<[byte]>`. Materialize the literal into a view
+first if pointer equality is intended.
 
 ## 13.7 Logical Operators
 

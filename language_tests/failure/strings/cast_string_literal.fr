@@ -1,0 +1,6 @@
+// Failure fixture: string literals and compile-time strings cannot be cast.
+
+func main() -> int32 {
+    view<[byte, 3]> v = cast<view<[byte, 3]>>("abc");
+    return 0;
+}

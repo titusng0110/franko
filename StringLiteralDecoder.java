@@ -11,6 +11,10 @@ public final class StringLiteralDecoder {
             throw new RuntimeException("Cannot decode null string literal node");
         }
 
+        if (node.literalBytes != null) {
+            return List.copyOf(node.literalBytes);
+        }
+
         String decoded = decodeRawContent(node.rawContent);
         byte[] bytes = decoded.getBytes(StandardCharsets.UTF_8);
 

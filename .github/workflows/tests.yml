@@ -98,13 +98,11 @@ jobs:
 
       # Windows runners ship Visual Studio with the C++ workload; compile.py
       # finds it through vswhere and loads vcvars64.bat/vcvarsarm64.bat.
-      # Export CXX for the remaining steps and fail if MSVC is not selected.
-      - name: Configure MSVC cl.exe (Windows)
+      # Fail if MSVC is not selected before falling back to g++/clang++.
+      - name: Verify MSVC cl.exe (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:CXX = "cl"
-          Add-Content -Path $env:GITHUB_ENV -Value "CXX=cl"
           uv run python -c "import compile; print(compile.find_cxx()); assert compile.cxx_family() == 'msvc'"
 
       - name: Build Franko compiler toolchain

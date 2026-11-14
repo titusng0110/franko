@@ -337,8 +337,8 @@ predicates see the concrete argument:
 `describe<int32>(1)` selects the first branch; `describe<Point>(p)` selects
 the second.
 
-The same applies to `#what_type`, `#is_same_type`, `#strcmp`, `#strcat`, and
-the `#IS_*` target constants:
+The same applies to `#what_type`, `#is_same_type`, string `+` folding, string
+comparisons, and the `#IS_*` target constants:
 
 ```franko
 #generic func spelling<typename T>() -> view<[byte]> {
@@ -366,10 +366,10 @@ they fire only for surviving selected paths of an instantiated template:
 ```franko
 #generic func check<typename T>() -> int32 {
     #if (#is_same_type(T, int32)) {
-        #warning(#strcat("instantiated ", #what_type(T)))
+        #warning("instantiated " + #what_type(T))
         return 1
     } #else {
-        #panic(#strcat("unsupported ", #what_type(T)))
+        #panic("unsupported " + #what_type(T))
     }
 }
 ```

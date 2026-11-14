@@ -133,7 +133,7 @@ const uint32 FNV_PRIME = 16777619
 // Compile-time target and layout assertion. The unsupported branch only
 // panics, and both branches select the same declarations on every target
 // this program supports.
-#if (#strcmp(#what_type([byte, 64]), "[uint8,64]") == 0 && (#IS_LINUX || #IS_MACOS || #IS_WINDOWS)) {
+#if (#what_type([byte, 64]) == "[uint8,64]" && (#IS_LINUX || #IS_MACOS || #IS_WINDOWS)) {
     int32 CODEC_LAYOUT_OK = 1
 } #else {
     #panic("binary_codec: unsupported target or packet layout")
@@ -477,7 +477,7 @@ func main(view<[[byte]]> args) -> int32 {
     stdout(#is_memcpy_safe(packet))
     stdout("is_memcpy_safe(PacketHeader): ", end = null)
     stdout(#is_memcpy_safe(PacketHeader))
-    stdout(#strcat("strcat: packet=", #what_type(packet), " header=", #what_type(PacketHeader)))
+    stdout("strings: packet=" + #what_type(packet) + " header=" + #what_type(PacketHeader))
     stdout("layout assertion: ", end = null)
     stdout(CODEC_LAYOUT_OK)
 

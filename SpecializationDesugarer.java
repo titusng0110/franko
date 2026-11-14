@@ -1,12 +1,7 @@
-import java.util.Map;
-
 public final class SpecializationDesugarer extends Desugarer {
 
-    public SpecializationDesugarer(
-            DiagnosticBag diagnostics,
-            Map<String, AstNode> hoistedStringGlobals
-    ) {
-        super(diagnostics, hoistedStringGlobals);
+    public SpecializationDesugarer(DiagnosticBag diagnostics) {
+        super(diagnostics);
     }
 
     AstNode desugarSpecialization(AstNode item) {

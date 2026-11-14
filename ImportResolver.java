@@ -1,4 +1,3 @@
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -25,9 +24,6 @@ public class ImportResolver {
     private final Frontend frontend;
 
     private final List<Diagnostic> diagnostics = new ArrayList<>();
-
-    private final Map<String, AstNode> hoistedStringGlobals =
-            new LinkedHashMap<>();
 
     public ImportResolver(
             Path importSearchDir,
@@ -84,22 +80,6 @@ public class ImportResolver {
     }
 
     private void addItem(AstNode item, List<AstNode> out) {
-        if (item.kind == AstKind.GLOBAL_VAR_DECL
-                && item.literalBytes != null
-                && item.name.startsWith("STRLIT_")) {
-            String key = item.name
-                    + "|"
-                    + typeKey(item.type)
-                    + "|"
-                    + literalBytesKey(item.literalBytes);
-
-            if (hoistedStringGlobals.containsKey(key)) {
-                return;
-            }
-
-            hoistedStringGlobals.put(key, item);
-        }
-
         out.add(item);
     }
 
@@ -271,41 +251,6 @@ public class ImportResolver {
         return Path.of(root + relative).normalize();
     }
 
-    private static String typeKey(AstNode type) {
-        if (type == null) {
-            return "<null>";
-        }
-
-        if (type.kind == AstKind.PRIMITIVE_TYPE) {
-            return type.primitive.name();
-        }
-
-        if (type.kind == AstKind.VOID_TYPE) {
-            return "void";
-        }
-
-        if (type.kind == AstKind.DYNAMIC_ARRAY_TYPE) {
-            return "[" + typeKey(type.type) + "]";
-        }
-
-        if (type.kind == AstKind.STATIC_ARRAY_TYPE) {
-            String size = type.sizeExpr != null && type.sizeExpr.kind == AstKind.INT
-                    ? type.sizeExpr.text
-                    : "?";
-            return "[" + typeKey(type.type) + ";" + size + "]";
-        }
-
-        if (type.kind == AstKind.PTR_TYPE) {
-            return type.permission.name() + "<" + typeKey(type.type) + ">";
-        }
-
-        if (type.kind == AstKind.STRUCT_TYPE) {
-            return String.join("::", type.names) + "::" + type.name;
-        }
-
-        return type.kind.jsonName();
-    }
-
     private List<String> importEdges(String key) {
         List<String> edges = importGraph.get(key);
 
@@ -315,15 +260,5 @@ public class ImportResolver {
         }
 
         return edges;
-    }
-
-    private static String literalBytesKey(List<BigInteger> values) {
-        StringBuilder sb = new StringBuilder();
-
-        for (BigInteger value : values) {
-            sb.append(value.toString(10)).append(',');
-        }
-
-        return sb.toString();
     }
 }

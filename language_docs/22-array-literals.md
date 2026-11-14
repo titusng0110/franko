@@ -1,7 +1,8 @@
 # 22. Array Literals
 
-Franko **array literals** are read-only views of static arrays, exactly
-like [string literals](24-string-literals.md) are views of byte arrays.
+Franko **array literals** are read-only views of static arrays. Like
+materialized [string literals](24-string-literals.md), they are read-only
+views over immutable byte storage.
 
 An array literal is written with square brackets:
 

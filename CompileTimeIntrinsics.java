@@ -53,7 +53,7 @@ final class CompileTimeIntrinsics {
                 : directives;
     }
 
-    SastNode analyzeCall(AstNode call) {
+    SastNode analyzeCall(AstNode call, boolean allowStringMaterialization) {
         StaticValue value = evaluateCall(call.name, call.args, call.span);
 
         if (value != null && value.kind == StaticValueKind.VOID) {
@@ -64,6 +64,20 @@ final class CompileTimeIntrinsics {
                     + "is evaluated for its compile-time side effect, so it "
                     + "cannot produce a value in an expression. Call it as a "
                     + "standalone statement or declaration-level directive.");
+            return fallback(call.span);
+        }
+
+        if (value != null
+                && value.kind == StaticValueKind.STRING
+                && !allowStringMaterialization) {
+            ctx.error("Compile-time string expression has no type and cannot "
+                    + "be used here. A string literal materializes only as an "
+                    + "assignment value, a function argument, or a return "
+                    + "value. Use it in one of those positions, or fold it "
+                    + "with another compile-time string using '+' or a "
+                    + "comparison. A compile-time string cannot be "
+                    + "dereferenced, indexed, accessed as a member, cast, or "
+                    + "used in a condition.");
             return fallback(call.span);
         }
 
@@ -111,14 +125,6 @@ final class CompileTimeIntrinsics {
             return evaluateWhatType(name, args);
         }
 
-        if ("strcat".equals(name)) {
-            return evaluateStrcat(name, args);
-        }
-
-        if ("strcmp".equals(name)) {
-            return evaluateStrcmp(name, args);
-        }
-
         if ("panic".equals(name)) {
             return evaluatePanic(name, args, span);
         }
@@ -143,12 +149,29 @@ final class CompileTimeIntrinsics {
             return evaluateTypePredicate(name, args, PredicateKind.IS_VALUE_ASSIGNABLE);
         }
 
+        if ("strcat".equals(name)) {
+            ctx.error("#strcat has been removed. Use the '+' operator on "
+                    + "compile-time string expressions instead, for example "
+                    + "\"prefix\" + #what_type(T). String concatenation now "
+                    + "folds at compile time.");
+            return null;
+        }
+
+        if ("strcmp".equals(name)) {
+            ctx.error("#strcmp has been removed. Use the comparison operators "
+                    + "==, !=, <, >, <=, or >= on compile-time string "
+                    + "expressions instead. A compile-time string comparison "
+                    + "folds to a uint8 value of 0 or 1.");
+            return null;
+        }
+
         ctx.error("Unknown compile-time reflection function '#"
                 + name
                 + "'. Only the documented built-in # functions such as "
-                + "#is_primitive, #strcmp, and #strcat are recognized during "
-                + "compilation. Check the spelling or replace the call with a "
-                + "supported compile-time reflection function.");
+                + "#is_primitive, #what_type, #panic, and #warning are "
+                + "recognized during compilation. Check the spelling or "
+                + "replace the call with a supported compile-time reflection "
+                + "function.");
         return null;
     }
 
@@ -279,63 +302,6 @@ final class CompileTimeIntrinsics {
         return StaticValue.string(utf8Bytes(type.mangleKey()));
     }
 
-    private StaticValue evaluateStrcat(String name, List<AstNode> args) {
-        if (args.isEmpty()) {
-            ctx.error("#strcat expects at least one compile-time string "
-                    + "argument. Concatenation needs a first string to produce "
-                    + "a result, and an empty string literal is the null view "
-                    + "with no bytes. Pass one or more compile-time string "
-                    + "literals or #strcat results.");
-            return null;
-        }
-
-        List<BigInteger> combined = new ArrayList<>();
-
-        for (int i = 0; i < args.size(); i++) {
-            List<BigInteger> part = evaluateStaticStringArgument(
-                    args.get(i),
-                    name,
-                    i + 1
-            );
-
-            if (part == null) {
-                return null;
-            }
-
-            combined.addAll(part);
-        }
-
-        return StaticValue.string(combined);
-    }
-
-    private StaticValue evaluateStrcmp(String name, List<AstNode> args) {
-        if (!requireArity(name, args, 2)) {
-            return null;
-        }
-
-        List<BigInteger> left = evaluateStaticStringArgument(
-                args.get(0),
-                name,
-                1
-        );
-        List<BigInteger> right = evaluateStaticStringArgument(
-                args.get(1),
-                name,
-                2
-        );
-
-        if (left == null || right == null) {
-            return null;
-        }
-
-        int comparison = compareBytes(left, right);
-
-        return StaticValue.integer(
-                BigInteger.valueOf(comparison),
-                INT32_TYPE
-        );
-    }
-
     private StaticValue evaluatePanic(
             String name,
             List<AstNode> args,
@@ -384,40 +350,59 @@ final class CompileTimeIntrinsics {
         return StaticValue.voidValue();
     }
 
+    List<BigInteger> evaluateStringExpression(AstNode arg) {
+        if (arg == null) {
+            return null;
+        }
+
+        if (arg.kind == AstKind.STRING_LITERAL) {
+            return decodeStringBytes(arg);
+        }
+
+        if (arg.kind == AstKind.BINARY && "+".equals(arg.text)) {
+            List<BigInteger> left = evaluateStringExpression(arg.left);
+            List<BigInteger> right = evaluateStringExpression(arg.right);
+
+            if (left == null || right == null) {
+                return null;
+            }
+
+            return StringConstantOps.concat(left, right);
+        }
+
+        if (arg.kind == AstKind.COMPILE_TIME_CALL) {
+            AstNode call = arg;
+            StaticValue value = evaluateCall(call.name, call.args, call.span);
+
+            if (value == null || value.kind != StaticValueKind.STRING) {
+                return null;
+            }
+
+            return value.bytes;
+        }
+
+        return null;
+    }
+
+    SastNode materializeStringConstant(
+            List<BigInteger> bytes,
+            SourceSpan span
+    ) {
+        if (bytes.isEmpty()) {
+            return SastNode.nullLiteral(span, SastType.nullType());
+        }
+
+        return materializeStaticString(bytes, span);
+    }
+
     private List<BigInteger> evaluateStaticStringArgument(
             AstNode arg,
             String consumerName,
             int position
     ) {
-        List<BigInteger> bytes;
+        List<BigInteger> bytes = evaluateStringExpression(arg);
 
-        if (arg.kind == AstKind.STRING_LITERAL) {
-            bytes = decodeStringBytes(arg);
-        } else if (arg.kind == AstKind.COMPILE_TIME_CALL) {
-            AstNode call = arg;
-            StaticValue value = evaluateCall(call.name, call.args, call.span);
-
-            if (value == null) {
-                return null;
-            }
-
-            if (value.kind != StaticValueKind.STRING) {
-                ctx.error("#"
-                        + consumerName
-                        + " argument "
-                        + position
-                        + " must be a compile-time string, got "
-                        + describeStaticValue(value)
-                        + ". This intrinsic consumes its string arguments at "
-                        + "compile time, so a runtime value or a non-string "
-                        + "compile-time result cannot be used. Pass a string "
-                        + "literal or a compile-time string expression such "
-                        + "as #strcat.");
-                return null;
-            }
-
-            bytes = value.bytes;
-        } else {
+        if (bytes == null) {
             ctx.error("#"
                     + consumerName
                     + " argument "
@@ -427,22 +412,18 @@ final class CompileTimeIntrinsics {
                     + ". This intrinsic consumes its string arguments at "
                     + "compile time, so a runtime value or a non-string "
                     + "compile-time result cannot be used. Pass a string "
-                    + "literal or a compile-time string expression such as "
-                    + "#strcat.");
-            return null;
-        }
-
-        if (bytes == null) {
+                    + "literal, #what_type(...), or a '+' concatenation of "
+                    + "compile-time strings.");
             return null;
         }
 
         if (bytes.isEmpty()) {
-            ctx.error("Empty string literals are not supported: "
-                    + "a string literal is a view<[byte, N]> value with "
-                    + "N >= 1. An empty literal is the null view and has no "
-                    + "bytes for this compile-time operation to consume. Write "
-                    + "at least one character in the literal or pass a "
-                    + "non-empty string expression.");
+            ctx.error("Empty compile-time strings are not supported here: a "
+                    + "compile-time string argument must have at least one "
+                    + "byte (N >= 1). An empty literal is the null view and "
+                    + "carries no bytes for this compile-time operation to "
+                    + "consume. Write at least one character in the literal or "
+                    + "pass a non-empty string expression.");
             return null;
         }
 
@@ -922,23 +903,6 @@ final class CompileTimeIntrinsics {
     private static boolean isUint8(SastType type) {
         return type.kind == SastTypeKind.PRIMITIVE
                 && type.primitive == SemanticPrimitiveKind.UINT8;
-    }
-
-    private static int compareBytes(
-            List<BigInteger> left,
-            List<BigInteger> right
-    ) {
-        int common = Math.min(left.size(), right.size());
-
-        for (int i = 0; i < common; i++) {
-            int comparison = left.get(i).compareTo(right.get(i));
-
-            if (comparison != 0) {
-                return comparison < 0 ? -1 : 1;
-            }
-        }
-
-        return Integer.compare(left.size(), right.size());
     }
 
     private static List<BigInteger> utf8Bytes(String text) {

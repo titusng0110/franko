@@ -1,0 +1,23 @@
+// LANGUAGE TEST: compile-time string comparisons fold to uint8
+
+import "franko/stdio"
+
+func main() -> int32 {
+    stdout("abc" == "abc")
+    stdout("abc" != "abd")
+    stdout("abc" < "abd")
+    stdout("abd" > "abc")
+    stdout("ab" < "abc")
+    stdout("abc" >= "abc")
+    stdout("" < "a")
+    stdout(#what_type(int32) == "int32")
+    stdout(#what_type(int32) < "uint8")
+
+    #if ("a" < "b") {
+        stdout("folded branch")
+    } #else {
+        stdout("wrong branch")
+    }
+
+    return 0
+}

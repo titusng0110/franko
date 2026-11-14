@@ -26,7 +26,7 @@ const Point p { x = 1 }
 Declaration initialization is evaluated once as part of the declaration; a
 `const` variable can therefore be initialized here and nowhere else. At
 global scope only the existing global initializer
-forms are valid (constant initializer, static address, string literal, or an
+forms are valid (constant initializer, static address, string expression, or an
 array literal through a pointer). See
 [Declarations](18-declarations.md#188-const-storage).
 
@@ -38,8 +38,10 @@ shorthand. See [Array Literals](22-array-literals.md) and
 
 ## 25.3 String Literal Values
 
-String literals are read-only `view<[byte, N]>` values over immutable UTF-8
-storage. See [String Literals](24-string-literals.md).
+String literals are untyped compile-time constants. They fold with `+` and
+comparisons and materialize as read-only `view<[byte, N]>` values over
+immutable UTF-8 storage in value positions. See
+[String Literals](24-string-literals.md).
 
 ## 25.4 Braceless Control-Flow Bodies
 

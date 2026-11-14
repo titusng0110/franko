@@ -36,7 +36,8 @@ Franko is a small statically typed language with:
 - `for`;
 - `break` and `continue` (with an optional `break N` level, see [Statements](17-statements.md));
 - `return`;
-- string literals as read-only `view<[byte, N]>` values;
+- untyped string literals that fold with `+` and compile-time comparisons,
+  and materialize as read-only `view<[byte, N]>` values in value positions;
 - array intrinsics:
   - `arr.init(size)`;
   - `arr.init_zero(size)`;
@@ -69,8 +70,8 @@ Franko is a small statically typed language with:
   - type predicates such as `#has_default_value`, `#is_memcpy_safe`,
     `#is_same_type`, and `#is_enum`, accepting either a type or a value;
   - canonical type spelling with `#what_type`;
-  - compile-time strings with `#strcat`, `#strcmp`, `#panic`, and
-    `#warning`
+  - compile-time strings with `+` and comparison operators, plus
+    `#panic` and `#warning`
     (see [Compile-Time Reflection](35-compile-time-reflection.md));
 - imports of other source files (see [Source Files](02-source-files.md));
 - namespaces, including nested namespaces, with `::`-qualified references (see [Program Structure](03-program-structure.md));

@@ -1,10 +1,10 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: String Literals as Views
+// LANGUAGE TEST: String Literals as Materialized Views
 // ============================================================
-// Covers: a string literal is a view<[byte, N]> over a
-// hoisted global byte array; identical literals share one
+// Covers: a string literal materializes as a view<[byte, N]> over
+// a hoisted global byte array; identical literals share one
 // global; global string views; strings as function arguments;
 // strings in initializer lists of view-typed slots.
 // ============================================================
@@ -17,8 +17,9 @@ func blen(view<[byte, 3]> s) -> void {
 }
 
 func main() -> int32 {
-    // Literals are views; reads go through $(...).
-    stdout($("abc").length());
+    // Literals materialize when assigned to a byte view.
+    view<[byte, 3]> abc = "abc";
+    stdout($(abc).length());
     blen("abc");
 
     // The same literal text shares one hoisted global.
@@ -29,7 +30,6 @@ func main() -> int32 {
     // Global string views.
     stdout($(GREETING).length());
     stdout($(GREETING)[0]);
-    stdout($("global")[0]);
 
     // Different content: different globals.
     view<[byte, 3]> c = "xyz";
