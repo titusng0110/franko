@@ -27,6 +27,7 @@ public final class SastDocument {
 
 enum SastPhase {
     SEMANTIC("semantic", "semantic"),
+    USELESS_GENERIC_PRUNED("useless-generic-pruned", "useless-generic-pruned"),
     LEGALITY("legality", "legality"),
     BRANCH_PRUNED("branch-pruned", "branch-pruned"),
     INACTIVE_PRUNED("inactive-pruned", "inactive-pruned"),

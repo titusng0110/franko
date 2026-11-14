@@ -100,26 +100,13 @@ final class GenericsResolver {
                     "method"
             );
         }
-
-        String key() {
-            return ownerKey + "." + name;
-        }
     }
 
     private static final class MethodInstance {
-        final String genericGroup;
-        final String genericHash;
-        final int depth;
-        AstNode methodNode;
+        final AstNode methodNode;
 
-        MethodInstance(
-                String genericGroup,
-                String genericHash,
-                int depth
-        ) {
-            this.genericGroup = genericGroup;
-            this.genericHash = genericHash;
-            this.depth = depth;
+        MethodInstance(AstNode methodNode) {
+            this.methodNode = methodNode;
         }
     }
 
@@ -833,7 +820,9 @@ final class GenericsResolver {
 
             if (instance.template.struct) {
                 generatedStructInstances.put(
-                        instance.generatedName,
+                        qualifiedKey(
+                                instance.template.namespace,
+                                instance.generatedName),
                         instance
                 );
             } else {
@@ -931,10 +920,14 @@ final class GenericsResolver {
                         ? node.thenBranch
                         : node.elseBranch;
 
+                if (selected == null) {
+                    return AstNode.block(node.span, List.of());
+                }
+
                 return AstNode.compileTimeIf(
                         node.span,
                         AstNode.typedIntLiteral(node.span, "1", PrimitiveKind.UINT8),
-                        selected == null ? null : substituteNode(selected, env),
+                        substituteNode(selected, env),
                         null
                 );
             }
@@ -1861,7 +1854,10 @@ final class GenericsResolver {
 
         if (template.struct) {
             generatedInstanceNames.add(generatedName);
-            generatedStructInstances.put(generatedName, instance);
+            generatedStructInstances.put(
+                    qualifiedKey(template.namespace, generatedName),
+                    instance
+            );
         }
 
         queue.add(instance);
@@ -2874,7 +2870,7 @@ final class GenericsResolver {
                 return;
 
             case VAR_DECL_INIT:
-                walkExpr(stmt.value, env);
+                walkExpr(stmt.init, env);
                 env.declare(stmt.name, stmt.type);
                 return;
 
@@ -3387,12 +3383,7 @@ final class GenericsResolver {
         desugared.genericGroup = genericGroup;
         desugared.genericHash = genericHash;
 
-        MethodInstance instance = new MethodInstance(
-                genericGroup,
-                genericHash,
-                depth
-        );
-        instance.methodNode = desugared;
+        MethodInstance instance = new MethodInstance(desugared);
         methodInstances.put(key, instance);
         methodBodyDepths.put(desugared, depth);
         bodyValueBindings.put(

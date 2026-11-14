@@ -11,7 +11,7 @@ Do not add comments to the Java source files. All design notes belong here.
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
   integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
   (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
-- **Compiler**: 97 hand-written Java files at the repo root, plus an ANTLR4
+- **Compiler**: 98 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
   `.cpp` is compiled with the host C++ toolchain. Enums lower to generated
@@ -67,6 +67,7 @@ import-resolved AstDocument             -> <base>.imports.ast.json
    │    └─ DeferredDirectives.flush
    ▼
 semantic SastDocument                   -> <base>.semantic.sast.json
+   │  UselessGenericPruner                -> <base>.useless-generic-pruned.sast.json
    │  LegalityChecker                     -> <base>.legality.sast.json
    │  BranchPruner                        -> <base>.branch-pruned.sast.json
    │  InactiveDeclarationPruner (twice)   -> <base>.inactive-pruned.sast.json
@@ -180,6 +181,7 @@ flowchart TD
     ArrayLowerer --> SymbolTable
     ConstExpressionEvaluator --> SymbolTable
     SemanticAnalyzer --> SastNode["SastNode + SastType + Symbol"]
+    Main --> UselessGenericPruner
     Main --> LegalityChecker
     LegalityChecker --> TypeChecker
     LegalityChecker --> ExpressionChecker
@@ -240,7 +242,7 @@ flowchart TD
 
 | Caller | Calls into |
 |---|---|
-| `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `MemoryAnalysisContext`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
+| `Main` | `Frontend`, `ImportResolver`, `JsonArtifacts`, `DiagnosticLog`, `SemanticAnalyzer`, `UselessGenericPruner`, `LegalityChecker`, `BranchPruner`, `InactiveDeclarationPruner`, `MemoryAnalysisContext`, `PointerNullStateChecker`, `DanglingPointerChecker`, `DynamicArrayMemoryChecker`, `PointerPermissionChecker`, `PrivateIdentifierLinter`, `FfiHandler`, `Cpp14Codegen`, `TargetInfo` |
 | `Frontend` | `FrankoLexer/Parser`, `FrankoASTVisitor`, `EarlyTargetFolder`, `PreGenericsDesugarer`, `ModuleRegistry`, `ModuleValidator`, `JsonArtifacts` |
 | `ImportResolver` | `Frontend`, `AstDocument`, `AstNode` |
 | `DeclarationSelector` | `SymbolTable`, `ExpressionLowering`, `SemanticTypeResolver`, `ExpressionAnalyzer`, `TargetInfo`, `GenericsResolver` (`containsGenericUse`), `DeferredDirectives`, `AstNode` |
@@ -2580,6 +2582,32 @@ built by `classify`; there is no separate boolean-expression hierarchy.
 
 ### 3.5 Inactive declaration pruning
 
+#### `UselessGenericPruner`
+Runs on the semantic SAST **after `SemanticAnalyzer` and before
+`LegalityChecker`** (invoked by `Main`) and writes the single
+`useless-generic-pruned` artifact. It exists because generic expansion
+instantiates every candidate with matching explicit generic arguments before
+ordinary overload resolution, so unselected generated bodies would otherwise be
+legality-checked and could produce false errors.
+
+The pass only prunes compiler-generated declarations:
+- a function is generated when `Symbol.genericGroup` is non-null;
+- a method is generated when its group is non-null or its owner has a
+  non-null `genericHash`;
+- a struct is generated when `StructSymbol.genericHash` is non-null.
+
+All non-generated functions and methods are roots, so every source declaration
+that will still be checked keeps the generated declarations it references.
+The pass follows the exact resolved SAST call graph, including function calls,
+method calls lowered from operators, array intrinsics, and aggregate-literal
+field values. A generated function or method survives only when call-reachable
+from a root. Non-generated structs are kept unconditionally; generated structs
+survive only when referenced by a kept signature, variable, field, expression
+type, or kept method receiver, expanded transitively through fields. Generated
+methods of a kept generated struct are still pruned when uncalled. Variables,
+globals, enums, and non-generated declarations are not pruned here; the full
+`InactiveDeclarationPruner` still runs after legality.
+
 #### `InactiveDeclarationPruner`
 Runs on the Semantic AST **immediately after `BranchPruner`** and before
 `PointerNullStateChecker` (invoked by `Main`; prints nothing). `Main` runs it
@@ -2939,6 +2967,7 @@ extension):
 <base>.desugared.ast.json
 <base>.imports.ast.json
 <base>.semantic.sast.json
+<base>.useless-generic-pruned.sast.json
 <base>.legality.sast.json
 <base>.branch-pruned.sast.json
 <base>.inactive-pruned.sast.json
@@ -2977,7 +3006,7 @@ AST document skeleton (`phase` is `raw`, `desugared`, or
 }
 ```
 
-SAST document skeleton (`phase` is `semantic`, `legality`, `branch-pruned`,
+SAST document skeleton (`phase` is `semantic`, `useless-generic-pruned`, `legality`, `branch-pruned`,
 `inactive-pruned`, `null-state`, `dangling`, `dyn-array`, `permissions`,
 `private-id`, `ffi-verified`, or `checked`):
 
@@ -3093,9 +3122,6 @@ that branch's statements.
 Expression metadata is always `type` (a semantic type object) and
 `constantValue` (decimal string or `null`; always `null` for enum variants).
 
-Expression metadata is always `type` (a semantic type object) and
-`constantValue` (decimal string or `null`).
-
 Symbol kinds: `struct` (`name`, `namespace`, `fields`, `methods`, optional
 `tuple: true` for synthetic tuple structs, optional
 `genericHash`/`genericBaseName`), `enum` (`name`, `namespace`,
@@ -3185,8 +3211,7 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   `getview(<global>)` everywhere (§4.10), except direct arguments of
   `#<name>` calls, which remain raw literals for compile-time
   evaluation; array literals get the same treatment during semantic
-  analysis (§4.13). Assigning a literal to an array is a checked error that
-  suggests `memcpy`.
+  analysis (§4.13).
 - Empty string literals (`""`) and empty array literals (`[]`) are rewritten
   to `AstKind.NULL` (the null view) and never hoisted. A non-empty array
   literal keeps its elements; `[]` has no element type or length of its own.
@@ -3285,82 +3310,9 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   `VAR_<name>`), so bridge definitions use the same prefix for consistency.
 
 ### 4.5 Pointer null-state model (PointerNullStateChecker)
-
-The null-state check is a two-phase interprocedural analysis. One lattice fact
-per pointer-typed variable (`ptr`/`mview`/`view` all tracked) is `POINTING`,
-`NULL`, or `MAYBE_NULL`. Pointer declarations start `NULL`; the language's
-null-initialization guarantee makes that seed exact for a local pointer
-variable. Pointer fields, tuple elements, and array elements are not tracked:
-a read of one remains `MAYBE_NULL` because the slot may have been assigned
-after initialization.
-`getptr`/`getmview`/`getview` are the only certifications; direct pointer
-assignment copies the source state and its one-level cell targets; a null
-literal is `NULL`; anything else is `MAYBE_NULL`. Parameters and globals enter
-each function `MAYBE_NULL`, except method `self` and the args-form `main`
-parameter, which enter `POINTING`. Dereference of a definitely-null variable is
-an error; a possibly-null dereference is a warning, emitted at most once per
-pointer variable. Non-variable dereferences warn at most once per site.
-
-**Direct summaries.** The first phase runs the same traversal with symbolic
-parameter states and emits no diagnostics. Per pointer variable it tracks
-template bitsets: `NULL`, `NONNULL`, `UNKNOWN`, `PARAM_VALUE(i, ANY|NONNULL|NULL)`,
-`PARAM_POINTEE_VALUE(i, ANY|NONNULL|NULL)`, `CALL_RESULT(site)`, `PARAM_CELL(i)`,
-and local/global cell templates. A parameter starts
-`{PARAM_VALUE(i, ANY)}` / `{PARAM_POINTEE_VALUE(i, ANY)}` /
-`{PARAM_CELL(i)}`; `self` and args-form `main` start `{NONNULL}` /
-`{UNKNOWN}` / empty; globals start `{UNKNOWN}` / `{UNKNOWN}` / empty;
-declarations start `{NULL}` / empty / empty. Direct assignment copies all three
-sets; `$(c) = value` strong-updates local cell variables and records
-`PARAM_CELL(i)` slot writes, with the assignment site's target parameter and a
-unioned RHS source set. The source sets come from the live per-site state, not
-from each exit snapshot; must/may certainty comes from exit snapshots.
-
-Guard refinement runs through the shared DNF cases: every `NULL`/`NONNULL` fact
-rewrites `PARAM_VALUE(i, ANY)` to its `NONNULL`/`NULL` variant, so a dereference
-under a compound guard such as `p != null && q != null` is not recorded as a
-requirement. `markDeref`/`markPointeeDeref` set both the must and may bit; a
-requirement is `MUST_DEREF` when the must bit holds on every exit and
-`MAY_DEREF` when the may bit holds on any exit. Per-case diagnostics are merged
-with the all-cases warning rule. The same intersection/union rule builds
-slot-write certainty. Return alternatives from all explicit returns are
-unioned; fallthrough contributes `UNKNOWN`. Call edges carry, per callee
-parameter, the unioned argument value/pointee template sets and a single cell
-target when present.
-
-**Summary-aware pass.** The second phase runs the same traversal with concrete
-state and resolves each call through `MemorySummaryBfs` (node =
-`(functionId, binding)`, budget 2048, recursive SCC/budget cutoff = silent TOP).
-A binding carries, per callee parameter, the actual value state, the actual
-pointee state, a one-level cell-target variable, and the root argument index.
-Callee requirements map back to the caller's argument index through the
-binding: a definitely-null argument to `MUST_DEREF` is an error, a
-possibly-null argument to either requirement is a warning, and a
-definitely-null argument to `MAY_DEREF` is a warning. A callee slot write
-strong-updates the caller's pointer variable when the target cell resolves to
-exactly one tracked pointer; a may-write only degrades a differing current
-state to `MAYBE_NULL`. `CALL_RESULT` templates are resolved recursively through
-the recorded call-site nodes with a per-site recursion guard. TOP returns
-`MAYBE_NULL`, havocs the cell targets reachable from the actual arguments, and
-does not diagnose.
-
-**Invalidation and evaluation.** Every call, including TOP, sets every pointer
-global to `MAYBE_NULL` and clears its cell targets. Template-set evaluation
-turns any unknown or null+non-null mixture into `MAYBE_NULL`, null-only into
-`NULL`, non-null-only into `POINTING`, and an empty set into `MAYBE_NULL`;
-incompatible constraints drop an alternative. `LOCAL`/`CONST` and
-global-value templates evaluate `POINTING`.
-
-**What remains intraprocedural.** Local state, guard refinement, branch
-exploration, loop exit filtering, and the existing deref warnings are still
-computed per function body. Interprocedural facts are additive; the callee's own
-intraprocedural warning is not suppressed because a summary exists. A
-non-variable dereference (for example `$(f())`) is diagnosed as an error when
-the resolved return state is definitely null and as a warning when it is
-possibly null. Concrete deref diagnostics are only produced for a variable,
-call, cast, or nested deref expression. Struct/tuple field and array-element
-nullness (for the view/mview pointers that aggregates may still contain),
-view/mview pointers hidden in returned aggregates, global null-state writes,
-and deeper-than-one-level pointer-cell aliasing remain out of scope.
+The lattice, seeds, transfers, guard refinement, summaries, and evaluation are
+documented with `PointerNullStateChecker` and `PointerNullAnalysisState` in
+§3.3.
 
 ### 4.6 Analyzer vs checker split
 - `ExpressionAnalyzer` (SemanticAnalyzer phase) **infers**: it resolves
@@ -3374,49 +3326,11 @@ and deeper-than-one-level pointer-cell aliasing remain out of scope.
 ---
 
 ### 4.7 Conditional branch pruning (BranchPruner)
-- A condition is pruned only when it is a **tautology or contradiction** under
-  a truth table of at most 12 effect-free `uint8`-typed atoms; `==`/`!=`
-  pairs over identical operands are the same variable and its negation.
-- Pruning **discards** the condition, so conditions containing function or
-  array-intrinsic calls are never pruned (effects must survive); derefs and
-  array indexes may be atoms, meaning a trap in a pruned condition disappears
-  (deliberate).
-- `if`: true → then-branch only; false → else-branch only, or the statement
-  disappears. `while`: false → loop removed entirely; true → condition
-  normalized to `1`.
-- Pruned branches are spliced as-is, never flattened into parent blocks
-  (keeps `VAR_x` name scopes intact in the emitted C++).
-- Runs after legality checking and before pointer null-state analysis, so dead
-  code receives no null-state diagnostics and never reaches codegen.
+Behavior and scoping contracts are documented with `BranchPruner` in §3.4.
 
 ### 4.8 Inactive declaration pruning (InactiveDeclarationPruner)
-- Runs right after branch pruning so declarations orphaned by branch cuts
-  become prunable. `Main` runs it twice with fresh instances; only the second
-  run's result is written as the single `INACTIVE_PRUNED` artifact.
-- Zero-reference rule, per kind: functions must be call-reachable from
-  `main`; variables must be mentioned somewhere in kept bodies (assignments
-  are mentions); structs must appear as a type in kept code (signatures,
-  kept variable declarations, expression types, method receivers), expanded
-  transitively through fields and kept methods.
-- Declaration initialization targets are not uses: for `VAR_DECL_INIT`,
-  references are collected from the initializers, the declared symbol is
-  removed, and only the rest count. Hidden operator-assignment `self` borrows
-  are dropped the same way.
-- Effect rule: a `VAR_DECL_INIT` is kept whenever any initializer may have
-  side effects or trap — function calls, array intrinsics other than
-  `length()`, dereferences, array accesses, checked casts, and
-  operator-assignment `EXPR_STMT`s. All `OPERATOR_*` methods, comparison and
-  assignment alike, lower to ordinary function calls and are therefore
-  effectful. This preserves output, allocation, stores, and runtime aborts.
-  Only effect-free initializers (literals, variables, pure arithmetic,
-  member accesses, `getptr` over pure targets, and pure aggregate literals)
-  are pruned with their declaration.
-- Pure chains still need two rounds: `int32 y = 1; int32 x = y` with both
-  unused removes `x` on the first run and `y` on the second. Longer pure
-  chains may need more rounds; that is accepted.
-- No dead-store elimination: a variable that is only written still counts as
-  used. No unused-field pruning. Unused methods of kept structs are pruned.
-- Pruning never flattens blocks and never touches `main`.
+Behavior and liveness contracts are documented with `InactiveDeclarationPruner`
+in §3.5.
 
 ## 4.9 Pointer permissions (capability model)
 
@@ -3460,7 +3374,7 @@ need an OWNER region at every level, so `mview` never grants `init`/`resize`/
 `OverloadResolution`. Static-to-dynamic array pointer decay is
 representation-preserving: static and decayed values are the same
 `Franko_Fat_Pointer<T>`, and `Cpp14Codegen` emits no conversion code or
-temporary. `DanglingPointerChecker` therefore has no decay origin (§4.14):
+temporary. `DanglingPointerChecker` therefore has no decay origin (§3.3):
 returning a decayed parameter/global view is safe, while a local array decay
 is the ordinary frame escape.
 
@@ -3726,226 +3640,13 @@ the same hoisting path; an array-typed global is rejected with the memcpy
 suggestion (§4.10 parity).
 
 ## 4.14 Dangling-pointer model (DanglingPointerChecker)
-
-The dangling check is a two-phase interprocedural provenance and frame-lifetime
-analysis. It rejects pointer values escaping a function while referring to that
-function's frame storage, pointer stores that move frame storage into global or
-caller-owned storage, and use of a pointer whose target block or loop body has
-ended. It also forwards capture facts through callees.
-
-**Origin lattice.** Concrete state per pointer variable is a pair of dense
-`long[]` bitsets (`FRAME(variableId)`, `GLOBAL(variableId)`) plus `unknown` and
-`nonNull` flags. `EMPTY` is definitely null (no origins, not non-null);
-`UNKNOWN` is caller-owned/untracked. Merging unions frame/global bits, ORs
-`unknown`, and ANDs `nonNull`. A value is a definite dangle only when it has a
-frame origin, no unknown/global origin, and is definitely non-null; otherwise a
-frame origin is a possible dangle. `storageOrigins(expr)` maps an lvalue to the
-region it occupies (variable → frame/global, `$(p)` → `valueOrigins(p)`,
-member/index → base, cast → operand). `valueOrigins(expr)` maps a pointer value
-to its origins (creation intrinsics → target storage plus non-null, pointer
-variable → current state, `$(p)` pointer read → union of tracked pointer-cell
-states, cast → operand, calls → cached call result, field/element reads →
-unknown). A parameter's own storage is `FRAME(parameterVariable)`, so
-`getptr(parameter)` points at the parameter slot, while `getptr($(parameter))`
-points at caller storage.
-
-**Direct summaries.** The first phase uses symbolic origin templates
-`PARAM_VALUE(i)`, `PARAM_POINTEE_VALUE(i)`, `GLOBAL(i)`, `LOCAL(variableId)`,
-`CONST`, `NULL`, `UNKNOWN`, and `CALL_RESULT(site)`. `LOCAL(variableId)` is the
-storage-origin template for a specific local variable; the bare `LOCAL`
-singleton evaluates to unknown. It records return origin sets, capture sites,
-must/may capture certainty, and call-edge argument templates. A capture site's
-sink is `SINK_GLOBAL(globalIndex)`, `SINK_POINTEE(param)`,
-`SINK_POINTEE_PATH(param, fieldPath)`, or `SINK_UNKNOWN`; member access
-accumulates the dotted field path. The capture source is the RHS value set,
-unioned in live state, while must/may certainty is intersected/unioned over
-exit snapshots. Both capture bits are set at the store; the exit rule turns that
-into `MUST_CAPTURE` or `MAY_CAPTURE`.
-
-**Summary-aware pass.** Pointer declarations start `EMPTY`; the
-null-initialization guarantee makes that seed exact for a local pointer
-variable. Field and element reads remain `UNKNOWN` because the checker does
-not track writes to those slots. Ordinary parameters
-and globals start `UNKNOWN`; an operator method's `other` parameter starts
-`FRAME(otherVariable)`. In the summary pass `other` is instead
-`{NONNULL, LOCAL(otherVariable)}` / `{UNKNOWN}` / `{LOCAL(otherVariable)}`.
-Direct pointer assignment is a strong update of the value/pointee/cell sets.
-`$(d) = value` strong-updates the single tracked pointer cell
-`valueOrigins(d)` resolves to in the check pass, and updates local symbolic cell
-variables in the summary pass; other pointer stores do not update tracked cell
-state. Calls resolve capture and return summaries through the bounded BFS.
-Capture diagnostics map the source template through the call binding: source
-definitely frame (no unknown/global) + `MUST_CAPTURE` = error; definitely frame
-+ `MAY_CAPTURE` = warning; possibly frame + either = warning. Only one capture
-diagnostic is emitted per call site. A resolved return origin is installed as
-the call result so a later return/store/deref can diagnose it. TOP returns
-`UNKNOWN` and havocs globals, address-taken pointer locals, and pointer cells
-reachable from the actual arguments, silently. Every call applies that
-invalidation, not only TOP.
-
-**Guards.** Null facts come from the shared DNF normalizer, so compound
-`&&`/`||`/`!` conditions refine state per feasible case. Summary feasibility
-tests the symbolic value set; a `NULL` fact replaces the set with `{NULL}` in
-the null alternative and a `NONNULL` fact keeps the current set and adds
-`{NONNULL}`. Concrete `p == null` is infeasible when the origin is definitely
-non-null, and `p != null` is infeasible when it is definitely null. The null
-branch stores `EMPTY` when the current origin is not non-null; the non-null
-branch stores the same origins with `nonNull` set unless the origin is
-definitely null. Per-case diagnostics use the all-cases warning rule.
-
-**Frame liveness.** Declaring a local marks it alive. Leaving a block normally
-marks its direct locals dead (`mustDead |=`, `mayDead |=`); a terminated block
-does not, because its state does not continue or was captured in a jump
-snapshot. Branch merge intersects `mustDead` and unions `mayDead`. A
-`break`/`continue` snapshot marks every direct local from the current block down
-to the target loop body dead inside that snapshot. After a loop, the loop body's
-direct locals are marked dead on all exit paths, including zero-trip and break
-paths, so a pointer that may refer to a loop-body local is diagnosed on use.
-Using a pointer whose frame origins intersect `mustDead` is a definite
-use-after-scope error; intersecting `mayDead` is a warning. Passing a pointer
-argument to a call performs the same liveness check with the `Cannot use
-pointer ...` wording. Parameters stay alive for the whole function.
-
-**Store and return rules.** A pointer store whose value has any frame origin is
-rejected when the target storage is `UNKNOWN` (caller-owned, e.g. through a
-pointer parameter) or `GLOBAL` (globals and fields reached through them). A
-`FRAME` target is allowed; the coarse FRAME → FRAME allowance is unchanged, so
-a view of an inner local stored into a longer-lived local is not diagnosed. At
-a pointer return: definite frame escape is an error; possible frame escape is a
-warning; a definite/possible dead frame origin is an error/warning with the same
-wording. Return and store diagnostics are deduplicated per site. Static-to-
-dynamic view decay adds no origin. Field-sensitive struct tracking, pointers
-hidden in returned aggregates, global dynamic-array lifecycle, and nullness
-remain out of scope.
+The origin lattice, liveness, store/return rules, summaries, and guards are
+documented with `DanglingPointerChecker` and `DanglingPointerState` in §3.3.
 
 ## 4.15 Dynamic-array lifecycle model (DynamicArrayMemoryChecker)
-
-The dynamic-array check is a two-phase interprocedural lifecycle and buffer
-analysis. It tracks function-local dynamic arrays, owner `ptr<[T]>` aliases,
-element buffer aliases, and callee effects. Pointer element construction
-(including null initialization) is a runtime detail: the lifecycle lattice
-tracks storage and aliases, not element values.
-
-**Owner-parameter assumptions.** `DynamicArrayAnalysisState` allocates one
-shadow array per owner-array parameter (`ptr<[T]>` where `T` is a dynamic
-array). After the normal summary and check passes, the checker runs two
-additional passes over the functions that have owner-array parameters:
-`ASSUME_INITED` seeds every owner-array parameter's shadow
-`INITED`/`FREED_NEVER`; `ASSUME_UNINITED` seeds it `UNINITED`/`FREED_NEVER`.
-Each pass reuses the existing summaries and BFS, and writes into its own
-`DiagnosticBag`. The two bags are merged per
-`(span, code)`: an error survives only when both runs report an error at that
-site; otherwise the result is a warning. This catches callee-local
-use-after-`uninit`, double free, and possible use-before-init. End-state
-differences for owner-array parameters are not diagnosed: a function may
-legitimately initialize a caller-owned array and leave it initialized, or
-release caller-owned storage as part of its contract. Missing-uninit remains a
-local-array warning (the local destructor owns the buffer). Shadow arrays are
-excluded from block-local clearing and from leak/end-state audits.
-
-**Lifecycle lattice.** One value per tracked local dynamic array:
-`UNINITED`, `INITED`, or `MAYBE_INITED`; a separate `FreedState`
-(`NEVER`/`MAYBE`/`YES`) distinguishes use-before-init from use-after-`uninit`.
-Transfers: declaration → `UNINITED`/`NEVER`; `init`/`init_zero` → `INITED`/
-`NEVER`; `resize` requires `INITED` and stays `INITED`/`NEVER`; `uninit`
-requires/records a free and stores `UNINITED`/`YES`. Element access, `memset`,
-`memcpy` destination, `memmove`, and the read/search/bit intrinsics except
-`length()` require `INITED`. `memcpy`, `memcmp`, and `memmem` also require the
-first argument's tracked array origin to be initialized. `length()` is always
-safe. Repeated `init` is not diagnosed. Missing explicit `uninit` is a warning;
-escaped arrays suppress leak warnings. An intrinsic whose receiver origins are
-unknown or empty havocs every escaped array to `MAYBE_INITED`/`FREED_MAYBE`.
-
-**Use and free diagnostics.** A definite `UNINITED`/`FREED_NEVER` use is
-"uninitialized before init"; a definite `UNINITED`/`FREED_YES` use is "after
-uninit"; `MAYBE_INITED` is a possible-use warning; `UNINITED`/`FREED_MAYBE` is
-a may-be-uninitialized-or-freed warning. `uninit` on `FREED_NEVER` is an invalid
-free, on `FREED_YES` a double free, and on `MAYBE_INITED`/`FREED_MAYBE` a
-possible invalid/double-free warning; all paths leave the array
-`UNINITED`/`FREED_YES` and advance the epoch.
-
-**Owner pointers and epochs.** Owner `ptr<[T]>` values carry an array-origin
-bitset plus an unknown flag. Each array has `epochMin`/`epochMax`; a single path
-has `epochMin == epochMax`. `init`/`init_zero`/`resize`/`uninit` advance both
-epochs on a definite path. A callee effect advances both for a must-invalidate
-and only `epochMax` for a may-invalidate. Branch merge takes the minimum and
-maximum epoch.
-
-**Element aliases.** Only element pointers/views are buffer aliases:
-`getptr`/`getmview`/`getview(d[i])` where `d` is a tracked dynamic array creates
-an alias rooted at `d` with the current epoch. `getptr(d)` points at the array
-object and is not an element alias. Static arrays never create aliases. Copies,
-casts, and returned/forwarded aliases propagate root and epoch; differing
-roots/epochs merge to `UNKNOWN`, while lifecycle/freed differences merge to
-`MAYBE_INITED`/`FREED_MAYBE`. Owner `ptr<[T]>` values and whole-array
-`view<[T]>`/`mview<[T]>` values point at the stable `Franko_Dynamic_Array`
-descriptor and are not invalidated by `resize`/`uninit`; only element
-pointers/views into the element buffer are invalidated. At any use of an element
-alias (deref, index, assignment target, call argument, return, or creation
-intrinsic over it), `aliasEpoch < epochMin` is a definite invalidation error and
-`epochMin <= aliasEpoch < epochMax` is a possible invalidation warning. When an
-array's block ends, the dynamic checker clears aliases rooted at it and resets
-its lifecycle state so the dangling checker owns the scope-end diagnostic.
-
-**Direct summaries.** Per owner-array parameter the first phase records the
-`INITED` requirement certainty (`MAY_REQUIRE_INITED`/`MUST_REQUIRE_INITED`),
-post-state (`UNCHANGED`/`INITED`/`UNINITED`/`MAYBE`/`HAVOC`), must/may
-invalidate, must/may free, and escape. Per pointer parameter it records
-may-use. Return aliases are `ELEMENT_OF(i)`, `ALIAS_OF_POINTER(i)`,
-`WHOLE_ARRAY(i)`, `NULL`, `UNKNOWN`, `LOCAL`, or `CALL_RESULT(site)`. Call
-edges carry alias templates for every parameter. `markSummaryRequireParam`
-skips a requirement when the parameter is definitely initialized on the current
-path (`paramInited`, set by `init`/`resize` and by a nonzero `length()` guard),
-so a callee that initializes before using its output parameter does not require
-the caller to pre-initialize it, and a `length() != 0` branch does not produce a
-spurious requirement. Must/may bitsets use the same intersection/union
-exit rule as the other domains. Escape is recorded only for
-`ALIAS_OF_POINTER`/`WHOLE_ARRAY` templates.
-
-**Summary-aware pass.** The BFS binding carries, per callee parameter, the
-actual array index, lifecycle, freed state, alias root/epoch, current epoch, and
-root argument index. Callee requirements are checked against the binding
-lifecycle: definite uninitialized/freed to `MUST_REQUIRE_INITED` is an error;
-possible to `MUST_REQUIRE_INITED` is a warning; definite uninitialized/freed to
-`MAY_REQUIRE_INITED` is a warning. Post-states update the caller array
-(`INITED`, `UNINITED`/freed, `MAYBE`/`HAVOC`), invalidations advance epochs,
-frees mark the array freed, and escapes set the escaped flag.
-`init`/`init_zero`, `resize`, and `uninit` are **strong** post-state updates
-within a path: the summary post-state is set directly, not merged with the
-pre-call state. Length guards refine the separate `paramAssume` state and the
-`paramInited` certainty (`length() == 0` → `UNINITED`, nonzero → `INITED`), so
-a callee that initializes an output array on one path and resizes it on the
-other does not require the caller to pre-initialize it, and guard refinement
-never changes the caller's post-call lifecycle. A returned element alias
-installs a caller alias at the current epoch and marks the returned array
-escaped. The cross-parameter rule
-warns when a callee may invalidate array parameter `i` and may use
-element-pointer parameter `j`, and the caller's actual `j` is an element alias
-of actual `i`. Only one cross-parameter warning is emitted per call. TOP sets
-the call result to `UNKNOWN`, marks every argument with a tracked array origin
-`MAYBE_INITED`/`FREED_MAYBE`/escaped, invalidates global owners, and emits no
-new diagnostic.
-
-**Guard refinement.** Length facts come from the shared DNF normalizer, so
-compound `&&`/`||`/`!` conditions refine state per feasible case.
-`length()` truthiness is a `!= 0` guard; a comparison with a constant uses the
-reversed operator when the length is on the right. The constant determines a
-zero or nonzero assertion (`== 0`, `<= 0`, `< 1` = zero; `!= 0`, `== positive`,
-`> non-negative`, `>= 1` = nonzero). In the summary pass the refinement writes
-the separate `paramAssume` state, not the mutation post-state, so guard
-refinement never changes what the caller's array looks like after the call. An
-owner parameter is feasible under zero unless `paramAssume` is `INITED` and
-under nonzero unless it is `UNINITED`; refinement stores
-`POST_UNINITED`/`POST_INITED` there. In the check pass the same refinement
-applies only when the receiver resolves to exactly one known array.
-
-**Remaining limits.** Struct-field arrays, nested dynamic-array elements below
-the outermost tracked array, global dynamic-array lifecycle, and allocation
-failure status are not tracked. `mview`/`view` parameters carry may-use but no
-lifecycle post-state. Loops are analyzed once, not to a fixed point. The two
-owner-parameter assumption runs treat distinct parameters as distinct arrays,
-so intraprocedural cross-parameter aliasing is not modeled; the call-site
-cross-parameter warning still covers the concrete aliasing case.
+The lifecycle lattice, owner assumptions, epochs, aliases, summaries, and
+guards are documented with `DynamicArrayMemoryChecker` and
+`DynamicArrayAnalysisState` in §3.3.
 
 ## 4.16 Identifier visibility (PrivateIdentifierLinter)
 
@@ -4170,44 +3871,11 @@ grammar/selector reject `#if` in a `for` header and declaration-level `#if`
 around imports; see `34-compile-time-reflection.md` for the language rules.
 
 ## 4.19 Tuples
-
-Tuple syntax and semantics are language-facing (`28-tuples.md`); this section
-records the compiler representation.
-
-`SemanticTypeResolver` walks tuple element types recursively, computes the
-effective element names (declared name or `_<index>`), rejects duplicate
-effective names, and interns one synthetic `StructSymbol` per canonical
-ordered-element-type key. The synthetic symbol is named `TUPLE_<8hex>`, lives
-in the global namespace, has fields `_0`, `_1`, … with `tupleIndex >= 0`, and
-is registered as a pending `SastNode.STRUCT_DECL`. Equality and hashing ignore
-element names and `cppSymbol`, so differently named tuples share one C++ type.
-A generated-name collision between distinct structural keys is an internal
-compiler error. `resetTupleTypes()` clears the intern map at analysis start and
-`pendingTupleDecls()` feeds the declarations into the semantic item list.
-
-Synthetic tuple declarations live in the Semantic AST, are kept alive by
-`InactiveDeclarationPruner` whenever their tuple type is live, and participate
-in the normal topological struct-definition ordering. Tuple JSON uses raw
-`"type": "tuple"` with an `elements` array; SAST adds a `symbol`, optional
-`"tuple": true` on synthetic struct symbols, and optional `"tupleIndex"` on
-tuple field symbols. `FieldSymbol.emittedName()` emits `_0`, `_1`, … for tuple
-fields and `FIELD_<name>` for ordinary fields.
+Tuple representation is documented with `SemanticTypeResolver`, `SastType`, and
+`FieldSymbol` in §3.2, and its JSON form is in §3.8.
 
 ## 4.20 Memory shape analysis
-
-`MemoryShapeIndex` answers three coarse questions for a type: can it carry a
-pointer, can it carry a dynamic array, and can it carry an owner pointer to an
-array. Primitives, `void`, `null`, and function types are empty. The walk stops
-at pointer and dynamic-array boundaries, recurses through static-array elements,
-struct fields, and tuple elements, and uses a per-struct visiting set so a
-recursive field cycle contributes no flags instead of looping. The
-aggregate-ownership ban makes `containsOwnerArrayPointer` false for every struct
-and tuple shape, because an owner pointer cannot be stored inside an aggregate;
-view/mview fields and dynamic-array fields still contribute `containsPointer`
-and `containsDynamicArray`. This is enough to classify direct memory effects and
-to know whether a value can hide memory, without introducing field-sensitive
-state. It is a build-stage cache keyed by `SastType`; the checkers never mutate
-it.
+The shape cache and its flags are documented with `MemoryShapeIndex` in §3.3.
 
 ## 4.21 Interprocedural summaries and bounded BFS
 
@@ -4262,38 +3930,12 @@ arrays. Bindings are domain-defined `int[]` records; no `HashMap` or
 `node + 1` with zero as the empty sentinel and grows at 50% load.
 
 ## 4.22 Dynamic-array buffer invalidation
-
-Buffer generations are tracked with `epochMin`/`epochMax` per tracked dynamic
-array. Element aliases (`getptr`/`getmview`/`getview(d[i])`) store
-`aliasRoot` and `aliasEpoch`; a whole-array `getptr(d)` or view stores no alias.
-A use of an alias is a definite invalidation error when
-`aliasEpoch < epochMin`, a possible invalidation warning when
-`epochMin <= aliasEpoch < epochMax`, and valid otherwise. The check applies at
-dereference, indexing, assignment through the alias, call argument, return, and
-creation intrinsics over the alias. `resize` and `uninit` advance the epoch;
-`init`/`init_zero` do too because they replace the buffer. Callee effects
-advance both epochs for a must-invalidate and only `epochMax` for a
-may-invalidate. Owner pointers and whole-array views are not element aliases:
-they point at the stable `Franko_Dynamic_Array` descriptor and are not
-invalidated by `init`/`resize`/`uninit`. When a tracked array's block ends, its
-lifecycle state is reset and aliases rooted at it (plus owner bits that name
-it) are cleared so the dangling checker owns the scope-end diagnostic.
+Epoch and alias rules are documented with `DynamicArrayMemoryChecker` and
+`DynamicArrayAnalysisState` in §3.3.
 
 ## 4.23 Frame liveness and inner-block lifetime
-
-The dangling checker maintains `mustDead` and `mayDead` bitsets over variable
-IDs. Declaring a local marks it alive. Leaving a block normally marks its
-direct locals dead; a block left through `return`/`break`/`continue` does not,
-because that path either does not continue or was already captured in a jump
-snapshot. Branch merge intersects `mustDead` and unions `mayDead`. Break/continue
-snapshots mark every direct local from the current block down to the target
-loop body dead inside the snapshot. The post-loop merge marks loop-body locals
-dead on all exit paths, including zero-trip and break paths. A pointer whose
-frame origins intersect `mustDead` is a definite use-after-scope error; an
-intersection with `mayDead` is a warning. Parameters remain alive for the whole
-function. The frame-origin algebra is otherwise unchanged: returning or storing
-a frame-origin pointer into caller/global storage is diagnosed by the existing
-return/store rules.
+Liveness rules are documented with `DanglingPointerChecker` and
+`DanglingPointerState` in §3.3.
 
 ## 4.24 Memory checker diagnostics matrix
 
@@ -4748,6 +4390,7 @@ language_tests/success/generics_methods_independent/
 language_tests/success/generics_methods_inherited/
 language_tests/success/generics_methods_receivers/
 language_tests/success/generics_methods_compile_time/
+language_tests/success/generics_useless_pruned/
 language_tests/failure/generics/generic_method_missing_args.fr
 language_tests/failure/generics/generic_method_unknown.fr
 language_tests/failure/generics/generic_method_arity.fr
@@ -4821,6 +4464,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Remove/rename syntax sugar | `Desugarer` |
 | Simplify or remove dead branches/loops | `BranchPruner` |
 | Remove unused structs/functions/variables | `InactiveDeclarationPruner` |
+| Prune unreachable generated generic declarations before legality | `UselessGenericPruner` (§3.5), invoked by `Main` after semantic analysis |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Change normal/return type resolution | `SemanticTypeResolver` + `SemanticAnalyzer` + `ExpressionLowering` |
 | Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `AstNode.java` (`AstKind.ENUM_DECL`/`AstKind.ENUM_VARIANT`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SastType.java` (`SastType.ENUM`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SastSerializer` + `InactiveDeclarationPruner`/`MemoryShapeIndex`/`PrivateIdentifierLinter` + §4.27 |
@@ -4844,10 +4488,10 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `Symbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |
 | Change summary fields | the relevant checker + `MemoryTemplate` (§4.21) |
 | Change BFS budget or memoization | `MemorySummaryBfs` (§4.21) |
-| Change shape flags | `MemoryShapeIndex` (§4.20) |
+| Change shape flags | `MemoryShapeIndex` (§3.3) |
 | Add a new memory effect | the domain summary + its check pass + §4.21–§4.24 |
-| Change buffer invalidation | `DynamicArrayAnalysisState` + `DynamicArrayMemoryChecker` (§4.15, §4.22) |
-| Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§4.14, §4.23) |
+| Change buffer invalidation | `DynamicArrayAnalysisState` + `DynamicArrayMemoryChecker` (§3.3) |
+| Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§3.3) |
 | Change dense IDs / call graph / block locals | `MemoryAnalysisContext` + `MemoryCallGraph` |
 | Change the shared branch/loop traversal | `MemoryDataflowDriver` |
 | Add or change named/optional arguments | `Franko.g4` (`parameterDefault`/`argument`) + `FrankoASTVisitor` + `AstNode` (`defaultValue`/`argumentNames`) + `ASTSerializer` + `AstRewriter` + `Desugarer` + `GenericsResolver` + `Symbol.parameterDefault` + `SemanticAnalyzer.resolveParameterDefaults`/`canonicalizeStaticDefault` + §4.32 |

@@ -189,13 +189,18 @@ public class Main {
                 PassCall.semantic(target, importResult.document)
         );
 
+        System.out.println("==== Useless Generic Pruning ====");
+        SastDocument genericPruned =
+                new UselessGenericPruner().prune(semaResult.document);
+        artifacts.writeSast(SastPhase.USELESS_GENERIC_PRUNED, genericPruned);
+
         PassResult legalityResult = runPass(
                 log,
                 artifacts,
                 "legality",
                 SastPhase.LEGALITY,
                 "==== Legality Checking ====",
-                PassCall.legality(semaResult.document)
+                PassCall.legality(genericPruned)
         );
 
         System.out.println("==== Branch Pruning ====");

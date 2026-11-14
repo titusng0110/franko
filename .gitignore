@@ -56,6 +56,7 @@ benchmark/**/*.compile.log
 *.desugared.ast.json
 *.imports.ast.json
 *.semantic.sast.json
+*.useless-generic-pruned.sast.json
 *.legality.sast.json
 *.branch-pruned.sast.json
 *.inactive-pruned.sast.json

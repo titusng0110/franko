@@ -1998,7 +1998,11 @@ namespace std {
         return
     }
 
-    #generic func __quicksort_entry<typename T>(ptr<[T]> values, uint32 start, uint32 end) -> void {
+    #generic func quicksort<typename T>(ptr<[T]> values, uint32 start, uint32 end) -> void {
+        #if (!#is_comparable(T) || !#is_assignable(T)) {
+            #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
+        }
+
         if (values == null || start >= end) {
             return
         }
@@ -2040,34 +2044,22 @@ namespace std {
         return
     }
 
-    #generic func quicksort<typename T>(ptr<[T]> values, uint32 start, uint32 end) -> void {
-        #if (!#is_comparable(T) || !#is_assignable(T)) {
-            #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
-        }
-
-        __quicksort_entry<T>(values, start, end)
-        return
-    }
-
     #generic func quicksort<typename T>(ptr<[T]> values) -> void {
         #if (!#is_comparable(T) || !#is_assignable(T)) {
             #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
         }
 
         if (values == null) {
             return
         }
         uint32 count = $(values).length()
-        __quicksort_entry<T>(values, 0, count)
+        quicksort<T>(getptr($(values)), 0, count)
         return
     }
 
     #generic func quicksort<typename T>(mview<[T]> values, uint32 start, uint32 end) -> void {
         #if (!#is_comparable(T) || !#is_assignable(T)) {
             #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
         }
 
         if (values == null || start >= end) {
@@ -2112,6 +2104,10 @@ namespace std {
     }
 
     #generic func quicksort<typename T>(mview<[T]> values) -> void {
+        #if (!#is_comparable(T) || !#is_assignable(T)) {
+            #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
+        }
+
         if (values == null) {
             return
         }
@@ -2123,7 +2119,6 @@ namespace std {
     #generic func heapsort<typename T>(mview<[T]> values, uint32 start, uint32 end) -> void {
         #if (!#is_comparable(T) || !#is_assignable(T)) {
             #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
         }
 
         if (values == null || start >= end) {
@@ -2134,6 +2129,10 @@ namespace std {
     }
 
     #generic func heapsort<typename T>(mview<[T]> values) -> void {
+        #if (!#is_comparable(T) || !#is_assignable(T)) {
+            #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
+        }
+
         if (values == null) {
             return
         }
@@ -2145,7 +2144,6 @@ namespace std {
     #generic func heapsort<typename T>(ptr<[T]> values, uint32 start, uint32 end) -> void {
         #if (!#is_comparable(T) || !#is_assignable(T)) {
             #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
         }
 
         if (values == null || start >= end) {
@@ -2158,14 +2156,13 @@ namespace std {
     #generic func heapsort<typename T>(ptr<[T]> values) -> void {
         #if (!#is_comparable(T) || !#is_assignable(T)) {
             #panic(#strcat("franko/algorithm requires an element type that supports ordering and assignment, got ", #what_type(T)))
-        } #else {
         }
 
         if (values == null) {
             return
         }
         uint32 count = $(values).length()
-        __heap_sort_values<T>(getptr($(values)), 0, count)
+        heapsort<T>(getptr($(values)), 0, count)
         return
     }
 }

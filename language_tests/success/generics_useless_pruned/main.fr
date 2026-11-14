@@ -1,0 +1,61 @@
+import "franko/stdio"
+
+struct Point {
+    int32 x
+}
+
+#generic func unused_bad<typename T>(int32 value) -> int32 {
+    T tmp
+    return tmp + tmp
+}
+
+#generic func unused_bad<typename T>(Point value) -> int32 {
+    return value.x + 1
+}
+
+struct Picker {
+    int32 value
+
+    #generic func choose<typename T>(ptr<Picker> self, int32 value) -> int32 {
+        T tmp
+        return tmp + tmp
+    }
+
+    #generic func choose<typename T>(ptr<Picker> self, Point point) -> int32 {
+        return point.x + 2
+    }
+}
+
+#generic struct BadBox<typename T> {
+    T value
+
+    func explode(ptr<BadBox<T>> self) -> T {
+        return $(self).value + $(self).value
+    }
+}
+
+#generic func build_bad<typename T>(int32 value) -> int32 {
+    BadBox<T> box
+    return 0
+}
+
+#generic func choose<typename T>(int32 value) -> int32 {
+    return build_bad<T>(value)
+}
+
+#generic func choose<typename T>(Point point) -> int32 {
+    return point.x + 3
+}
+
+func main() -> int32 {
+    Point point
+    point.x = 10
+
+    stdout(choose<Point>(point))
+    stdout(unused_bad<Point>(point))
+
+    Picker picker
+    picker.value = 0
+    stdout(picker.choose<Point>(point))
+    return 0
+}
