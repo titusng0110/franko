@@ -1,44 +1,16 @@
 // ============================================================
 // LIBRARY TEST: franko/os — Win32 free functions
 // ============================================================
-// Covers os::win32::GetStdHandle, ReadFile, WriteFile, the timing
-// primitives, and the stdio handle constants. Runs only on Windows targets.
+// Covers the timing primitives. Standard handles are reserved for
+// franko/stdio and are rejected by the bridge; ReadFile/WriteFile
+// coverage is intentionally omitted here.
+// Runs only on Windows targets.
 // ============================================================
 
 import "franko/os"
 import "franko/stdio"
 
 func main() -> int32 {
-    uint64 hin = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE);
-    [byte] buf;
-    buf.init(8);
-    buf.memset(0);
-
-    uint32 read_count = 0;
-    int32 read_ok = os::win32::ReadFile(
-            hin,
-            getmview(buf),
-            8,
-            getmview(read_count)
-    );
-    stdout(read_ok);
-    stdout(read_count);
-    stdout(buf[0]);
-    stdout(buf[1]);
-    stdout(buf[2]);
-    stdout(buf[3]);
-
-    uint64 hout = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE);
-    uint32 written_count = 0;
-    int32 write_ok = os::win32::WriteFile(
-            hout,
-            getview(buf),
-            3,
-            getmview(written_count)
-    );
-    stdout(write_ok);
-    stdout(written_count);
-
     int64 counter = 0;
     int64 frequency = 0;
     int32 counter_ok = os::win32::QueryPerformanceCounter(
@@ -60,6 +32,5 @@ func main() -> int32 {
         stdout(3);
     }
 
-    buf.uninit();
     return 0;
 }

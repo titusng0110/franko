@@ -31,7 +31,21 @@ public class DeclarationChecker {
             return;
         }
 
-        if (node.symbol.isConst
+        if (node.symbol.kind == SymbolKind.GLOBAL
+                && node.symbol.literalBytes == null
+                && node.symbol.literalValues == null
+                && !types.isValueAssignableType(node.symbol.type)) {
+            diagnostics.error("Global variable '"
+                + node.symbol.qualifiedName()
+                + "' has type '"
+                + types.describeSafe(node.symbol.type)
+                + "'; global variables are implicitly const and must be"
+                + " value-assignable. Global storage is initialized once"
+                + " before main and never mutated, so it cannot hold an"
+                + " array or a pointer-only aggregate. Use a primitive,"
+                + " enum, pointer, or value-assignable struct/tuple, or"
+                + " move the storage into a function.");
+        } else if (node.symbol.isConst
                 && !types.isValueAssignableType(node.symbol.type)) {
             diagnostics.error(constKindName(node.symbol)
                 + " '"
@@ -68,7 +82,12 @@ public class DeclarationChecker {
         }
 
         if (node.staticInitializer != null) {
-            validateGlobalStaticInitializer(node);
+            if (node.symbol.type != null
+                    && node.symbol.type.kind == SastTypeKind.PTR) {
+                validateGlobalStaticInitializer(node);
+            } else {
+                validateGlobalValueInitializer(node);
+            }
         }
     }
 
@@ -82,6 +101,58 @@ public class DeclarationChecker {
         }
 
         return "Const variable";
+    }
+
+    private void validateGlobalValueInitializer(SastNode node) {
+        SastType type = node.symbol.type;
+        SastNode init = node.staticInitializer;
+
+        expressions.checkExpr(init);
+
+        if (type == null || init.type == null) {
+            return;
+        }
+
+        if (type.kind == SastTypeKind.ENUM) {
+            if (init.kind != SastKind.ENUM_VARIANT) {
+                diagnostics.error("Global variable '"
+                    + node.symbol.qualifiedName()
+                    + "' has an enum type, but its initializer is not an enum"
+                    + " variant. Enums are nominal and are only initialized"
+                    + " from their own variant references. Use "
+                    + type.describe()
+                    + "::<variant>, or leave the initializer out to use the"
+                    + " first variant.");
+                return;
+            }
+        } else if (type.kind == SastTypeKind.STRUCT
+                || type.kind == SastTypeKind.TUPLE) {
+            if (init.kind != SastKind.AGGREGATE_LITERAL) {
+                diagnostics.error("Global variable '"
+                    + node.symbol.qualifiedName()
+                    + "' has an aggregate type, but its initializer is not"
+                    + " an aggregate literal. Global aggregates are"
+                    + " initialized once before main from static values. Use "
+                    + type.describe()
+                    + " { ... } with constant, null, enum, string, array,"
+                    + " getview, or nested aggregate values.");
+                return;
+            }
+        } else {
+            diagnostics.error("Global variable '"
+                + node.symbol.qualifiedName()
+                + "' has a static initializer, but its type is not a"
+                + " pointer, enum, struct, or tuple. Primitive globals use"
+                + " a constant initializer instead. Replace the initializer"
+                + " with a constant expression of the declared type.");
+            return;
+        }
+
+        types.ensureAssignable(
+                type,
+                init,
+                "Invalid global initializer"
+        );
     }
 
     private void validateGlobalStaticInitializer(SastNode node) {

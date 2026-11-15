@@ -12,16 +12,19 @@ import "franko/stdio"
 Module files:
 
 ```text
-import/franko/stdio.fr    // Franko implementation (on top of franko/os and franko/string)
+import/franko/stdio.fr         // public overload set, String/width adapters, input parsing
+import/franko/stdio.module.json // module descriptor and bridge file
+import/franko/stdio.ffi.cpp    // C++ integer formatting, byte writes, and stdin buffer
 ```
 
-`stdio` imports the standard `franko/os` and `franko/string` modules via
-file-relative `./os` and `./string` imports, so they work regardless of the
-user's `-p` search directory, and talks through the OS bridge:
-`os::posix::write` / `os::posix::read` on linux/macos,
-`os::win32::WriteFile` / `os::win32::ReadFile` on Windows.
-Output therefore shares a channel with raw fd writes and appears in program
-order, and input shares one with raw fd reads.
+`stdio` imports the standard `franko/string` module via the file-relative
+`./string` import, so it works regardless of the user's `-p` search
+directory. Standard-stream I/O lives entirely in the `stdio` FFI bridge:
+integer formatting and byte-view writes are implemented in C++, and the
+bridge owns the 8192-byte stdin read-ahead buffer. `franko/os` refuses to
+read or write file descriptors/handles `0`, `1`, and `2` (or their Windows
+standard-handle equivalents), so `franko/stdio` is the only supported path
+to standard input and output.
 
 Design rules:
 
@@ -136,10 +139,11 @@ func main() -> int32 {
 }
 ```
 
-Both streams share the same channel as raw fd writes: `stdout` uses the
-stdout fd/handle and `stderr` uses the stderr fd/handle. On a terminal or
-when both streams are redirected to the same file, writes appear in program
-order.
+`stdout` writes to the standard output stream and `stderr` to the standard
+error stream through the `stdio` bridge. `franko/os` rejects its standard
+fds/handles, so raw `os` writes cannot interleave with stdio output; use
+`franko/stdio` for all standard I/O. On a terminal or when both streams are
+redirected to the same file, stdio writes appear in program order.
 
 ## std::String output
 
@@ -179,9 +183,9 @@ func main() -> int32 {
 
 ## Input
 
-Both read functions read from stdin through the OS bridge and share an
-internal 8192-byte input buffer; bytes read ahead stay buffered for the
-next call. `stdin_bytes` fills a caller-owned byte buffer and returns
+Both read functions read from stdin through the `stdio` FFI bridge and share
+an internal 8192-byte input buffer owned by that bridge; bytes read ahead
+stay buffered for the next call. `stdin_bytes` fills a caller-owned byte buffer and returns
 `(uint32 val, int32 err)`; `stdin_line` fills a `std::String` and returns
 `int32`.
 

@@ -4,26 +4,14 @@ import "franko/stdio"
 // LANGUAGE TEST: Capability Linter Ignores Globals
 // ============================================================
 // The capability linter tracks function-local variables and
-// parameters only. global_value is read in main but exercised at the owner
-// level through alloc: no per-function downgrade warning is
-// emitted for it (see main.forbidden). The parameter p exercises
-// allocation rights, so it is not warned about either.
+// parameters only. global_value is a read-only view and is exercised
+// through reads in main: no per-function downgrade warning is emitted
+// for it (see main.forbidden).
 // ============================================================
 
-ptr<[byte]> global_value;
-[byte] b;
-
-func alloc(ptr<[byte]> p) -> void {
-    $(p).init(3);
-    $(p)[0] = 1;
-    $(p)[1] = 2;
-    $(p)[2] = 3;
-}
+view<[byte, 3]> global_value = [1, 2, 3]
 
 func main() -> int32 {
-    global_value = getptr(b);
-    alloc(global_value);
-
     stdout($(global_value).length());
     stdout($(global_value)[0]);
     stdout($(global_value)[1]);

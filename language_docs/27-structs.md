@@ -177,7 +177,7 @@ xs[i].field           // element of a static or dynamic array
 - **Declaration initialization.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value as part of the declaration.
 - **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](30-aggregate-literals.md).
 - **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
-- **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
+- **Global declarations.** Global structs are statically allocated and implicitly const. The struct must be value-assignable, so pointer-only structs cannot be global. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
 Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
 
@@ -195,8 +195,8 @@ Point origin;
 int32 scale = 2;
 ```
 
-- Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
-- Struct globals are declared before `main` runs; executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
+- Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch. Use a struct aggregate literal instead.
+- Every global is implicitly const and must be value-assignable; a pointer-only struct cannot be a global. Struct globals are initialized before `main` runs, and executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
 
 ## 27.10 Restrictions Summary
 

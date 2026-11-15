@@ -391,7 +391,7 @@ final class DeclarationSelector {
                 namespaceName,
                 node.name,
                 type,
-                node.isConst
+                true
         );
 
         ctx.declareGlobalVariable(symbol);

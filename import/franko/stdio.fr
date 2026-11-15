@@ -1,81 +1,79 @@
-import "./os"
 import "./string"
 
-// Shared stdin buffer. Bytes read ahead by stdin_bytes/stdin_line stay
-// here until the next call consumes them.
-[byte, 8192] __io_input
-uint32 __io_input_pos = 0
-uint32 __io_input_len = 0
-
-// Internal line accumulator. The dynamic array lives in a struct so the
-// local-array lifecycle checker does not track it. stdin_line initializes
-// it to the exact size of the first chunk and doubles it up to the
-// 81920-byte line limit.
+// franko/stdio — user-level output and input.
+//
+// Integer formatting, byte-view writing, and the stdin read-ahead
+// buffer live in the stdio FFI bridge `stdio.ffi.cpp`. The public
+// overload set and the String/width adapters stay in Franko.
 struct __IoLineBuffer {
     [byte] data
 }
 
-// Internal write helpers. Formatting happens in the stdout/stderr
-// functions; these only flush a byte view to a standard stream.
-func __io_write_stdout(const view<[byte]> payload, const uint32 count) -> void {
-    if (payload == null || count == 0) {
-        return
-    }
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
-        os::win32::WriteFile(h, payload, count, null)
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        os::posix::write(os::posix::STDOUT_FILENO, payload, cast<uint64>(count))
-    }
+// Bridged output primitives. The public int64/uint64/view<[byte]>
+// overloads below are thin Franko wrappers over these definitions.
+func __io_stdout_int64(const int64 num, const view<[byte]> end) -> void {
+    return
 }
 
-func __io_write_stderr(const view<[byte]> payload, const uint32 count) -> void {
-    if (payload == null || count == 0) {
-        return
-    }
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_ERROR_HANDLE)
-        os::win32::WriteFile(h, payload, count, null)
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        os::posix::write(os::posix::STDERR_FILENO, payload, cast<uint64>(count))
-    }
+func __io_stdout_uint64(const uint64 num, const view<[byte]> end) -> void {
+    return
 }
 
-// franko/stdio — user-level output and input.
-//
-// `stdout` is an ordinary overloaded function (not a statement).
-// Single-argument `stdout(x)` writes `x` followed by `\n`. Supplying the
-// optional end argument uses a named argument:
-// `stdout(x, end = suffix)` writes `x` followed by `suffix` verbatim (a
-// null or empty `suffix` means no suffix, so no newline either).
-// `stdout()` writes a bare newline. `stdout(str)` writes the UTF-8 bytes
-// verbatim followed by `\n`; a null or empty view writes no text bytes,
-// but the `end` suffix is still written. The
-// `std::String` overloads write only the live bytes, not the backing
-// buffer's unused capacity.
-//
-// `stderr` mirrors every `stdout` overload on stderr.
-//
-// Integer printing formats into a 25-byte stack buffer. The longest
-// integer is 20 digits (plus a possible sign), so the separator is
-// appended into the spare bytes when it fits and the whole line goes
-// out in one write; a longer separator is emitted in a second write.
-// Text and `std::String` printing write the payload and suffix
-// separately.
-//
-// Output goes through the OS bridge (posix `write` on linux/macos,
-// `WriteFile` on windows), so it shares a channel with raw fd writes.
-//
-// Input: `stdin_bytes` reads into a caller-provided buffer and reports
-// how much arrived; `stdin_line` reads one line into a `std::String`
-// using an internal growable buffer. See their comments below.
+func __io_stdout_bytes(const view<[byte]> text, const view<[byte]> end) -> void {
+    return
+}
+
+func __io_stderr_int64(const int64 num, const view<[byte]> end) -> void {
+    return
+}
+
+func __io_stderr_uint64(const uint64 num, const view<[byte]> end) -> void {
+    return
+}
+
+func __io_stderr_bytes(const view<[byte]> text, const view<[byte]> end) -> void {
+    return
+}
+
+// Bridged stdin state and buffer accessors.
+func __io_fill() -> int32 {
+    return -1
+}
+
+func __io_input_pos() -> uint32 {
+    return 0
+}
+
+func __io_input_len() -> uint32 {
+    return 0
+}
+
+func __io_set_input_pos(const uint32 value) -> void {
+    return
+}
+
+func __io_set_input_len(const uint32 value) -> void {
+    return
+}
+
+func __io_input_byte(const uint32 index) -> byte {
+    return 0
+}
+
+func __io_input_memchr(const byte value, const uint32 start, const uint32 count) -> uint32 {
+    return 0xFFFFFFFF
+}
+
+func __io_input_copy_to(const mview<[byte]> dst, const uint32 dst_start, const uint32 src_start, const uint32 count) -> void {
+    return
+}
 
 func stdout() -> void {
-    __io_write_stdout([10], 1)
+    stdout([10], end = null)
 }
 
 func stderr() -> void {
-    __io_write_stderr([10], 1)
+    stderr([10], end = null)
 }
 
 // ------------------------------------------------------------
@@ -83,41 +81,7 @@ func stderr() -> void {
 // ------------------------------------------------------------
 
 func stdout(const uint64 num, const view<[uint8]> end = "\n") -> void {
-    [byte, 25] out
-    uint32 len = 0
-    if (num == 0) {
-        out[0] = 48
-        len = 1
-    } else {
-        for (uint64 n = num; n != 0; n = n / 10) {
-            uint64 d = n % 10
-            out[len] = unsafe_cast<byte>(d + 48)
-            len = len + 1
-        }
-    }
-    uint32 a = 0
-    uint32 b = len - 1
-    while (a < b) {
-        byte tmp = out[a]
-        out[a] = out[b]
-        out[b] = tmp
-        a = a + 1
-        b = b - 1
-    }
-    uint32 total = len
-    uint32 m = 0
-    if (end != null) {
-        m = $(end).length()
-        if (m != 0 && m <= 25 - len) {
-            out.memcpy(end, len, 0, m)
-            total = len + m
-            m = 0
-        }
-    }
-    __io_write_stdout(getview(out), total)
-    if (m != 0) {
-        __io_write_stdout(end, m)
-    }
+    __io_stdout_uint64(num, end)
 }
 
 func stdout(const uint8 num, const view<[uint8]> end = "\n") -> void {
@@ -137,43 +101,7 @@ func stdout(const uint32 num, const view<[uint8]> end = "\n") -> void {
 // ------------------------------------------------------------
 
 func stdout(const int64 num, const view<[uint8]> end = "\n") -> void {
-    if (num >= 0) {
-        stdout(unsafe_cast<uint64>(num), end = end)
-        return
-    }
-    [byte, 25] out
-    uint32 len = 0
-    for (int64 n = num; n != 0; n = n / 10) {
-        int64 r = n % 10
-        int64 d = 0 - r
-        out[len] = unsafe_cast<byte>(d + 48)
-        len = len + 1
-    }
-    out[len] = 45
-    len = len + 1
-    uint32 a = 0
-    uint32 b = len - 1
-    while (a < b) {
-        byte tmp = out[a]
-        out[a] = out[b]
-        out[b] = tmp
-        a = a + 1
-        b = b - 1
-    }
-    uint32 total = len
-    uint32 m = 0
-    if (end != null) {
-        m = $(end).length()
-        if (m != 0 && m <= 25 - len) {
-            out.memcpy(end, len, 0, m)
-            total = len + m
-            m = 0
-        }
-    }
-    __io_write_stdout(getview(out), total)
-    if (m != 0) {
-        __io_write_stdout(end, m)
-    }
+    __io_stdout_int64(num, end)
 }
 
 func stdout(const int8 num, const view<[uint8]> end = "\n") -> void {
@@ -193,18 +121,7 @@ func stdout(const int32 num, const view<[uint8]> end = "\n") -> void {
 // ------------------------------------------------------------
 
 func stdout(const view<[uint8]> utf8str, const view<[uint8]> end = "\n") -> void {
-    if (utf8str != null) {
-        uint32 n = $(utf8str).length()
-        if (n != 0) {
-            __io_write_stdout(utf8str, n)
-        }
-    }
-    if (end != null) {
-        uint32 m = $(end).length()
-        if (m != 0) {
-            __io_write_stdout(end, m)
-        }
-    }
+    __io_stdout_bytes(utf8str, end)
 }
 
 func stdout(const view<std::String> str, const view<std::String> end) -> void {
@@ -247,41 +164,7 @@ func stdout(const view<std::String> str, const view<[byte]> end = "\n") -> void 
 // ------------------------------------------------------------
 
 func stderr(const uint64 num, const view<[uint8]> end = "\n") -> void {
-    [byte, 25] out
-    uint32 len = 0
-    if (num == 0) {
-        out[0] = 48
-        len = 1
-    } else {
-        for (uint64 n = num; n != 0; n = n / 10) {
-            uint64 d = n % 10
-            out[len] = unsafe_cast<byte>(d + 48)
-            len = len + 1
-        }
-    }
-    uint32 a = 0
-    uint32 b = len - 1
-    while (a < b) {
-        byte tmp = out[a]
-        out[a] = out[b]
-        out[b] = tmp
-        a = a + 1
-        b = b - 1
-    }
-    uint32 total = len
-    uint32 m = 0
-    if (end != null) {
-        m = $(end).length()
-        if (m != 0 && m <= 25 - len) {
-            out.memcpy(end, len, 0, m)
-            total = len + m
-            m = 0
-        }
-    }
-    __io_write_stderr(getview(out), total)
-    if (m != 0) {
-        __io_write_stderr(end, m)
-    }
+    __io_stderr_uint64(num, end)
 }
 
 func stderr(const uint8 num, const view<[uint8]> end = "\n") -> void {
@@ -301,43 +184,7 @@ func stderr(const uint32 num, const view<[uint8]> end = "\n") -> void {
 // ------------------------------------------------------------
 
 func stderr(const int64 num, const view<[uint8]> end = "\n") -> void {
-    if (num >= 0) {
-        stderr(unsafe_cast<uint64>(num), end = end)
-        return
-    }
-    [byte, 25] out
-    uint32 len = 0
-    for (int64 n = num; n != 0; n = n / 10) {
-        int64 r = n % 10
-        int64 d = 0 - r
-        out[len] = unsafe_cast<byte>(d + 48)
-        len = len + 1
-    }
-    out[len] = 45
-    len = len + 1
-    uint32 a = 0
-    uint32 b = len - 1
-    while (a < b) {
-        byte tmp = out[a]
-        out[a] = out[b]
-        out[b] = tmp
-        a = a + 1
-        b = b - 1
-    }
-    uint32 total = len
-    uint32 m = 0
-    if (end != null) {
-        m = $(end).length()
-        if (m != 0 && m <= 25 - len) {
-            out.memcpy(end, len, 0, m)
-            total = len + m
-            m = 0
-        }
-    }
-    __io_write_stderr(getview(out), total)
-    if (m != 0) {
-        __io_write_stderr(end, m)
-    }
+    __io_stderr_int64(num, end)
 }
 
 func stderr(const int8 num, const view<[uint8]> end = "\n") -> void {
@@ -357,18 +204,7 @@ func stderr(const int32 num, const view<[uint8]> end = "\n") -> void {
 // ------------------------------------------------------------
 
 func stderr(const view<[uint8]> utf8str, const view<[uint8]> end = "\n") -> void {
-    if (utf8str != null) {
-        uint32 n = $(utf8str).length()
-        if (n != 0) {
-            __io_write_stderr(utf8str, n)
-        }
-    }
-    if (end != null) {
-        uint32 m = $(end).length()
-        if (m != 0) {
-            __io_write_stderr(end, m)
-        }
-    }
+    __io_stderr_bytes(utf8str, end)
 }
 
 func stderr(const view<std::String> str, const view<std::String> end) -> void {
@@ -409,49 +245,9 @@ func stderr(const view<std::String> str, const view<[byte]> end = "\n") -> void 
 // franko/stdio — input.
 //
 // Input fills a caller-provided buffer (arrays cannot be returned
-// directly) and reports how much arrived. Both functions go through
-// the same OS bridge `stdout` writes with: os::posix::read on
-// linux/macos, os::win32::ReadFile on windows, so input shares a
-// channel with raw fd reads.
-
-// Fill the shared stdin buffer when it is empty. Returns 1 when bytes
-// are available, 0 at end of input, and -1 on error.
-func __io_fill() -> int32 {
-    if (__io_input_pos < __io_input_len) {
-        return 1
-    }
-    __io_input_pos = 0
-    __io_input_len = 0
-    #if (#IS_WINDOWS) {
-        uint64 h = os::win32::GetStdHandle(os::win32::STD_INPUT_HANDLE)
-        // GetStdHandle returns NULL or INVALID_HANDLE_VALUE on failure.
-        if (h == 0 || h == 0xFFFFFFFFFFFFFFFF) {
-            return -1
-        }
-        uint32 n = 0
-        int32 ok = os::win32::ReadFile(h, getmview(__io_input), 8192, getmview(n))
-        if (ok == 0 && n == 0) {
-            // A failed read that delivered no bytes: on Windows a closed
-            // stdin pipe is reported this way (ERROR_BROKEN_PIPE) rather
-            // than as a successful zero-byte read, so treat it as EOF.
-            return 0
-        }
-        __io_input_len = n
-        return 1
-    } #else #if (#IS_LINUX || #IS_MACOS) {
-        int64 n = os::posix::read(os::posix::STDIN_FILENO, getmview(__io_input), 8192)
-        if (n < 0) {
-            return -1
-        }
-        if (n == 0) {
-            return 0
-        }
-        __io_input_len = unsafe_cast<uint32>(n)
-        return 1
-    } #else {
-        return -1
-    }
-}
+// directly) and reports how much arrived. The OS reads and the shared
+// read-ahead buffer live in stdio.ffi.cpp; these functions keep the
+// buffering, line parsing, and public result logic in Franko.
 
 // Read up to `count` bytes from stdin into `buf`, looping over the
 // shared 8192-byte input buffer until `count` bytes have been stored,
@@ -468,9 +264,8 @@ func __io_fill() -> int32 {
 //
 // On Windows, reading a stdin pipe whose writer has closed makes
 // ReadFile report failure (ERROR_BROKEN_PIPE) with zero bytes instead
-// of succeeding with 0 bytes as POSIX read does. The os::win32 bridge
-// stays a thin ReadFile wrapper, so that end-of-input normalization
-// lives here.
+// of succeeding with 0 bytes as POSIX read does. That end-of-input
+// normalization lives in the FFI bridge.
 func stdin_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 err) {
     (uint32 val, int32 err) result
     result.val = 0
@@ -487,7 +282,9 @@ func stdin_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 er
     }
     uint32 copied = 0
     while (copied < count) {
-        if (__io_input_pos == __io_input_len) {
+        uint32 pos = __io_input_pos()
+        uint32 buffer_len = __io_input_len()
+        if (pos == buffer_len) {
             int32 fill = __io_fill()
             if (fill < 0) {
                 result.val = copied
@@ -497,21 +294,24 @@ func stdin_bytes(mview<[byte]> buf, const uint32 count) -> (uint32 val, int32 er
             if (fill == 0) {
                 break
             }
-            if (__io_input_len == 0) {
+            pos = __io_input_pos()
+            buffer_len = __io_input_len()
+            if (buffer_len == 0) {
                 break
             }
         }
-        uint32 available = __io_input_len - __io_input_pos
+        uint32 available = buffer_len - pos
         uint32 take = count - copied
         if (take > available) {
             take = available
         }
-        $(buf).memcpy(getview(__io_input), copied, __io_input_pos, take)
+        __io_input_copy_to(buf, copied, pos, take)
         copied = copied + take
-        __io_input_pos = __io_input_pos + take
-        if (__io_input_pos == __io_input_len) {
-            __io_input_pos = 0
-            __io_input_len = 0
+        pos = pos + take
+        __io_set_input_pos(pos)
+        if (pos == buffer_len) {
+            __io_set_input_pos(0)
+            __io_set_input_len(0)
         }
     }
     result.val = copied
@@ -541,7 +341,9 @@ func stdin_line(ptr<std::String> out) -> int32 {
     uint32 len = 0
     uint8 too_long = 0
     while (1) {
-        if (__io_input_pos == __io_input_len) {
+        uint32 pos = __io_input_pos()
+        uint32 buffer_len = __io_input_len()
+        if (pos == buffer_len) {
             int32 fill = __io_fill()
             if (fill < 0) {
                 if (cap != 0) {
@@ -552,21 +354,23 @@ func stdin_line(ptr<std::String> out) -> int32 {
             if (fill == 0) {
                 break
             }
+            pos = __io_input_pos()
+            buffer_len = __io_input_len()
         }
-        uint32 available = __io_input_len - __io_input_pos
-        uint32 nl = __io_input.memchr(10, __io_input_pos, available)
+        uint32 available = buffer_len - pos
+        uint32 nl = __io_input_memchr(10, pos, available)
         uint32 take = available
         uint32 advance = available
         uint8 found = 0
         uint8 strip_cr = 0
         if (nl != 0xFFFFFFFF) {
-            take = nl - __io_input_pos
+            take = nl - pos
             advance = take
             found = 1
             if (take != 0) {
                 // Drop the CR of a CRLF ending before the size check so
                 // it does not count as line content.
-                if (__io_input[__io_input_pos + take - 1] == 13) {
+                if (__io_input_byte(pos + take - 1) == 13) {
                     take = take - 1
                 }
             } else {
@@ -603,16 +407,18 @@ func stdin_line(ptr<std::String> out) -> int32 {
                         cap = next_cap
                     }
                 }
-                line.data.memcpy(getview(__io_input), len, __io_input_pos, take)
+                __io_input_copy_to(getmview(line.data), len, pos, take)
                 len = needed
             }
         }
-        __io_input_pos = __io_input_pos + advance
+        pos = pos + advance
+        __io_set_input_pos(pos)
         if (found != 0) {
-            __io_input_pos = __io_input_pos + 1
-            if (__io_input_pos == __io_input_len) {
-                __io_input_pos = 0
-                __io_input_len = 0
+            pos = pos + 1
+            __io_set_input_pos(pos)
+            if (pos == buffer_len) {
+                __io_set_input_pos(0)
+                __io_set_input_len(0)
             }
             if (too_long == 0 && strip_cr != 0 && len != 0) {
                 if (line.data[len - 1] == 13) {
@@ -621,9 +427,9 @@ func stdin_line(ptr<std::String> out) -> int32 {
             }
             break
         }
-        if (__io_input_pos == __io_input_len) {
-            __io_input_pos = 0
-            __io_input_len = 0
+        if (pos == buffer_len) {
+            __io_set_input_pos(0)
+            __io_set_input_len(0)
         }
     }
     if (too_long != 0) {

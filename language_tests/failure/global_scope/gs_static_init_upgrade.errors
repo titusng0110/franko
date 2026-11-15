@@ -1,2 +1,1 @@
-initializer has type
-expected ptr<[uint8, 5]>
+Global variable initializer has type 'view<int32>', expected 'ptr<int32>'

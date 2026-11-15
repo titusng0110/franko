@@ -1727,18 +1727,6 @@ public final class DanglingPointerChecker {
         }
 
         private void invalidateForCall(SastNode call) {
-            for (int globalIndex = 0;
-                    globalIndex < context.globalVariableIds.length;
-                    globalIndex++) {
-                int pointerIndex = state.pointerIndexByVariableId(
-                        context.globalVariableIds[globalIndex]
-                );
-
-                if (pointerIndex >= 0) {
-                    state.setPointer(pointerIndex, originUnknown());
-                }
-            }
-
             for (int word = 0; word < addressTaken.length; word++) {
                 long bits = addressTaken[word];
 

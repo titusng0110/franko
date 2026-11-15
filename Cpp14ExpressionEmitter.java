@@ -4,6 +4,18 @@ import java.util.List;
 final class Cpp14ExpressionEmitter {
 
     private Cpp14Codegen owner;
+    private boolean staticInitializer;
+
+    String emitStaticInitializer(Cpp14Codegen owner, SastNode node) {
+        boolean saved = staticInitializer;
+        staticInitializer = true;
+
+        try {
+            return emitExpr(owner, node);
+        } finally {
+            staticInitializer = saved;
+        }
+    }
 
     String emitExpr(Cpp14Codegen owner, SastNode node) {
         this.owner = owner;
@@ -351,8 +363,15 @@ final class Cpp14ExpressionEmitter {
         String type = owner.emitType(node.type);
         StringBuilder sb = new StringBuilder();
 
-        sb.append("([&]() -> ").append(type).append(" { ");
-        sb.append(type).append(" _franko_literal; ");
+        sb.append("(")
+          .append(staticInitializer ? "[]" : "[&]")
+          .append("() -> ")
+          .append(type)
+          .append(" { ");
+        sb.append(type)
+          .append(" _franko_literal")
+          .append(staticInitializer ? "{}" : "")
+          .append("; ");
 
         for (SastNode init : node.fields) {
             sb.append("_franko_literal.")

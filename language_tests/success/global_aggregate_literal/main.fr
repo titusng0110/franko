@@ -1,0 +1,52 @@
+import "franko/stdio"
+
+// ============================================================
+// LANGUAGE TEST: Global Aggregate Literals
+// ============================================================
+// Covers: value-assignable struct/tuple globals, partial aggregate
+// literals, recursive zero/default filling, string/array view fields,
+// enum defaults, and namespaced globals.
+// ============================================================
+
+struct Inner {
+    int32 a = 5
+    view<int32> link
+}
+
+struct Outer {
+    int32 x
+    Inner inner
+    int32 y = 7
+    view<[byte, 5]> name
+}
+
+int32 G = 3
+
+Outer O = Outer { x = 1, name = "hello" }
+Outer P = Outer { x = 2, inner = Inner { a = 9 } }
+(int32, int32) T = (int32, int32) { 4 }
+
+namespace n {
+    Outer N = Outer { x = 11 }
+}
+
+func main() -> int32 {
+    stdout(O.x)                  // 1
+    stdout(O.inner.a)            // 5
+    stdout(O.y)                  // 7
+    stdout($(O.name)[0])         // 104
+    stdout(O.inner.link == null) // 1
+
+    stdout(P.inner.a)            // 9
+    stdout(P.y)                  // 7
+    stdout(P.name == null)       // 1
+
+    stdout(T._0)                 // 4
+    stdout(T._1)                 // 0
+
+    stdout(n::N.x)               // 11
+    stdout(n::N.inner.a)         // 5
+    stdout(n::N.y)               // 7
+
+    return 0
+}

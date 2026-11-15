@@ -43,7 +43,7 @@ For each pointer variable the compiler tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, a pointer parameter or global starts as maybe-null because the compiler cannot see the value it receives. Exceptions: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
+- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global pointer's state is known from its declaration: a global without a static initializer is null, and a global initialized from `getview`/a literal view is pointing. Calls do not change a global pointer's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
 ## 32.3 Dereference Checking
 
@@ -131,7 +131,7 @@ Current limitations of the pointer null-state check:
   values can, and a pointer held in a struct field, an array element, or
   behind a `$(...)` chain is not tracked;
 - view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
-- global null-state writes are not tracked across functions;
+- global pointer slots are immutable, so there is no global null-state write to track;
 - only one level of pointer-to-pointer writes is followed;
 - deeply nested conditions may reduce precision;
 - recursive or very deep call chains are handled conservatively, so some
@@ -242,19 +242,7 @@ as function bodies.
 ### 32.9.5 The Store Rule
 
 A pointer store is rejected when the stored value refers to current-frame
-storage and the target storage is caller-owned or global:
-
-```franko
-ptr<int32> global_p
-
-func bad() -> void {
-    int32 x
-    global_p = getptr(x)      // error: x dies with this frame
-    return
-}
-```
-
-The same rule applies to stores through a pointer parameter:
+storage and the target storage is caller-owned:
 
 ```franko
 func bad(ptr<ptr<int32>> out) -> void {
@@ -263,6 +251,10 @@ func bad(ptr<ptr<int32>> out) -> void {
     return
 }
 ```
+
+Globals are immutable, so a direct global store is rejected earlier by the
+const-storage rule. The dangling store rule remains relevant for caller-owned
+out-parameters.
 
 The diagnostic is:
 
@@ -283,7 +275,6 @@ The check intentionally does not detect:
 - view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
-- global dynamic-array lifecycle;
 - every loop-carried lifetime fact: loops are checked conservatively, so a
   pointer that becomes dangling only on a later iteration may be missed;
 - every escape through a recursive or very deep call chain.
@@ -344,13 +335,10 @@ It does not yet track:
 
 - dynamic arrays stored in struct fields;
 - individual elements of nested dynamic arrays below the outermost tracked
-  array;
-- global dynamic array variables.
+  array.
 
-Global owner pointer variables are not tracked. Assigning a tracked array to a
-global owner pointer marks that array escaped, so it is exempt from local
-missing-`uninit` warnings, but reads through the global pointer are not followed.
-Global dynamic array lifecycle is not tracked at all.
+Global variables cannot be dynamic arrays (they must be value-assignable), so
+there is no global dynamic-array lifecycle to track.
 
 Element pointers/views (`getptr`/`getmview`/`getview(d[i])`) refer to the
 element buffer. Whole-array `view<[T]>`/`mview<[T]>` values refer to the array
@@ -488,7 +476,6 @@ parameters are not diagnosed. The same applies to arrays reached through
 The check does not detect:
 
 - lifecycle misuse of struct-field or nested-element arrays;
-- lifecycle tracking for global dynamic arrays;
 - allocation failure of `init`/`init_zero` (the successful path is modeled);
 - every loop-carried lifecycle fact: loops are checked conservatively;
 - every effect of a recursive or very deep call chain;

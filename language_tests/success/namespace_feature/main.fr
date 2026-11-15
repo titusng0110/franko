@@ -59,11 +59,8 @@ func main() -> int32 {
     stdout(p.x)
     stdout(p.y)
 
-    // Qualified variable assignment and references.
+    // Qualified variable references.
     stdout(util::offset)
-    util::offset = 7
-    stdout(util::offset)
-    util::offset = 100
     stdout(util::double_it(10))
     stdout(util::make_point_sum())
 

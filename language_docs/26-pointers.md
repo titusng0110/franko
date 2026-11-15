@@ -66,6 +66,11 @@ This limits a const struct receiver to `view<X> self` methods.
 holding `p`: when `p` is a const `ptr<int32>`, `$(p) = 5` is valid and
 `p = ...` is not. See [Declarations](18-declarations.md#188-const-storage).
 
+Every global variable is implicitly const, so `getptr(global)` and
+`getmview(global)` are rejected; use `getview(global)` for read-only
+access. Taking a mutable pointer to a field or element of a global is
+rejected for the same reason.
+
 ## 26.2 Dereferencing with `$`
 
 If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then
@@ -332,7 +337,7 @@ The guarantee covers every pointer storage slot:
 - pointer elements of local static arrays;
 - pointer elements of initialized dynamic arrays, after `init`, `init_zero`, or a growing `resize`.
 
-A global static array is zero-initialized, so its pointer elements are null before `main` runs. The same rule applies recursively to pointer storage nested inside structs, tuples, and arrays.
+Global storage is statically initialized before `main`: pointer fields and pointer tuple elements are null, and pointer elements of value-assignable aggregates are null recursively. Global arrays do not exist, so no global array element storage is allocated.
 
 ### 26.9.2 Nullness Certification
 

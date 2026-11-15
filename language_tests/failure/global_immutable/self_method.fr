@@ -1,0 +1,14 @@
+struct Counter {
+    int32 value = 0
+
+    func add(mview<Counter> self, int32 amount) -> void {
+        $(self).value = $(self).value + amount
+    }
+}
+
+Counter counter
+
+func main() -> int32 {
+    counter.add(1)
+    return 0
+}

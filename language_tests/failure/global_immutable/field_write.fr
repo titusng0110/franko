@@ -1,0 +1,11 @@
+struct Point {
+    int32 x
+    int32 y
+}
+
+Point origin
+
+func main() -> int32 {
+    origin.x = 1
+    return 0
+}

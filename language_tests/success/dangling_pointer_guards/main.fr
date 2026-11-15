@@ -1,6 +1,4 @@
-[int32, 4] global_value
-
-func null_branch_is_safe(uint32 pick) -> ptr<int32> {
+func null_branch_is_safe(uint32 pick, ptr<int32> q) -> ptr<int32> {
     int32 x = 0
     ptr<int32> p
     if (pick != 0) {
@@ -11,7 +9,7 @@ func null_branch_is_safe(uint32 pick) -> ptr<int32> {
     if (p == null) {
         return p
     }
-    p = getptr(global_value[0])
+    p = q
     return p
 }
 
@@ -109,7 +107,7 @@ func loop_tail_is_ignored() -> ptr<int32> {
 
 func main() -> int32 {
     int32 z = 0
-    ptr<int32> a = null_branch_is_safe(0)
+    ptr<int32> a = null_branch_is_safe(0, getptr(z))
     ptr<int32> b = infeasible_branch_is_ignored()
     ptr<int32> c = loop_exit_is_null()
     ptr<int32> d = null_guard_is_infeasible()

@@ -389,9 +389,9 @@ expressions (an array literal is a `view<[T, N]>` value, §4.13). Aggregate
 literals are ordinary expressions but are constrained to specific
 value-consuming contexts during semantic analysis (§4.26).
 Global initializers parse a full expression; semantic analysis accepts a
-`constExpr`, a string expression, an array literal, a
-`getptr`/`getmview`/`getview` over a global, or `null`, and rejects runtime
-expressions. `varDecl` carries a parse-time guard that reports
+`constExpr`, an enum variant, a string expression, an array literal,
+`getview` over a global, `null`, or a static struct/tuple aggregate literal,
+and rejects runtime expressions. `varDecl` carries a parse-time guard that reports
 `unexpected '(' after variable declaration` when the declarator is followed
 by `(`; without it, the parser would split the suffix into a separate
 parenthesized expression statement.
@@ -731,10 +731,9 @@ String-literal arguments of any `#` call are deliberately **not**
 hoisted, so `CompileTimeIntrinsics` can inspect the literal text; nested
 compile-time producers such as `#what_type` stay evaluable as
 compile-time values while analyzing the call. Global initializers pass
-through the statically
-representable forms (`null`, `getptr`/`getmview`/`getview` over a global,
-string expressions, an array literal) and reject everything else, including
-global aggregate literals. Error-recovery style: it accumulates diagnostics in
+through the static forms (`null`, `getview` over a global, enum variants,
+string expressions, array literals, and struct/tuple aggregate literals)
+and reject everything else. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure); `Frontend`/`Main` check
 the returned diagnostics. Private control-flow signal: `InferenceFailure`
 (a `RuntimeException`) for `?`-size failures, converted to a diagnostic.
@@ -787,7 +786,6 @@ A module sidecar named `<stem>.module.json` describes the module’s bridged
   "functions": [
     {"namespace": "os::posix", "name": "read"},
     {"namespace": "os::posix", "name": "write"},
-    {"namespace": "os::win32", "name": "GetStdHandle"},
     {"namespace": "os::win32", "name": "ReadFile"},
     {"namespace": "os::win32", "name": "WriteFile"}
   ]
@@ -906,6 +904,13 @@ literals whose fields recursively satisfy the same forms. Anything else is a
 declaration-site error; recovery stores a type-correct fallback default so
 later call lowering can continue.
 
+Global initializers use `canonicalizeGlobalInitializer`, the same static-value
+machinery with global-only extensions: `getview` over global storage is a
+valid read-only address, tuple aggregate literals are accepted, and omitted
+aggregate fields are recursively synthesized from field defaults and type
+defaults (`0`, `null`, first enum variant). The full aggregate is then emitted
+with a no-capture lambda in codegen.
+
 Assignment statements to struct-typed targets are first offered to
 `ExpressionAnalyzer.tryLowerOperatorAssignment`, which lowers them to an
 ordinary `SastNode` when an `OPERATOR_*MOV` overload
@@ -930,10 +935,11 @@ the `ExpressionLowering` coordinator (constructed with the shared `SymbolTable`
 + `ConstExpressionEvaluator`; it builds the `ExpressionAnalyzer`,
 `ArrayLowerer`, `ArrayLiteralLowerer`, and `SemanticTypeResolver` and wires
 them together).
-Globals additionally accept the statically representable initializers
-(`null`, `getptr`/`getmview`/`getview` over a global, a constant array
-literal) and carry the UTF-8
-payload of hoisted string-literal globals on `Symbol`. It
+Globals are registered with `isConst = true`. They additionally accept the
+static initializers (`null`, `getview` over a global, enum variants, constant
+array literals, string expressions, and static struct/tuple aggregate
+literals), canonicalize them through the global initializer path, and carry
+the UTF-8 payload of hoisted string-literal globals on `Symbol`. It
 also owns array-literal hoisting (`hoistArrayLiteralGlobal`, wired into
 `ArrayLiteralLowerer` through the concrete `ArrayLiteralHoister` class): each distinct
 (element type, values) pair becomes one `ARRLIT_<hash>` global registered in
@@ -1054,8 +1060,8 @@ User-written `getptr`/`getmview`/`getview` never set the flag. `CAST` has a
 `checked` flag: `false` → plain `static_cast` (`cast`), `true` → runtime-checked
 `franko_integer_unsafe_cast` (`unsafe_cast`). `VAR_DECL` carries either a
 folded `BigInteger` `foldedConstInitializer` (primitive globals) or a
-`staticInitializer` expression (pointer globals initialized with a statically
-representable address). `AGGREGATE_LITERAL` carries the resolved struct/tuple
+`staticInitializer` expression (pointer globals, enum variants, string/array
+views, or struct/tuple aggregate literals initialized from static values). `AGGREGATE_LITERAL` carries the resolved struct/tuple
 type plus ordered field/value entries, preserving source order for evaluation
 and codegen; it is never an lvalue.
 
@@ -1612,6 +1618,10 @@ value-assignable types`), and an uninitialized local const whose type is not
 fully default-initialized warns (`Const variable '…' has no initializer and
 type '…' is not fully default-initialized`); parameters and globals never get
 the rule-4 warning because they are initialized before the body runs.
+Every source global is implicitly const and additionally runs a
+global-specific value-assignability check (arrays and pointer-only aggregates
+are rejected with a global-variable diagnostic); internal literal-backed
+globals are exempt.
 It also requires static array sizes to be constant, positive, and fit `uint32` (zero is
 rejected — the backend emits `T data[N]`), struct field graphs must not have
 infinite-size **by-value** cycles (cycle detection via `StructWalkState`;
@@ -1620,11 +1630,13 @@ path is intentionally reset when descending through dynamic array
 elements because those live behind a pointer), method names must not collide
 with field names, and folded const initializers/field defaults must fit their
 primitive type. Synthetic tuple struct declarations (`StructSymbol.isTuple`)
-are skipped: the tuple is validated at its real use sites. Pointer globals
-initialized with a statically representable
-address (`getptr`/`getmview`/`getview` over a global) are validated here:
-the initializer must be a pointer type match or pointer conversion
-(permission downgrade or array-view decay).
+are skipped: the tuple is validated at its real use sites. Global static
+initializers are validated by kind: pointer initializers must be a pointer
+type match or pointer conversion (permission downgrade or array-view decay);
+enum initializers must be the exact enum variant; struct/tuple initializers
+must be aggregate literals of the declared type and are checked field by
+field through `ExpressionChecker`; primitive globals use
+`foldedConstInitializer`.
 
 #### `StatementChecker`
 Statement-level legality: assignment targets must be storage-backed lvalues
@@ -1632,8 +1644,10 @@ Statement-level legality: assignment targets must be storage-backed lvalues
 storage — stronger than `SastNode.isLValue()`), non-void LHS, exact/
 fitting RHS per `TypeChecker.ensureAssignable` (pointer conversions
 allowed). An ordinary assignment rejects const storage by resolving
-`node.target.storageSymbol()` (`Cannot assign to const variable 'x'`), which
-covers variables, members, and array elements but not `$(p)` pointees.
+`node.target.storageSymbol()` (`Cannot assign to const variable 'x'` for
+locals and `Cannot assign to global variable 'x'` for implicitly-const
+globals), which covers variables, members, and array elements but not
+`$(p)` pointees.
 `VAR_DECL_INIT` is checked by reusing the assignment path with
 `declarationInitializer = true`, which skips only that const-target rejection;
 all storage, region, void, assignability, and compound rules still run.
@@ -1675,7 +1689,8 @@ legality (`getptr`/`getmview`/`getview` need an equally strong storage
 region, §4.9), deref legality, and void-in-value-context rules. A non-read-only
 creation intrinsic over const storage is rejected via
 `node.target.storageSymbol()` (`Cannot create a mutable pointer to const
-variable 'x'; const storage only allows getview(...)`); `getview` is allowed.
+variable 'x'; const storage only allows getview(...)` for locals, and the
+global-specific read-only message for globals); `getview` is allowed.
 This also enforces the const-receiver rule: a `ptr<X> self`/`mview<X> self`
 method call synthesizes `getptr`/`getmview(receiver)` and is rejected, while a
 `view<X> self` method synthesizes `getview(receiver)` and is allowed. A
@@ -2031,11 +2046,15 @@ interprocedural call-site diagnostics.
 {PARAM_POINTEE_VALUE(i, ANY)}`, and `symCell = {PARAM_CELL(i)}`. A method
 `self` parameter and the args-form `main` parameter (a free function named
 `main` in the global namespace with exactly one parameter) instead start with
-`NONNULL` value, `UNKNOWN` pointee, and an empty cell set. Pointer globals start
-`UNKNOWN`/`UNKNOWN` with an empty cell set. Pointer declarations start
-`symValue = {NULL}` with empty pointee and cell sets. The check pass seeds
-parameters and globals `MAYBE_NULL` (self and args-form `main` `POINTING`) and
-declarations `NULL`, with empty cell targets.
+`NONNULL` value, `UNKNOWN` pointee, and an empty cell set. Pointer globals are
+seeded from their global declaration: a static `GET_PTR` initializer starts
+`NONNULL`, and a global without a static initializer starts `NULL`. The check
+pass uses the matching concrete state (`POINTING`/`NULL`) for such globals.
+Calls do not invalidate global pointers because globals are implicitly const
+and cannot be assigned. Pointer declarations start `symValue = {NULL}` with
+empty pointee and cell sets. The check pass seeds parameters `MAYBE_NULL`
+(self and args-form `main` `POINTING`) and declarations `NULL`, with empty cell
+targets.
 
 **Transfers.** Direct pointer assignment copies the RHS value, pointee, and cell
 template sets (check pass: value state and concrete cell targets). Compound
@@ -2145,7 +2164,8 @@ pointee `{UNKNOWN}`, and cell `{LOCAL(paramVariable)}`. Pointer globals start
 `UNKNOWN`/`UNKNOWN` with an empty cell set; pointer declarations start
 `NULL`/empty/empty. The check pass seeds ordinary pointer parameters and globals
 `UNKNOWN`, declarations `EMPTY`, and the operator `other` parameter
-`FRAME(parameterVariable)`.
+`FRAME(parameterVariable)`. Calls do not havoc global pointers because global
+slots are immutable.
 
 **Summary stores and captures.** `checkAssign` handles only non-compound
 assignments whose target type is a pointer, after checking both target and value
@@ -2303,7 +2323,8 @@ seeded `INITED` and `UNINITED`, merging the two diagnostic sets.
 `POST_UNCHANGED`. Pointer globals start with `symAlias = {UNKNOWN}`. In the
 check pass, owner-array parameters start with empty owner origins plus the
 unknown-owner flag, every pointer parameter starts with no alias, global owner
-pointers start unknown, and global pointer aliases are cleared.
+pointers start unknown, and global pointer aliases are cleared. Globals cannot
+be arrays, so there is no global array lifecycle to model.
 
 **Declarations and assignments.** A local dynamic-array declaration resets
 `UNINITED`/`FREED_NEVER`, clears escaped, and zeroes both epochs. An owner
@@ -2848,7 +2869,10 @@ operators, array access, function calls, array intrinsics, aggregate
 literals, `getptr`, deref, casts, and member access. An aggregate literal
 emits an immediately invoked C++14 lambda:
 `([&]() -> T { T _franko_literal; _franko_literal.field = ...; return
-_franko_literal; }())`. Default construction applies NSDMIs and null pointer
+_franko_literal; }())` for ordinary expressions. Global initializers use a
+no-capture `[]` lambda and value-initialize the temporary (`T
+_franko_literal{};`), because C++ forbids a capture-default at namespace
+scope. Default construction applies NSDMIs and null pointer
 fields exactly like a local declaration, named fields are assigned in source
 order, empty literals need no special case, and nested literals become
 nested lambdas; each value goes through `emitAsType` against the field type.
@@ -3343,6 +3367,14 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   declarations. Struct and tuple parameters/returns are outside the current
   bridge prelude model; bridged signatures should use primitive or pointer
   types.
+- The bundled `franko/stdio` module uses the same mechanism for its internal
+  formatting/byte-write/input functions. Its public overload set stays in
+  Franko so `std::String` adapters do not cross the bridge; the FFI names are
+  internal (`__io_*`) to keep every descriptor entry unique.
+- `franko/os` reserves standard streams: `os::posix::read`/`write` abort on
+  fd 0/1/2, and `os::win32::ReadFile`/`WriteFile` abort on the standard
+  handles. `GetStdHandle` and the standard fd/handle constants are not
+  exposed.
 - Bridge ABI: a thin pointer parameter or return (`ptr<T>`, `mview<T>`, or
   `view<T>` whose pointee is not an array) is `Franko_Thin_Pointer<T>` in
   the C++ bridge; use `.data` for the raw pointer and null checks. A
@@ -3579,9 +3611,11 @@ exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because
 decimal literals in C++14 do not fall back to unsigned integer types.
 
 **Output.** There is no builtin output statement: output is provided by the
-`franko/stdio` library, whose overloaded `stdout(...)` functions write through
-the `franko/os` bridge (`os::posix::write` / `os::win32::WriteFile`).
-Generated C++ contains no `std::cout` insertions.
+`franko/stdio` library. Integer formatting and byte-view writes are bridged
+by `stdio.ffi.cpp`, which writes directly to the standard output/error
+streams. `franko/os` reserves standard fds/handles and aborts if user code
+passes one to its read/write bridge. Generated C++ contains no `std::cout`
+insertions.
 
 **Mangling key spelling.** The 8-hex-digit suffix is the low 32 bits of the
 64-bit FNV-1a hash of the canonical signature key: declared parameter types in order
@@ -3685,8 +3719,9 @@ is known, and is re-lowered with the selected parameter type. Remaining ties
 are ambiguity errors.
 
 **Globals.** A pointer-typed global may take a constant array literal through
-the same hoisting path; an array-typed global is rejected with the memcpy
-suggestion (§4.10 parity).
+the same hoisting path. Array-typed globals are rejected because globals must
+be value-assignable; a struct/tuple aggregate global may contain a `view` field
+initialized from a constant array literal.
 
 ## 4.14 Dangling-pointer model (DanglingPointerChecker)
 The origin lattice, liveness, store/return rules, summaries, and guards are
@@ -4043,8 +4078,8 @@ Deliberately out of scope:
   cannot be stored in aggregates);
 - full field-sensitive tracking of struct fields;
 - nested dynamic-array path tracking below the outermost tracked array;
-- global dynamic-array lifecycle tracking;
-- global null-state writes (calls instead havoc pointer globals);
+- global null-state writes (calls instead havoc pointer globals); globals
+  cannot be arrays, so global dynamic-array lifecycle is not expressible;
 - FFI resource leaks;
 - deeper-than-one-level pointer-cell aliasing;
 - taint/sensitive-data analysis;
@@ -4109,7 +4144,17 @@ resolved type (field defaults and null pointer fields apply), assigns entries
 in source order through `emitAsType`, and returns the value. Nested literals
 become nested lambdas. Construction never invokes `OPERATOR_MOV`, and no
 runtime header support is required. The language-facing rules are in
-`29-aggregate-literals.md`.
+`30-aggregate-literals.md`.
+
+**Global aggregate initializers.** A struct/tuple aggregate literal may
+initialize a global. `SemanticAnalyzer.canonicalizeGlobalInitializer` accepts
+only static entries (`getview` of a global, enum variants, `null`, compile-time
+strings, array literals, and nested aggregate literals), and recursively
+fills omitted fields from `FieldSymbol.foldedDefault` / type defaults.
+`Cpp14Codegen.emitVarDecl` emits the initializer through
+`Cpp14ExpressionEmitter.emitStaticInitializer`, which selects a no-capture
+lambda and value-initializes the temporary. Globals without an explicit
+aggregate initializer emit `= {}`, matching the zero/default guarantee.
 
 **Field-wise declaration initializers.** `AstKind.VAR_DECL_FIELDS_INIT`
 survives desugaring and is lowered to `SastKind.VAR_DECL_INIT` with one
@@ -4184,8 +4229,10 @@ The language rules for `const` live in `18-declarations.md`; this section
 records how the compiler represents and checks them.
 
 **Representation.** `const` is a compiler-only storage modifier on locals,
-parameters, and globals. `AstNode.isConst` is populated by
-`FrankoASTVisitor`; `Symbol.isConst` is populated by `SemanticAnalyzer` and
+parameters, and globals. Source globals are registered with `isConst = true`
+whether or not the keyword was written; the keyword is optional and
+redundant there. `AstNode.isConst` is populated by `FrankoASTVisitor`;
+`Symbol.isConst` is populated by `SemanticAnalyzer` and
 `DeclarationSelector`. The flag is not part of `SastType`, signature keys,
 mangling, `#what_type`, or generated C++. `ASTSerializer`/`SastSerializer`
 emit optional `"const": true` and accept its absence for backward
@@ -4195,16 +4242,19 @@ the Desugarer can report the field error and continue recovery.
 
 **Checks.** `DeclarationChecker.checkVarDecl` validates the declared type with
 `TypeChecker.isValueAssignableType` and emits the local-only
-`isFullyDefaultInitialized` warning. `StatementChecker` rejects ordinary
-assignments whose `target.storageSymbol()` is const; the same path checks
-`VAR_DECL_INIT` with `declarationInitializer = true`, which skips only the
-const-target rejection. `storageSymbol()` recurses through member/index
-accesses and returns `null` through a `DEREF`. `ExpressionChecker.visitGetPtr`
-rejects non-READ_ONLY creation intrinsics over const storage, which also
-covers `ptr`/`mview` method receivers. Every method's `self` parameter symbol
-is built const regardless of source spelling. `ExpressionAnalyzer` skips
-operator-assignment lowering for a const target so `StatementChecker` owns the
-diagnostic.
+`isFullyDefaultInitialized` warning. Globals additionally run the
+global-specific value-assignability check and reject arrays and pointer-only
+aggregates; generated literal globals are exempt. `StatementChecker` rejects
+ordinary assignments whose `target.storageSymbol()` is const, using the
+const-variable message for locals and the global-variable message for globals;
+the same path checks `VAR_DECL_INIT` with `declarationInitializer = true`,
+which skips only the const-target rejection. `storageSymbol()` recurses
+through member/index accesses and returns `null` through a `DEREF`.
+`ExpressionChecker.visitGetPtr` rejects non-READ_ONLY creation intrinsics over
+const storage, which also covers `ptr`/`mview` method receivers. Every
+method's `self` parameter symbol is built const regardless of source spelling.
+`ExpressionAnalyzer` skips operator-assignment lowering for a const target so
+`StatementChecker` owns the diagnostic.
 
 **Declaration initialization.** Plain and field-wise forms lower to one
 `SastKind.VAR_DECL_INIT` with internal `ASSIGN`/`EXPR_STMT` entries; a const
@@ -4355,7 +4405,18 @@ language_tests/success/aggregate_literals_contexts/
 language_tests/success/aggregate_literals_operator_mov/
 language_tests/success/aggregate_literals_pointer_only/
 language_tests/success/aggregate_literals_memory/
+language_tests/success/global_aggregate_literal/
 language_tests/failure/aggregate_literals/
+```
+
+Immutable-global fixtures:
+
+```text
+language_tests/success/global_implicit_const/
+language_tests/success/global_static_init/
+language_tests/success/global_zero_init/
+language_tests/failure/global_immutable/
+language_tests/failure/global_scope/
 ```
 
 Empty string/array literal fixture:
@@ -4544,6 +4605,8 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§3.3) |
 | Change dense IDs / call graph / block locals | `MemoryAnalysisContext` + `MemoryCallGraph` |
 | Change the shared branch/loop traversal | `MemoryDataflowDriver` |
+| Change global variable rules | `SemanticAnalyzer` (implicit const + `canonicalizeGlobalInitializer`/`completeAggregateFields`) + `DeclarationSelector` + `Desugarer` + `DeclarationChecker` + `StatementChecker`/`ExpressionChecker` diagnostics + `Cpp14Codegen.emitVarDecl`/`Cpp14ExpressionEmitter.emitStaticInitializer` + §4.26/§4.28 |
+| Change stdio or os standard-stream policy | `import/franko/stdio.fr`/`stdio.module.json`/`stdio.ffi.cpp` + `import/franko/os.fr`/`os.module.json`/`os.ffi.cpp` + `FfiHandler` verification + library docs |
 | Add or change named/optional arguments | `Franko.g4` (`parameterDefault`/`argument`) + `FrankoASTVisitor` + `AstNode` (`defaultValue`/`argumentNames`) + `ASTSerializer` + `AstRewriter` + `Desugarer` + `GenericsResolver` + `Symbol.parameterDefault` + `SemanticAnalyzer.resolveParameterDefaults`/`canonicalizeStaticDefault` + §4.32 |
 | Change argument binding or the no-default preference | `OverloadResolution.bindArguments`/`describeBindingProblem`/`preferFewestDefaultFills` + `SymbolTable` resolution + `CallArg.name` |
 | Insert defaults into semantic calls | `ExpressionAnalyzer.lowerCallArgs`/`finalizeCallArgs` + `SastNode.copyStaticDefault` + §4.32 |

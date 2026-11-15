@@ -23,6 +23,10 @@ Arrays may be nested:
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
+Arrays cannot be **global variables**. Globals are implicitly const and must
+be value-assignable; declare arrays inside a function and pass them through
+`ptr`/`mview`/`view` when they need to outlive a call.
+
 However, Franko supports **array literals** as `view<[T, N]>` values over immutable constant storage; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 21.1 Static Arrays

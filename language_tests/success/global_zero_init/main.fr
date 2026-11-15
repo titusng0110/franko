@@ -3,19 +3,28 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Global zero-initialization
 // ============================================================
-// Covers: uninitialized globals are statically allocated and
-// zero-initialized before main runs (primitives and static arrays).
+// Covers: uninitialized value-assignable globals are statically
+// allocated and zero/default-initialized before main runs.
 // ============================================================
+
+struct Zero {
+    int32 a
+    int32 b
+    int32 c
+    int32 d
+    view<int32> link
+}
 
 int32 gz
 
-[int32, 4] garr
+Zero gz_struct
 
 func main() -> int32 {
     stdout(gz)
-    stdout(garr[0])
-    stdout(garr[1])
-    stdout(garr[2])
-    stdout(garr[3])
+    stdout(gz_struct.a)
+    stdout(gz_struct.b)
+    stdout(gz_struct.c)
+    stdout(gz_struct.d)
+    stdout(gz_struct.link == null)
     return 0
 }

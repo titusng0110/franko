@@ -84,8 +84,8 @@ from `getptr`/`getmview`/`getview(d[i])` are diagnosed when a
 `resize`/`uninit` invalidates them; owner pointers and whole-array views point
 at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
-outermost tracked array, global dynamic-array lifecycle, allocation failure
-status, or all runtime bounds properties. See
+outermost tracked array, allocation failure status, or all runtime bounds
+properties. Globals cannot be dynamic arrays. See
 [Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 
 ## 36.10 Pointer Lifetime Is Not Fully Tracked
@@ -118,7 +118,7 @@ The unary plus operator does not exist in the language:
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](16-assignment.md)).
 
-Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. Global variables are always implicitly const. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
 
 ## 36.13 String Literals Cannot Initialize Arrays
 
@@ -160,7 +160,7 @@ Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. 
 
 Only struct declarations, global variable declarations, function declarations, namespace declarations, imports, and `#if` declaration conditionals are valid at global scope.
 
-Executable statements are invalid at global scope. Aggregate literals and field-wise declaration initializers are local-only; global aggregate initializers are rejected. See [Aggregate Literals](30-aggregate-literals.md).
+Executable statements are invalid at global scope. Global variables are implicitly const and must be value-assignable, so arrays and pointer-only aggregates cannot be global. Static struct/tuple aggregate literals may initialize globals; field-wise declaration initializers remain local-only. See [Aggregate Literals](30-aggregate-literals.md) and [Declarations](18-declarations.md#184-global-variable-declarations).
 
 ## 36.16 No C-Style Casts, Ternary, or Multiple Declarators
 

@@ -37,6 +37,8 @@ namespace util {
 
 A namespace body may contain struct declarations, global variable declarations, function declarations, nested namespace declarations, and `#if` declaration conditionals. Imports and executable statements are not allowed inside a namespace body.
 
+Variables declared at program scope and variables declared inside a namespace body are both **globals** for all language rules. A namespace only changes the qualified name; it does not change mutability, initialization, or type validity. Every global is implicitly `const`, read-only after initialization, and must have a value-assignable type (see [Declarations](18-declarations.md#184-global-variable-declarations)).
+
 Nested namespaces may be written in two equivalent forms:
 
 ```franko
@@ -65,7 +67,7 @@ Namespace members are referenced with `::`:
 
 ```franko
 util::Point p
-util::offset = 5
+int32 offset = util::offset
 a::b::helper(x)
 ```
 

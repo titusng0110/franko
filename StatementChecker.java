@@ -111,12 +111,22 @@ public class StatementChecker {
         if (!declarationInitializer
                 && storage != null
                 && storage.isConst) {
-            diagnostics.error("Cannot assign to const variable '"
-                    + storage.name
-                    + "'"
-                    + ". Const variables cannot be mutated after their"
-                    + " initial value is set. Remove const from the"
-                    + " declaration or assign to a mutable copy.");
+            if (storage.kind == SymbolKind.GLOBAL) {
+                diagnostics.error("Cannot assign to global variable '"
+                        + storage.name
+                        + "'. Global variables are implicitly const and"
+                        + " read-only after initialization, so they cannot"
+                        + " be mutated by any function. Keep mutable state"
+                        + " in a local variable, pass it through a pointer,"
+                        + " or return the new value instead.");
+            } else {
+                diagnostics.error("Cannot assign to const variable '"
+                        + storage.name
+                        + "'"
+                        + ". Const variables cannot be mutated after their"
+                        + " initial value is set. Remove const from the"
+                        + " declaration or assign to a mutable copy.");
+            }
         }
 
         if (!isStorageBackedLValue(node.target)) {

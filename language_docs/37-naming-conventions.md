@@ -25,7 +25,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Field | `lower_case_snake_case` | `capacity`, `next_index` |
 | Private field | `_` + `lower_case_snake_case` | `_secret_field`, `_capacity` |
 | Namespace | short, lowercase, no underscores | `bignum`, `os`, `win32` |
-| Constant | `ALL_CAPS_WITH_UNDERSCORES` | `IS_WINDOWS`, `STDOUT_FILENO` |
+| Constant | `ALL_CAPS_WITH_UNDERSCORES` | `IS_WINDOWS`, `CLOCK_REALTIME` |
 | Private member constant | `_` + `ALL_CAPS_WITH_UNDERSCORES` | `_END`, `_ALLOCATED` |
 | Internal constant | `__` + `ALL_CAPS_WITH_UNDERSCORES` | `__SECRET_CONSTANT` |
 
@@ -95,7 +95,6 @@ preserves the platform API spelling, even when that is not snake case. The
 namespace remains lowercase and underscore-free:
 
 ```franko
-os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
 os::win32::ReadFile(...)
 os::win32::WriteFile(...)
 ```
@@ -167,7 +166,7 @@ casing, but `const int32 MAX_SIZE = 10` is the recommended style:
 
 ```franko
 byte IS_WINDOWS = 0
-int32 STDOUT_FILENO = 1
+int32 MAX_SIZE = 10
 ```
 
 A constant that belongs to a private member scope uses the single-underscore

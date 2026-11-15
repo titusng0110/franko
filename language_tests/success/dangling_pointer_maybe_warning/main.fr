@@ -1,17 +1,16 @@
-[int32, 4] global_value
-
-func maybe(uint32 pick) -> ptr<int32> {
+func maybe(uint32 pick, ptr<int32> q) -> ptr<int32> {
     int32 x = 0
     ptr<int32> p
     if (pick != 0) {
         p = getptr(x)
     } else {
-        p = getptr(global_value[0])
+        p = q
     }
     return p
 }
 
 func main() -> int32 {
-    ptr<int32> p = maybe(0)
+    int32 z = 0
+    ptr<int32> p = maybe(0, getptr(z))
     return 0
 }

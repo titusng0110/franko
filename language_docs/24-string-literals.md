@@ -162,7 +162,8 @@ func main() -> int32 {
 }
 ```
 
-A non-pointer global cannot hold a string view.
+The global is implicitly const and the view is read-only. A non-pointer
+global cannot hold a string view; global variables must be value-assignable.
 
 ## 24.7 Empty Strings
 

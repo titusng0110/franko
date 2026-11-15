@@ -328,6 +328,8 @@ public final class SemanticAnalyzer {
                 new IdentityHashMap<>();
         Map<AstNode, AstNode> globalArrayLiteralInitializers =
                 new IdentityHashMap<>();
+        Map<AstNode, AstNode> globalAggregateInitializers =
+                new IdentityHashMap<>();
 
         Map<AstNode, SastNode> loweredByNode = new IdentityHashMap<>();
 
@@ -436,7 +438,7 @@ public final class SemanticAnalyzer {
                         currentNamespaceName(),
                         item.name,
                         type,
-                        item.isConst
+                        true
                 );
 
                 if (item.literalBytes != null) {
@@ -453,7 +455,13 @@ public final class SemanticAnalyzer {
 
                 if (item.value != null && item.value.kind == AstKind.ARRAY_LITERAL) {
                     globalArrayLiteralInitializers.put(item, item.value);
+                } else if (item.value != null
+                        && item.value.kind == AstKind.AGGREGATE_LITERAL) {
+                    globalAggregateInitializers.put(item, item.value);
                 } else if (item.value != null && item.value.kind == AstKind.GET_PTR) {
+                    globalStaticInitializers.put(item, item.value);
+                } else if (item.value != null
+                        && item.value.kind == AstKind.QUALIFIED_NAME) {
                     globalStaticInitializers.put(item, item.value);
                 } else if (item.value != null
                         && StringLiteralFolder.isStringExpression(item.value)) {
@@ -542,20 +550,45 @@ public final class SemanticAnalyzer {
                     if (sym != null) {
                         AstNode staticInit = globalStaticInitializers.get(item);
 
-                        SastNode loweredStaticInit = staticInit == null
-                                ? null
-                                : exprAnalyzer.analyzeExprWithExpectedType(
-                                        staticInit,
-                                        sym.type);
+                        SastNode loweredStaticInit = null;
+
+                        if (staticInit != null) {
+                            loweredStaticInit =
+                                    canonicalizeGlobalInitializer(
+                                            exprAnalyzer.analyzeExprWithExpectedType(
+                                                    staticInit,
+                                                    sym.type),
+                                            sym.type,
+                                            staticInit.span
+                                    );
+                        }
 
                         AstNode arrayLiteralInit =
                                 globalArrayLiteralInitializers.get(item);
 
                         if (arrayLiteralInit != null) {
                             loweredStaticInit =
-                                    exprAnalyzer.analyzeExprWithExpectedType(
-                                            arrayLiteralInit,
-                                            sym.type);
+                                    canonicalizeGlobalInitializer(
+                                            exprAnalyzer.analyzeExprWithExpectedType(
+                                                    arrayLiteralInit,
+                                                    sym.type),
+                                            sym.type,
+                                            arrayLiteralInit.span
+                                    );
+                        }
+
+                        AstNode aggregateInit =
+                                globalAggregateInitializers.get(item);
+
+                        if (aggregateInit != null) {
+                            loweredStaticInit =
+                                    canonicalizeGlobalInitializer(
+                                            exprAnalyzer.analyzeExprWithExpectedType(
+                                                    aggregateInit,
+                                                    sym.type),
+                                            sym.type,
+                                            aggregateInit.span
+                                    );
                         }
 
                         if (loweredStaticInit != null
@@ -1054,7 +1087,8 @@ public final class SemanticAnalyzer {
                 value,
                 parameter.type,
                 where,
-                span
+                span,
+                false
         );
 
         if (canonical == null) {
@@ -1081,7 +1115,8 @@ public final class SemanticAnalyzer {
             SastNode value,
             SastType expectedType,
             String where,
-            SourceSpan span
+            SourceSpan span,
+            boolean globalContext
     ) {
         if (value == null) {
             symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
@@ -1168,16 +1203,35 @@ public final class SemanticAnalyzer {
                 );
             }
 
+            if (globalContext
+                    && value.type != null
+                    && value.type.kind == SastTypeKind.PTR
+                    && PointerPermissions.pointerPermission(value.type)
+                            == PtrPermission.READ_ONLY
+                    && value.target != null
+                    && isGlobalStorageTarget(value.target)) {
+                return SastNode.getPtr(
+                        value.span,
+                        value.type,
+                        value.target,
+                        value.temporary
+                );
+            }
+
             symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
             return null;
         }
 
         if (value.kind == SastKind.AGGREGATE_LITERAL) {
-            if (value.type == null
-                    || value.type.kind != SastTypeKind.STRUCT
-                    || !typeChecker.isValueAssignableType(value.type)) {
+            boolean aggregateAllowed = value.type != null
+                    && (value.type.kind == SastTypeKind.STRUCT
+                        || (globalContext
+                            && value.type.kind == SastTypeKind.TUPLE))
+                    && typeChecker.isValueAssignableType(value.type);
+
+            if (!aggregateAllowed) {
                 symbolTable.error(where
-                        + " must be a value-assignable struct literal. Static defaults are stored by value, so the literal's struct cannot contain owning pointers or other non-copyable fields. Use a literal of a value-assignable struct or initialize the value at runtime.");
+                        + " must be a value-assignable struct or tuple literal. Static defaults and global initializers are stored by value, so the literal's aggregate cannot contain arrays or other non-copyable fields. Use a literal of a value-assignable aggregate or initialize the value at runtime.");
                 return null;
             }
 
@@ -1193,10 +1247,11 @@ public final class SemanticAnalyzer {
                 SastNode fieldValue = canonicalStaticValue(
                         fieldInit.value,
                         fieldInit.field.type,
-                        "Default aggregate literal field '"
+                        "Aggregate literal field '"
                                 + fieldInit.field.name
                                 + "'",
-                        span
+                        span,
+                        globalContext
                 );
 
                 if (fieldValue == null) {
@@ -1209,6 +1264,10 @@ public final class SemanticAnalyzer {
                 ));
             }
 
+            if (globalContext) {
+                fields = completeAggregateFields(value.type, fields, value.span);
+            }
+
             return SastNode.aggregateLiteral(
                     value.span,
                     value.type,
@@ -1218,6 +1277,164 @@ public final class SemanticAnalyzer {
 
         symbolTable.error(where + " must be a compile-time value. Franko stores static defaults in the compiled declaration and cannot evaluate runtime expressions there. Replace it with a literal, named constant, enum variant, or constant expression.");
         return null;
+    }
+
+    private static boolean isGlobalStorageTarget(SastNode target) {
+        if (target == null) {
+            return false;
+        }
+
+        Symbol storage = target.storageSymbol();
+
+        return storage != null && storage.kind == SymbolKind.GLOBAL;
+    }
+
+    private List<SastNode> completeAggregateFields(
+            SastType type,
+            List<SastNode> explicit,
+            SourceSpan span
+    ) {
+        Set<FieldSymbol> seen = new HashSet<>();
+        List<SastNode> out = new ArrayList<>(explicit);
+
+        for (SastNode fieldInit : explicit) {
+            if (fieldInit.field != null) {
+                seen.add(fieldInit.field);
+            }
+        }
+
+        for (FieldSymbol field : aggregateFields(type)) {
+            if (seen.contains(field)) {
+                continue;
+            }
+
+            SastNode value = defaultGlobalFieldValue(
+                    field.type,
+                    field.foldedDefault,
+                    span
+            );
+
+            if (value == null) {
+                symbolTable.error("Global aggregate field '"
+                        + field.name
+                        + "' has type '"
+                        + typeChecker.describeSafe(field.type)
+                        + "', which has no static default value. Global aggregate literals can only contain value-assignable fields. Initialize the field explicitly or move the aggregate into a function.");
+                return out;
+            }
+
+            out.add(SastNode.aggregateFieldInit(field, value));
+        }
+
+        return out;
+    }
+
+    private List<FieldSymbol> aggregateFields(SastType type) {
+        if (type == null) {
+            return List.of();
+        }
+
+        if (type.kind == SastTypeKind.STRUCT && type.structSymbol != null) {
+            return type.structSymbol.fields;
+        }
+
+        if (type.kind == SastTypeKind.TUPLE) {
+            return type.fields;
+        }
+
+        return List.of();
+    }
+
+    private SastNode defaultGlobalFieldValue(
+            SastType type,
+            BigInteger foldedDefault,
+            SourceSpan span
+    ) {
+        if (type == null) {
+            return null;
+        }
+
+        if (type.kind == SastTypeKind.PRIMITIVE) {
+            BigInteger value = foldedDefault == null
+                    ? BigInteger.ZERO
+                    : foldedDefault;
+
+            return SastNode.intLiteral(
+                    span,
+                    type,
+                    value,
+                    value.toString(10)
+            );
+        }
+
+        if (type.kind == SastTypeKind.PTR) {
+            return SastNode.nullLiteral(span, SastType.nullType());
+        }
+
+        if (type.kind == SastTypeKind.ENUM
+                && type.enumSymbol != null
+                && !type.enumSymbol.variants.isEmpty()) {
+            return SastNode.enumVariant(
+                    span,
+                    type.enumSymbol,
+                    type.enumSymbol.variants.get(0)
+            );
+        }
+
+        if (type.kind == SastTypeKind.STRUCT
+                || type.kind == SastTypeKind.TUPLE) {
+            List<SastNode> fields = new ArrayList<>();
+
+            for (FieldSymbol field : aggregateFields(type)) {
+                SastNode value = defaultGlobalFieldValue(
+                        field.type,
+                        field.foldedDefault,
+                        span
+                );
+
+                if (value == null) {
+                    return null;
+                }
+
+                fields.add(SastNode.aggregateFieldInit(field, value));
+            }
+
+            return SastNode.aggregateLiteral(span, type, fields);
+        }
+
+        return null;
+    }
+
+    private SastNode canonicalizeGlobalInitializer(
+            SastNode value,
+            SastType expectedType,
+            SourceSpan span
+    ) {
+        String where = "Global variable initializer";
+
+        SastNode canonical = canonicalStaticValue(
+                value,
+                expectedType,
+                where,
+                span,
+                true
+        );
+
+        if (canonical == null) {
+            return null;
+        }
+
+        if (!isAssignableStaticDefault(expectedType, canonical)) {
+            symbolTable.error(where
+                    + " has type '"
+                    + typeChecker.describeSafe(canonical.type)
+                    + "', expected '"
+                    + typeChecker.describeSafe(expectedType)
+                    + "'. A global initializer must produce the declared type using only static values and read-only addresses. Match the declared type or change the initializer.");
+            return null;
+        }
+
+        return canonical;
     }
 
     private boolean isAssignableStaticDefault(

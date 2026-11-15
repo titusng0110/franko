@@ -102,6 +102,7 @@ public final class PointerNullStateChecker {
 
     private long[] warnedVariables;
     private long[] warnedSites;
+    private byte[] globalInitialStates;
 
     public PointerNullStateChecker(DiagnosticBag diagnostics) {
         this(diagnostics, null);
@@ -162,6 +163,7 @@ public final class PointerNullStateChecker {
             callResultResolving = null;
             warnedVariables = null;
             warnedSites = null;
+            globalInitialStates = null;
         }
 
         if (state == null) {
@@ -172,6 +174,43 @@ public final class PointerNullStateChecker {
             callResultResolving = new boolean[context.callSiteCount];
             warnedVariables = new long[Math.max(1, (context.variables.length + 63) >>> 6)];
             warnedSites = new long[Math.max(1, (context.siteCount + 63) >>> 6)];
+            globalInitialStates = new byte[context.variables.length];
+            Arrays.fill(globalInitialStates, (byte) -1);
+            collectGlobalInitialStates(context.root);
+        }
+    }
+
+    private void collectGlobalInitialStates(SastNode node) {
+        if (node == null) {
+            return;
+        }
+
+        if (node.kind == SastKind.PROGRAM) {
+            for (SastNode item : node.topLevelItems) {
+                collectGlobalInitialStates(item);
+            }
+            return;
+        }
+
+        if (node.kind == SastKind.NAMESPACE) {
+            for (SastNode item : node.items) {
+                collectGlobalInitialStates(item);
+            }
+            return;
+        }
+
+        if (node.kind == SastKind.VAR_DECL
+                && node.symbol != null
+                && node.symbol.kind == SymbolKind.GLOBAL) {
+            int variableId = context.variableId(node.symbol);
+
+            if (variableId >= 0 && variableId < globalInitialStates.length) {
+                globalInitialStates[variableId] =
+                        node.staticInitializer != null
+                                && node.staticInitializer.kind == SastKind.GET_PTR
+                                ? PointerNullAnalysisState.POINTING
+                                : PointerNullAnalysisState.NULL;
+            }
         }
     }
 
@@ -334,13 +373,35 @@ public final class PointerNullStateChecker {
                 }
 
                 if (summaryMode) {
+                    byte initial = globalInitialStates != null
+                            && variableId >= 0
+                            && variableId < globalInitialStates.length
+                            ? globalInitialStates[variableId]
+                            : (byte) -1;
+
                     int offset = state.symValueOffset(pointerIndex);
                     state.templates.clearAll(state.symValue, offset);
-                    state.templates.set(
-                            state.symValue,
-                            offset,
-                            MemoryTemplate.UNKNOWN
-                    );
+
+                    if (initial == PointerNullAnalysisState.POINTING) {
+                        state.templates.set(
+                                state.symValue,
+                                offset,
+                                MemoryTemplate.NONNULL
+                        );
+                    } else if (initial == PointerNullAnalysisState.NULL) {
+                        state.templates.set(
+                                state.symValue,
+                                offset,
+                                MemoryTemplate.NULL
+                        );
+                    } else {
+                        state.templates.set(
+                                state.symValue,
+                                offset,
+                                MemoryTemplate.UNKNOWN
+                        );
+                    }
+
                     state.templates.clearAll(
                             state.symPointee,
                             state.symPointeeOffset(pointerIndex)
@@ -355,9 +416,17 @@ public final class PointerNullStateChecker {
                             state.symCellOffset(pointerIndex)
                     );
                 } else {
+                    byte initial = globalInitialStates != null
+                            && variableId >= 0
+                            && variableId < globalInitialStates.length
+                            ? globalInitialStates[variableId]
+                            : PointerNullAnalysisState.MAYBE_NULL;
+
                     state.setState(
                             pointerIndex,
-                            PointerNullAnalysisState.MAYBE_NULL
+                            initial >= 0
+                                    ? initial
+                                    : PointerNullAnalysisState.MAYBE_NULL
                     );
                     state.clearCellTargets(pointerIndex);
                 }
@@ -1378,7 +1447,6 @@ public final class PointerNullStateChecker {
             if (result.containsTop()) {
                 callResultStates[callSiteId] = PointerNullAnalysisState.MAYBE_NULL;
                 havocRootCells(call);
-                invalidateGlobalPointers();
                 currentBfsResult = null;
                 return;
             }
@@ -1496,26 +1564,7 @@ public final class PointerNullStateChecker {
                     rootRequirements,
                     rootPointeeRequirements
             );
-            invalidateGlobalPointers();
             currentBfsResult = null;
-        }
-
-        private void invalidateGlobalPointers() {
-            for (int globalIndex = 0;
-                    globalIndex < context.globalVariableIds.length;
-                    globalIndex++) {
-                int pointerIndex = state.pointerIndexByVariableId(
-                        context.globalVariableIds[globalIndex]
-                );
-
-                if (pointerIndex >= 0) {
-                    state.setState(
-                            pointerIndex,
-                            PointerNullAnalysisState.MAYBE_NULL
-                    );
-                    state.clearCellTargets(pointerIndex);
-                }
-            }
         }
 
         void processNode(int node) {

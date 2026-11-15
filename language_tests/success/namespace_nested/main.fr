@@ -66,9 +66,7 @@ func main() -> int32 {
     stdout(pt.x)
     stdout(pt.y)
 
-    // Qualified variable read and write.
-    stdout(a::b::limit)
-    a::b::limit = 101
+    // Qualified variable read.
     stdout(a::b::limit)
 
     // Qualified calls, including into a merged-then-nested path.

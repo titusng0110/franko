@@ -25,10 +25,11 @@ Franko is a small statically typed language with:
   [Functions](19-functions.md));
 - struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](28-methods.md));
 - `void` and non-`void` return types;
-- global variable declarations;
+- global variable declarations, which are always implicitly `const`,
+  read-only, and limited to value-assignable types;
 - global function declarations;
-- `const` storage on locals, parameters, and globals for value-assignable
-  types (see [Declarations](18-declarations.md));
+- `const` storage on locals and parameters for value-assignable types
+  (globals are implicitly const; see [Declarations](18-declarations.md));
 - assignment;
 - blocks;
 - `if`;
@@ -292,6 +293,8 @@ namespace util {
 
 A namespace body may contain struct declarations, global variable declarations, function declarations, nested namespace declarations, and `#if` declaration conditionals. Imports and executable statements are not allowed inside a namespace body.
 
+Variables declared at program scope and variables declared inside a namespace body are both **globals** for all language rules. A namespace only changes the qualified name; it does not change mutability, initialization, or type validity. Every global is implicitly `const`, read-only after initialization, and must have a value-assignable type (see [Declarations](18-declarations.md#184-global-variable-declarations)).
+
 Nested namespaces may be written in two equivalent forms:
 
 ```franko
@@ -320,7 +323,7 @@ Namespace members are referenced with `::`:
 
 ```franko
 util::Point p
-util::offset = 5
+int32 offset = util::offset
 a::b::helper(x)
 ```
 
@@ -993,6 +996,11 @@ ptr<[ptr<int32>]> p;       // invalid: pointer to an array of owning ptrs
 
 Static arrays nest: every level of `[[byte, 20], 12]` must satisfy the static array size rules (see [Arrays](21-arrays.md)).
 
+Global variables have an additional restriction: their type must be
+**value-assignable** (primitive, enum, pointer, or a struct/tuple whose parts
+are all value-assignable). Arrays and pointer-only aggregates can only be
+local. See [Declarations](18-declarations.md#184-global-variable-declarations).
+
 A function return type has separate rules. It may be:
 
 - `void`;
@@ -1591,6 +1599,23 @@ x += 1         // error
 x++            // error: equivalent to x += 1
 ```
 
+Every global variable is implicitly const, even when the declaration omits
+the `const` keyword. Namespace variables are globals too:
+
+```franko
+int32 G = 1
+G = 2          // error: Cannot assign to global variable 'G'
+
+namespace util {
+    int32 offset = 100
+}
+
+util::offset = 5   // error: Cannot assign to global variable 'offset'
+```
+
+Global mutations are rejected by the same const-storage rules as local
+const variables; see [Declarations](18-declarations.md#184-global-variable-declarations).
+
 The restriction follows the storage root. `p.field = 1`, `p[i] = 1`, and
 `p = v` are all rejected when `p` is const, but `$(p) = v` and
 `$(p).field = v` write the pointee and are allowed when `p` is a const
@@ -2115,53 +2140,83 @@ Local variables must be declared before they are used.
 
 ## 18.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope. Global variables are statically allocated.
+Variable declarations are allowed at global scope and inside namespace
+bodies. Both are **global variables**: a namespace only changes the
+qualified name, not the rules.
 
-Two different initializer forms exist for declarations, and they follow different rules at global scope.
+Global rules:
 
-**Constant initializers.** A global declaration may end with `= constExpr`:
+- **Every global is implicitly `const`.** The `const` keyword is accepted
+  but redundant. A global cannot be assigned, compound-assigned,
+  incremented, or written through a field or element access.
+- **The type must be value-assignable:** a primitive integer, an enum, a
+  pointer (`ptr<T>`, `mview<T>`, `view<T>`), or a struct/tuple whose parts
+  are all value-assignable. Arrays, dynamic arrays, and pointer-only
+  aggregates cannot be globals.
+- A global is initialized once before `main` and never mutated after that.
+- `getptr(global)` and `getmview(global)` are rejected; `getview(global)`
+  is allowed. A global `view` therefore provides read-only access without
+  exposing mutable storage.
+
+**Default initialization.** A global without an initializer starts with its
+type's default value: primitives `0`, pointers `null`, enums their first
+variant, and structs/tuples recursively zero/default-initialized. Declared
+primitive field defaults are applied on top of that zero state.
+
+**Allowed initializers.** A global may be initialized with a static value:
+
+- an integer constant expression for a primitive global;
+- an enum variant reference for an enum global;
+- `null` for a pointer global;
+- a compile-time string expression for a pointer global;
+- an array literal for a pointer global (a `view<[T, N]>` value over
+  immutable constant storage);
+- `getview` over another global (a read-only static address);
+- a struct or tuple aggregate literal whose entries are recursively static
+  values, including nested aggregate literals, enum variants, `null`,
+  compile-time strings, array literals, and `getview` of globals.
+
+Omitted fields in a global aggregate literal receive their declared default
+or the type default (`0`, `null`, first enum variant, recursively). This is
+the same zero/default state as an uninitialized global.
 
 ```franko
-int32 g = 1 + 2
-uint64 mask = 1 << 8
+struct Point {
+    int32 x
+    int32 y = 5
+    view<int32> link
+}
+
+enum<uint8> Mode { idle = 5, active = 9 }
+
+int32 G = 7
+Mode mode = Mode::active
+Point origin = Point { x = 1 }          // y = 5, link = null
+Point blank                             // x = 0, y = 5, link = null
+(int32, int32) pair = (int32, int32) { 4 }   // _0 = 4, _1 = 0
+view<int32> g_view = getview(G)
+view<[byte, 5]> greeting = "hello"
+view<[int32, 3]> numbers = [1, 2, 3]
+
+namespace util {
+    int32 offset = 100                  // namespace global, same rules
+}
 ```
 
-The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
+`Point origin { x = 1 }` field-wise initialization remains local-only;
+global aggregates use the `Point origin = Point { ... }` literal form.
 
-**Static address initializers.** A pointer-typed global may be
-initialized with `null`, with `getptr`/`getmview`/`getview` over another
-global variable, or with a materialized string expression (which folds and
-becomes a view over immutable constant storage; see
-[String Literals](24-string-literals.md)):
+**Rejected initializers.** Runtime expressions are not allowed at global
+scope. Calls, casts, dereferences, indexing, member reads, and reads of
+other variables are compile errors:
 
 ```franko
-[byte, 5] greeting
-view<[byte, 5]> v = getview(greeting)
-view<[byte, 5]> s = "he" + "llo"
-ptr<[byte, 5]> p = null
+int32 a = otherGlobal               // invalid: reads a runtime global
+Point p = Point { x = readInput() } // invalid: runtime call
+int32 b = cast<int32>(someValue)    // invalid: runtime cast
 ```
 
-The initializer must be a statically representable address of the right
-type (a permission downgrade is allowed, an upgrade is not).
-
-An array literal may initialize a pointer-typed global (it is a
-`view<[T, N]>` value over immutable constant storage, like a string
-literal):
-
-```franko
-view<[int32, 4]> G = [1, 2, 3, 4]   // valid
-```
-
-**Ordinary declaration initialization.** The `= expr` form described in this chapter and in [Assignment](16-assignment.md), when the expression is not constant, performs an executable initialization. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
-
-```franko
-int32 g = h                     // invalid: the initializer must be constant
-[int32, 3] xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
-[byte, 6] s = "hello"        // invalid: strings cannot initialize arrays
-```
-
-The constant-initializer, static-address, and array-literal forms above
-are the only ways to initialize a global at its declaration.
+Executable statements are not allowed at global scope.
 
 ## 18.5 Uninitialized Values
 
@@ -2175,7 +2230,12 @@ A **local** declaration without an initializer default-initializes the variable:
 
 There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: primitives, static array elements, and aggregate storage without an explicit default start at zero (pointer storage starts null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated and initialized before
+`main` runs: primitives and aggregate storage without an explicit default
+start at zero, pointer storage starts null, enums start at their first
+variant, and struct/tuple storage is zero/default-initialized recursively.
+Declared field defaults and global initializers are applied on top of that.
+Globals cannot be arrays or dynamic arrays; those types must be local.
 
 ## 18.6 Struct Fields
 
@@ -2254,10 +2314,11 @@ The rules:
    `const` is not part of overload identity or mangling: `f(const int32)` and
    `f(int32)` are duplicate declarations. A method's `self` slot is always
    implicitly const; writing `const self` is allowed but redundant.
-8. **Const globals are allowed** for value-assignable types, using the
-   existing global initializer forms (constant initializer, static address,
-   string expression, or array literal through a pointer type). A const global
-   cannot be assigned from any function.
+8. **Every global is implicitly const.** The `const` keyword is optional
+   and redundant on globals. Globals use the static initializer forms in
+   [Global Variable Declarations](#184-global-variable-declarations) and
+   cannot be assigned from any function. Namespace variables follow the
+   same rule.
 
 `#is_value_assignable` is exactly the type predicate `const` requires.
 
@@ -3269,6 +3330,10 @@ Arrays may be nested:
 
 Arrays are not arithmetic values and cannot be directly assigned as ordinary values.
 
+Arrays cannot be **global variables**. Globals are implicitly const and must
+be value-assignable; declare arrays inside a function and pass them through
+`ptr`/`mview`/`view` when they need to outlive a call.
+
 However, Franko supports **array literals** as `view<[T, N]>` values over immutable constant storage; arrays receive their elements through `memcpy`. See [Array Literals](22-array-literals.md).
 
 ## 21.1 Static Arrays
@@ -3643,8 +3708,9 @@ func main() -> int32 {
 `G` refers to the literal's constant `[int32, 4]` storage; the literal is
 not copied.
 
-Array-typed globals are not assignable from literals (22.5); use
-element assignments in an initializer function.
+Array-typed globals are rejected because arrays are not value-assignable.
+Use a local array and copy the literal with `memcpy`, or keep the literal
+as a read-only `view` global as above.
 
 ## 22.9 Summary
 
@@ -4322,7 +4388,8 @@ func main() -> int32 {
 }
 ```
 
-A non-pointer global cannot hold a string view.
+The global is implicitly const and the view is read-only. A non-pointer
+global cannot hold a string view; global variables must be value-assignable.
 
 ## 24.7 Empty Strings
 
@@ -4378,11 +4445,12 @@ const Point p { x = 1 }
 ```
 
 Declaration initialization is evaluated once as part of the declaration; a
-`const` variable can therefore be initialized here and nowhere else. At
-global scope only the existing global initializer
-forms are valid (constant initializer, static address, string expression, or an
-array literal through a pointer). See
-[Declarations](18-declarations.md#188-const-storage).
+`const` variable can therefore be initialized here and nowhere else. Every
+global is implicitly const. At global scope the static initializer forms are
+constant expressions, enum variants, `null`, string expressions, array
+literals through a pointer type, `getview` of a global, and struct/tuple
+aggregate literals with static entries. See
+[Declarations](18-declarations.md#184-global-variable-declarations).
 
 ## 25.2 Array and Aggregate Literal Values
 
@@ -4659,6 +4727,11 @@ This limits a const struct receiver to `view<X> self` methods.
 holding `p`: when `p` is a const `ptr<int32>`, `$(p) = 5` is valid and
 `p = ...` is not. See [Declarations](18-declarations.md#188-const-storage).
 
+Every global variable is implicitly const, so `getptr(global)` and
+`getmview(global)` are rejected; use `getview(global)` for read-only
+access. Taking a mutable pointer to a field or element of a global is
+rejected for the same reason.
+
 ## 26.2 Dereferencing with `$`
 
 If the operand has type `ptr<T>`, `mview<T>`, or `view<T>`, then
@@ -4925,7 +4998,7 @@ The guarantee covers every pointer storage slot:
 - pointer elements of local static arrays;
 - pointer elements of initialized dynamic arrays, after `init`, `init_zero`, or a growing `resize`.
 
-A global static array is zero-initialized, so its pointer elements are null before `main` runs. The same rule applies recursively to pointer storage nested inside structs, tuples, and arrays.
+Global storage is statically initialized before `main`: pointer fields and pointer tuple elements are null, and pointer elements of value-assignable aggregates are null recursively. Global arrays do not exist, so no global array element storage is allocated.
 
 ### 26.9.2 Nullness Certification
 
@@ -5229,7 +5302,7 @@ xs[i].field           // element of a static or dynamic array
 - **Declaration initialization.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value as part of the declaration.
 - **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](30-aggregate-literals.md).
 - **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
-- **Global declarations.** Global structs are statically allocated. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
+- **Global declarations.** Global structs are statically allocated and implicitly const. The struct must be value-assignable, so pointer-only structs cannot be global. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
 Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
 
@@ -5247,8 +5320,8 @@ Point origin;
 int32 scale = 2;
 ```
 
-- Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch.
-- Struct globals are declared before `main` runs; executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
+- Global variable initializers (`= constExpr`) are for primitive globals only; a struct-typed global rejects `= constExpr` as a type mismatch. Use a struct aggregate literal instead.
+- Every global is implicitly const and must be value-assignable; a pointer-only struct cannot be a global. Struct globals are initialized before `main` runs, and executable statements remain invalid at global scope (see [Program Structure](03-program-structure.md)).
 
 ## 27.10 Restrictions Summary
 
@@ -5993,7 +6066,8 @@ Literal lit = Literal { x = 0, def = 1 }
 
 Aggregate literals are expressions, but they are only valid in the specific
 value-consuming contexts listed in [Allowed Expression Contexts](#306-allowed-expression-contexts).
-They are local-only: no global aggregate initializers exist.
+A struct or tuple aggregate literal may also initialize a global, where every
+entry must be a static value; the global is then implicitly const.
 
 ## 30.1 Struct Literal Expressions
 
@@ -6226,6 +6300,7 @@ An aggregate literal expression is only valid as:
 
 - the entire right-hand side of an assignment;
 - the entire right-hand side of a declaration initializer;
+- the entire initializer of a global struct/tuple variable (static values only);
 - the entire return expression;
 - an entire function or method call argument;
 - an entire field value inside another aggregate literal.
@@ -6241,6 +6316,7 @@ lit = Literal { x = 2 }
 return Literal { x = 3 }
 f(Literal { x = 4 })
 Outer o = Outer { inner = Inner { x = 5 } }
+Literal global_lit = Literal { x = 1 }     // global, static entries only
 ```
 
 Invalid:
@@ -6367,22 +6443,31 @@ The same rule applies to a tuple containing an array:
 func make() -> (int32, [int32, 3]) { ... }     // error at declaration
 ```
 
-## 30.10 Global-Scope Restriction
+## 30.10 Global-Scope Rules
 
-Aggregate literals and field-wise declaration initializers are local-only.
-Global scope remains declaration-only, and its initializer forms are
-unchanged: constant expressions, statically representable addresses, string
-literals, and array literals.
-
-Invalid:
+A struct or tuple aggregate literal may initialize a global:
 
 ```franko
-Literal global_lit = Literal { x = 1 }     // invalid: global aggregate literal
-Literal global_lit { x = 1 }               // invalid: global field initializer
+Literal global_lit = Literal { x = 1 }     // valid: static aggregate initializer
 ```
 
-Initialize a global aggregate in an initializer function called from `main`,
-or use the ordinary global forms where they apply.
+The declared global type must be value-assignable. Every aggregate entry must
+be a static value: an integer constant expression, an enum variant, `null`, a
+compile-time string expression, an array literal, a `getview` of another
+global, or a nested aggregate literal. Calls, casts, dereferences, indexing,
+member reads, and reads of other variables are rejected. Omitted fields
+receive their declared default or type default (`0`, `null`, first enum
+variant, recursively).
+
+Field-wise declaration initializers remain local-only:
+
+```franko
+Literal local_lit { x = 1 }                // valid: local field-wise form
+Literal global_lit { x = 1 }               // invalid: global field-wise form
+```
+
+A pointer-only aggregate cannot be a global, because globals must be
+value-assignable.
 
 ## 30.11 Diagnostics and Invalid Examples
 
@@ -6400,7 +6485,9 @@ Required diagnostics include:
 - non-value-assignable return type with pointer/out-parameter guidance;
 - field-wise initializer on a non-struct/non-tuple declaration;
 - field-wise assignment of an array field;
-- global aggregate literal or global field initializer rejection.
+- runtime entry in a global aggregate initializer;
+- global field-wise initializer rejection;
+- non-value-assignable global aggregate type rejection.
 
 Examples:
 
@@ -6830,7 +6917,7 @@ For each pointer variable the compiler tracks one of:
 - assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, a pointer parameter or global starts as maybe-null because the compiler cannot see the value it receives. Exceptions: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
+- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global pointer's state is known from its declaration: a global without a static initializer is null, and a global initialized from `getview`/a literal view is pointing. Calls do not change a global pointer's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
 ## 32.3 Dereference Checking
 
@@ -6918,7 +7005,7 @@ Current limitations of the pointer null-state check:
   values can, and a pointer held in a struct field, an array element, or
   behind a `$(...)` chain is not tracked;
 - view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
-- global null-state writes are not tracked across functions;
+- global pointer slots are immutable, so there is no global null-state write to track;
 - only one level of pointer-to-pointer writes is followed;
 - deeply nested conditions may reduce precision;
 - recursive or very deep call chains are handled conservatively, so some
@@ -7029,19 +7116,7 @@ as function bodies.
 ### 32.9.5 The Store Rule
 
 A pointer store is rejected when the stored value refers to current-frame
-storage and the target storage is caller-owned or global:
-
-```franko
-ptr<int32> global_p
-
-func bad() -> void {
-    int32 x
-    global_p = getptr(x)      // error: x dies with this frame
-    return
-}
-```
-
-The same rule applies to stores through a pointer parameter:
+storage and the target storage is caller-owned:
 
 ```franko
 func bad(ptr<ptr<int32>> out) -> void {
@@ -7050,6 +7125,10 @@ func bad(ptr<ptr<int32>> out) -> void {
     return
 }
 ```
+
+Globals are immutable, so a direct global store is rejected earlier by the
+const-storage rule. The dangling store rule remains relevant for caller-owned
+out-parameters.
 
 The diagnostic is:
 
@@ -7070,7 +7149,6 @@ The check intentionally does not detect:
 - view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
 - pointer fields inside structs or other aggregates when the escape does not
   go through a direct global or out-parameter store;
-- global dynamic-array lifecycle;
 - every loop-carried lifetime fact: loops are checked conservatively, so a
   pointer that becomes dangling only on a later iteration may be missed;
 - every escape through a recursive or very deep call chain.
@@ -7131,13 +7209,10 @@ It does not yet track:
 
 - dynamic arrays stored in struct fields;
 - individual elements of nested dynamic arrays below the outermost tracked
-  array;
-- global dynamic array variables.
+  array.
 
-Global owner pointer variables are not tracked. Assigning a tracked array to a
-global owner pointer marks that array escaped, so it is exempt from local
-missing-`uninit` warnings, but reads through the global pointer are not followed.
-Global dynamic array lifecycle is not tracked at all.
+Global variables cannot be dynamic arrays (they must be value-assignable), so
+there is no global dynamic-array lifecycle to track.
 
 Element pointers/views (`getptr`/`getmview`/`getview(d[i])`) refer to the
 element buffer. Whole-array `view<[T]>`/`mview<[T]>` values refer to the array
@@ -7275,7 +7350,6 @@ parameters are not diagnosed. The same applies to arrays reached through
 The check does not detect:
 
 - lifecycle misuse of struct-field or nested-element arrays;
-- lifecycle tracking for global dynamic arrays;
 - allocation failure of `init`/`init_zero` (the successful path is modeled);
 - every loop-carried lifecycle fact: loops are checked conservatively;
 - every effect of a recursive or very deep call chain;
@@ -7452,9 +7526,9 @@ Target-specific FFI calls are guarded with `#if`:
 
 ```franko
 #if (#IS_WINDOWS) {
-    os::win32::WriteFile(...)
+    os::win32::QueryPerformanceCounter(...)
 } #else #if (#IS_LINUX || #IS_MACOS) {
-    os::posix::write(...)
+    os::posix::clock_gettime(...)
 }
 ```
 
@@ -7511,13 +7585,22 @@ Rules:
 - Merely importing a module with a bridge adds no bridge code unless a
   bridged function is actually used.
 
-## 34.4 The Bundled `franko/os` Module
+## 34.4 The Bundled FFI Modules
 
-`franko/os` is Franko's standard FFI module. It ships
-`import/franko/os.module.json` and `import/franko/os.ffi.cpp` alongside
-`import/franko/os.fr`. Its functions are documented in
-[`franko/os`](../library_docs/os.md). It uses the same descriptor and
-bridge rules described above.
+`franko/os` and `franko/stdio` are Franko's standard FFI modules.
+
+- `franko/os` ships `import/franko/os.module.json` and
+  `import/franko/os.ffi.cpp` alongside `import/franko/os.fr`. Its functions
+  are documented in [`franko/os`](../library_docs/os.md). Standard streams
+  are reserved for `franko/stdio`; passing a standard fd or handle to the os
+  read/write bridge aborts.
+- `franko/stdio` ships `import/franko/stdio.module.json` and
+  `import/franko/stdio.ffi.cpp` alongside `import/franko/stdio.fr`. It owns
+  integer formatting, byte-view writes, and the stdin read-ahead buffer, so
+  all standard I/O goes through `franko/stdio`. Its API is documented in
+  [`franko/stdio`](../library_docs/stdio.md).
+
+Both use the same descriptor and bridge rules described above.
 
 ## 34.5 Failure Modes
 
@@ -8311,8 +8394,8 @@ from `getptr`/`getmview`/`getview(d[i])` are diagnosed when a
 `resize`/`uninit` invalidates them; owner pointers and whole-array views point
 at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
-outermost tracked array, global dynamic-array lifecycle, allocation failure
-status, or all runtime bounds properties. See
+outermost tracked array, allocation failure status, or all runtime bounds
+properties. Globals cannot be dynamic arrays. See
 [Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 
 ## 36.10 Pointer Lifetime Is Not Fully Tracked
@@ -8345,7 +8428,7 @@ The unary plus operator does not exist in the language:
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](16-assignment.md)).
 
-Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. Global variables are always implicitly const. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
 
 ## 36.13 String Literals Cannot Initialize Arrays
 
@@ -8387,7 +8470,7 @@ Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. 
 
 Only struct declarations, global variable declarations, function declarations, namespace declarations, imports, and `#if` declaration conditionals are valid at global scope.
 
-Executable statements are invalid at global scope. Aggregate literals and field-wise declaration initializers are local-only; global aggregate initializers are rejected. See [Aggregate Literals](30-aggregate-literals.md).
+Executable statements are invalid at global scope. Global variables are implicitly const and must be value-assignable, so arrays and pointer-only aggregates cannot be global. Static struct/tuple aggregate literals may initialize globals; field-wise declaration initializers remain local-only. See [Aggregate Literals](30-aggregate-literals.md) and [Declarations](18-declarations.md#184-global-variable-declarations).
 
 ## 36.16 No C-Style Casts, Ternary, or Multiple Declarators
 
@@ -8526,7 +8609,7 @@ compiler warnings. The other conventions in this chapter are style guidance.
 | Field | `lower_case_snake_case` | `capacity`, `next_index` |
 | Private field | `_` + `lower_case_snake_case` | `_secret_field`, `_capacity` |
 | Namespace | short, lowercase, no underscores | `bignum`, `os`, `win32` |
-| Constant | `ALL_CAPS_WITH_UNDERSCORES` | `IS_WINDOWS`, `STDOUT_FILENO` |
+| Constant | `ALL_CAPS_WITH_UNDERSCORES` | `IS_WINDOWS`, `CLOCK_REALTIME` |
 | Private member constant | `_` + `ALL_CAPS_WITH_UNDERSCORES` | `_END`, `_ALLOCATED` |
 | Internal constant | `__` + `ALL_CAPS_WITH_UNDERSCORES` | `__SECRET_CONSTANT` |
 
@@ -8596,7 +8679,6 @@ preserves the platform API spelling, even when that is not snake case. The
 namespace remains lowercase and underscore-free:
 
 ```franko
-os::win32::GetStdHandle(os::win32::STD_OUTPUT_HANDLE)
 os::win32::ReadFile(...)
 os::win32::WriteFile(...)
 ```
@@ -8668,7 +8750,7 @@ casing, but `const int32 MAX_SIZE = 10` is the recommended style:
 
 ```franko
 byte IS_WINDOWS = 0
-int32 STDOUT_FILENO = 1
+int32 MAX_SIZE = 10
 ```
 
 A constant that belongs to a private member scope uses the single-underscore
@@ -9207,7 +9289,8 @@ Dynamic array fields are not allocated as part of the struct declaration; alloca
 
 ## 38.19 Struct Globals
 
-Global variable declarations accept constant initializers.
+Global variables are implicitly const and are initialized before `main`.
+A struct global must be value-assignable.
 
 ```franko
 struct Point {
@@ -9216,19 +9299,21 @@ struct Point {
 }
 
 int32 scale = 2;
-Point origin;
+Point origin = Point { x = 2 };   // y gets its field default
+Point blank;                      // x = 0, y = 0
 
 func main() -> int32 {
-    origin.x = scale;
-
     stdout(origin.x);   // 2
+    stdout(origin.y);   // 0
+    stdout(blank.x);    // 0
     stdout(scale);      // 2
 
     return 0;
 }
 ```
 
-Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
+Global declarations are checked before `main` runs; executable statements and
+assignments to globals remain invalid.
 
 ## 38.20 Array `length()`
 

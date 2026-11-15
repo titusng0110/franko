@@ -24,9 +24,6 @@ struct Box {
     mview<int32> link
 }
 
-ptr<int32> g
-int32 g_target = 0
-
 func take_ptr(ptr<int32> q) -> int32 {
     if (q != null) {
         return $(q)
@@ -41,6 +38,8 @@ func make_null() -> ptr<int32> {
 
 func main() -> int32 {
     int32 x = 0
+    int32 g_target = 0
+    ptr<int32> g
 
     stdout(1)
 

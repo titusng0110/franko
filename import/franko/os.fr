@@ -14,24 +14,15 @@ namespace os {
 
     #if (#IS_WINDOWS) {
         namespace win32 {
-            // Win32 File API (fileapi.h) standard-handle constants.
-            // These are (DWORD)-10/-11/-12, spelled as hex because a
-            // negative literal cannot fit a uint32 target.
-            const uint32 STD_INPUT_HANDLE = 0xFFFFFFF6
-            const uint32 STD_OUTPUT_HANDLE = 0xFFFFFFF5
-            const uint32 STD_ERROR_HANDLE = 0xFFFFFFF4
-
             // FFI intrinsics, bridged by import/franko/os.ffi.cpp.
-            // hFile is a HANDLE widened to 64 bits; obtain one with
-            // GetStdHandle. lpOverlapped is dropped: the bridge always
-            // passes NULL (synchronous I/O). bytesRead and bytesWritten
-            // are written through (mview) and may be null. The buffer is
-            // read-only for WriteFile (view) and written in place for
-            // ReadFile (mview). The stubs report failure (0) so a missing
-            // bridge can never look like silent success.
-            func GetStdHandle(const uint32 nStdHandle) -> uint64 {
-                return 0
-            }
+            // hFile is a HANDLE widened to 64 bits. lpOverlapped is
+            // dropped: the bridge always passes NULL (synchronous I/O).
+            // bytesRead and bytesWritten are written through (mview) and
+            // may be null. The buffer is read-only for WriteFile (view) and
+            // written in place for ReadFile (mview). Standard handles are
+            // reserved for franko/stdio and are rejected at run time. The
+            // stubs report failure (0) so a missing bridge can never look
+            // like silent success.
             func ReadFile(const uint64 hFile, const mview<[byte]> buf, const uint32 count, const mview<uint32> bytesRead) -> int32 {
                 return 0
             }
@@ -55,9 +46,6 @@ namespace os {
         }
     } #else #if (#IS_LINUX || #IS_MACOS) {
         namespace posix {
-            const int32 STDIN_FILENO = 0
-            const int32 STDOUT_FILENO = 1
-            const int32 STDERR_FILENO = 2
             const int32 CLOCK_REALTIME = 0
             #if (#IS_LINUX) {
                 const int32 CLOCK_MONOTONIC = 1
@@ -69,6 +57,8 @@ namespace os {
             // replaces the stubs with the bridge definitions from
             // import/franko/os.ffi.cpp. The stubs report failure (-1) so
             // a missing bridge can never look like silent success.
+            // Standard fds 0/1/2 are reserved for franko/stdio and abort
+            // at run time if passed to read or write.
             func read(const int32 fd, const mview<[byte]> buf, const uint64 count) -> int64 {
                 return -1
             }

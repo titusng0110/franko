@@ -325,16 +325,11 @@ public class Desugarer {
         }
 
         if (init != null && init.kind == AstKind.AGGREGATE_LITERAL) {
-            diagnostics.error("Global variable '"
-                    + n.name
-                    + "': aggregate literals are local-only. Global scope is "
-                    + "declaration-only, so an aggregate literal has no runtime "
-                    + "point at which to construct its temporary value. "
-                    + "Initialize the global aggregate in an initializer "
-                    + "function called from main, or assign its fields "
-                    + "individually inside a function.");
+            return globalVarDecl(n, type, desugarExpr(init));
+        }
 
-            return globalVarDecl(n, type, null);
+        if (init != null && init.kind == AstKind.QUALIFIED_NAME) {
+            return globalVarDecl(n, type, desugarExpr(init));
         }
 
         return globalVarDecl(

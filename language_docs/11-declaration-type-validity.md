@@ -56,6 +56,11 @@ ptr<[ptr<int32>]> p;       // invalid: pointer to an array of owning ptrs
 
 Static arrays nest: every level of `[[byte, 20], 12]` must satisfy the static array size rules (see [Arrays](21-arrays.md)).
 
+Global variables have an additional restriction: their type must be
+**value-assignable** (primitive, enum, pointer, or a struct/tuple whose parts
+are all value-assignable). Arrays and pointer-only aggregates can only be
+local. See [Declarations](18-declarations.md#184-global-variable-declarations).
+
 A function return type has separate rules. It may be:
 
 - `void`;

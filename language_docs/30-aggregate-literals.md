@@ -17,7 +17,8 @@ Literal lit = Literal { x = 0, def = 1 }
 
 Aggregate literals are expressions, but they are only valid in the specific
 value-consuming contexts listed in [Allowed Expression Contexts](#306-allowed-expression-contexts).
-They are local-only: no global aggregate initializers exist.
+A struct or tuple aggregate literal may also initialize a global, where every
+entry must be a static value; the global is then implicitly const.
 
 ## 30.1 Struct Literal Expressions
 
@@ -250,6 +251,7 @@ An aggregate literal expression is only valid as:
 
 - the entire right-hand side of an assignment;
 - the entire right-hand side of a declaration initializer;
+- the entire initializer of a global struct/tuple variable (static values only);
 - the entire return expression;
 - an entire function or method call argument;
 - an entire field value inside another aggregate literal.
@@ -265,6 +267,7 @@ lit = Literal { x = 2 }
 return Literal { x = 3 }
 f(Literal { x = 4 })
 Outer o = Outer { inner = Inner { x = 5 } }
+Literal global_lit = Literal { x = 1 }     // global, static entries only
 ```
 
 Invalid:
@@ -391,22 +394,31 @@ The same rule applies to a tuple containing an array:
 func make() -> (int32, [int32, 3]) { ... }     // error at declaration
 ```
 
-## 30.10 Global-Scope Restriction
+## 30.10 Global-Scope Rules
 
-Aggregate literals and field-wise declaration initializers are local-only.
-Global scope remains declaration-only, and its initializer forms are
-unchanged: constant expressions, statically representable addresses, string
-literals, and array literals.
-
-Invalid:
+A struct or tuple aggregate literal may initialize a global:
 
 ```franko
-Literal global_lit = Literal { x = 1 }     // invalid: global aggregate literal
-Literal global_lit { x = 1 }               // invalid: global field initializer
+Literal global_lit = Literal { x = 1 }     // valid: static aggregate initializer
 ```
 
-Initialize a global aggregate in an initializer function called from `main`,
-or use the ordinary global forms where they apply.
+The declared global type must be value-assignable. Every aggregate entry must
+be a static value: an integer constant expression, an enum variant, `null`, a
+compile-time string expression, an array literal, a `getview` of another
+global, or a nested aggregate literal. Calls, casts, dereferences, indexing,
+member reads, and reads of other variables are rejected. Omitted fields
+receive their declared default or type default (`0`, `null`, first enum
+variant, recursively).
+
+Field-wise declaration initializers remain local-only:
+
+```franko
+Literal local_lit { x = 1 }                // valid: local field-wise form
+Literal global_lit { x = 1 }               // invalid: global field-wise form
+```
+
+A pointer-only aggregate cannot be a global, because globals must be
+value-assignable.
 
 ## 30.11 Diagnostics and Invalid Examples
 
@@ -424,7 +436,9 @@ Required diagnostics include:
 - non-value-assignable return type with pointer/out-parameter guidance;
 - field-wise initializer on a non-struct/non-tuple declaration;
 - field-wise assignment of an array field;
-- global aggregate literal or global field initializer rejection.
+- runtime entry in a global aggregate initializer;
+- global field-wise initializer rejection;
+- non-value-assignable global aggregate type rejection.
 
 Examples:
 

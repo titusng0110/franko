@@ -215,26 +215,30 @@ struct Txn {
 
 const uint32 ACCOUNT_NONE = 0xFFFFFFFF
 
-[Account, 3] accounts
+func setup_accounts(mview<[Account, 3]> accounts) -> void {
+    if (accounts == null) {
+        return
+    }
+    $(accounts)[0].id = 1
+    $(accounts)[0].name = "checking"
+    $(accounts)[0].balance = Money { amount = 0 }
 
-func setup_accounts() -> void {
-    accounts[0].id = 1
-    accounts[0].name = "checking"
-    accounts[0].balance = Money { amount = 0 }
+    $(accounts)[1].id = 2
+    $(accounts)[1].name = "savings"
+    $(accounts)[1].balance = Money { amount = 0 }
 
-    accounts[1].id = 2
-    accounts[1].name = "savings"
-    accounts[1].balance = Money { amount = 0 }
-
-    accounts[2].id = 3
-    accounts[2].name = "reserve"
-    accounts[2].balance = Money { amount = 0 }
+    $(accounts)[2].id = 3
+    $(accounts)[2].name = "reserve"
+    $(accounts)[2].balance = Money { amount = 0 }
     return
 }
 
-func find_account(const uint32 id) -> uint32 {
-    for (uint32 i = 0; i < accounts.length(); i++) {
-        if (accounts[i].id == id) {
+func find_account(view<[Account, 3]> accounts, const uint32 id) -> uint32 {
+    if (accounts == null) {
+        return ACCOUNT_NONE
+    }
+    for (uint32 i = 0; i < $(accounts).length(); i++) {
+        if ($(accounts)[i].id == id) {
             return i
         }
     }
@@ -498,7 +502,10 @@ func print_prefix(const view<Txn> txn) -> void {
     return
 }
 
-func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
+func run_transaction(ptr<[Account, 3]> accounts, const view<Txn> txn, ptr<Money> total) -> void {
+    if (accounts == null) {
+        return
+    }
     if (txn == null) {
         return
     }
@@ -510,12 +517,12 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     print_prefix(txn)
 
     if (kind == TxnKind::deposit) {
-        uint32 idx = find_account($(txn).account_id)
+        uint32 idx = find_account(accounts, $(txn).account_id)
         if (idx == ACCOUNT_NONE) {
             stdout("unknown account")
             return
         }
-        ptr<Money> balance = getptr(accounts[idx].balance)
+        ptr<Money> balance = getptr($(accounts)[idx].balance)
         $(balance) += $(txn).amount
         $(total) += $(txn).amount
         stdout("ok")
@@ -523,12 +530,12 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     }
 
     if (kind == TxnKind::withdraw) {
-        uint32 idx = find_account($(txn).account_id)
+        uint32 idx = find_account(accounts, $(txn).account_id)
         if (idx == ACCOUNT_NONE) {
             stdout("unknown account")
             return
         }
-        ptr<Money> balance = getptr(accounts[idx].balance)
+        ptr<Money> balance = getptr($(accounts)[idx].balance)
         if ($(balance) < $(txn).amount) {
             stdout("insufficient funds")
             return
@@ -540,8 +547,8 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     }
 
     if (kind == TxnKind::transfer) {
-        uint32 from_idx = find_account($(txn).account_id)
-        uint32 to_idx = find_account($(txn).target_id)
+        uint32 from_idx = find_account(accounts, $(txn).account_id)
+        uint32 to_idx = find_account(accounts, $(txn).target_id)
         if (from_idx == ACCOUNT_NONE || to_idx == ACCOUNT_NONE) {
             stdout("unknown account")
             return
@@ -550,8 +557,8 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
             stdout("same account")
             return
         }
-        ptr<Money> from_balance = getptr(accounts[from_idx].balance)
-        ptr<Money> to_balance = getptr(accounts[to_idx].balance)
+        ptr<Money> from_balance = getptr($(accounts)[from_idx].balance)
+        ptr<Money> to_balance = getptr($(accounts)[to_idx].balance)
         if ($(from_balance) < $(txn).amount) {
             stdout("insufficient funds")
             return
@@ -563,12 +570,12 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
     }
 
     if (kind == TxnKind::balance) {
-        uint32 idx = find_account($(txn).account_id)
+        uint32 idx = find_account(accounts, $(txn).account_id)
         if (idx == ACCOUNT_NONE) {
             stdout("unknown account")
             return
         }
-        stdout(accounts[idx].balance.amount)
+        stdout($(accounts)[idx].balance.amount)
         return
     }
 
@@ -581,7 +588,8 @@ func run_transaction(const view<Txn> txn, ptr<Money> total) -> void {
 }
 
 func main() -> int32 {
-    setup_accounts()
+    [Account, 3] accounts
+    setup_accounts(getmview(accounts))
 
     [byte, 256] line
     uint32 len = 0
@@ -613,7 +621,7 @@ func main() -> int32 {
 
     Money total = Money { amount = 0 }
     for (uint32 i = 0; i < txn_count; i++) {
-        run_transaction(getview(txns[i]), getptr(total))
+        run_transaction(getptr(accounts), getview(txns[i]), getptr(total))
     }
 
     stdout("final balances:")

@@ -1,0 +1,42 @@
+import "franko/stdio"
+
+// ============================================================
+// LANGUAGE TEST: Implicitly Const Globals
+// ============================================================
+// Covers: globals without the const keyword are still read-only,
+// value-assignable enum/struct/pointer defaults, namespace globals
+// with the same rules, and read-only getview access.
+// ============================================================
+
+struct Config {
+    int32 a
+    view<int32> link
+}
+
+enum<uint8> Mode {
+    idle = 5,
+    active = 9
+}
+
+int32 G = 7
+Mode mode = Mode::active
+Config cfg = Config { a = 3 }
+
+namespace n {
+    int32 X = 11
+    Config C = Config { a = 4 }
+}
+
+func main() -> int32 {
+    stdout(G)
+    stdout(mode == Mode::active)
+    stdout(cfg.a)
+    stdout(cfg.link == null)
+    stdout(n::X)
+    stdout(n::C.a)
+
+    view<int32> v = getview(G)
+    stdout($(v))
+
+    return 0
+}

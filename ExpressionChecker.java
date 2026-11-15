@@ -682,15 +682,25 @@ public class ExpressionChecker {
                 && storage.isConst
                 && PointerPermissions.pointerPermission(node.type)
                         != PtrPermission.READ_ONLY) {
-            diagnostics.error("Cannot create a mutable pointer to const "
-                    + "variable '"
-                    + storage.name
-                    + "'; const storage only allows getview(...). const makes "
-                    + "the storage immutable, so a mutable or owning pointer "
-                    + "would allow writes that violate the declaration. Use "
-                    + "getview(...) instead, or remove const from '"
-                    + storage.name
-                    + "'.");
+            if (storage.kind == SymbolKind.GLOBAL) {
+                diagnostics.error("Cannot create a mutable pointer to global "
+                        + "variable '" + storage.name + "'; global variables"
+                        + " are implicitly const and read-only. A mutable or"
+                        + " owning pointer would allow writes that violate the"
+                        + " declaration. Use getview(...) to read the global,"
+                        + " or move mutable storage into a function.");
+            } else {
+                diagnostics.error("Cannot create a mutable pointer to const "
+                        + "variable '"
+                        + storage.name
+                        + "'; const storage only allows getview(...). const makes "
+                        + "the storage immutable, so a mutable or owning pointer "
+                        + "would allow writes that violate the declaration. Use "
+                        + "getview(...) instead, or remove const from '"
+                        + storage.name
+                        + "'.");
+            }
+            return;
         }
 
         ensureRegionPermission(

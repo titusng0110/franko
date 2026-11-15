@@ -1,0 +1,13 @@
+struct Literal {
+    int32 x
+}
+
+func value() -> int32 {
+    return 1
+}
+
+Literal lit = Literal { x = value() }
+
+func main() -> int32 {
+    return lit.x
+}

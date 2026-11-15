@@ -16,9 +16,8 @@ struct Wrapper {
 
 Status g;
 
-[Status, 2] g_stats;
-
 func main() -> int32 {
+    [Status, 2] g_stats
     Status t;
     stdout(t == Status::spawning);
     stdout(g == Status::spawning);

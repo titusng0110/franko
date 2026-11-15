@@ -24,11 +24,12 @@ const Point p { x = 1 }
 ```
 
 Declaration initialization is evaluated once as part of the declaration; a
-`const` variable can therefore be initialized here and nowhere else. At
-global scope only the existing global initializer
-forms are valid (constant initializer, static address, string expression, or an
-array literal through a pointer). See
-[Declarations](18-declarations.md#188-const-storage).
+`const` variable can therefore be initialized here and nowhere else. Every
+global is implicitly const. At global scope the static initializer forms are
+constant expressions, enum variants, `null`, string expressions, array
+literals through a pointer type, `getview` of a global, and struct/tuple
+aggregate literals with static entries. See
+[Declarations](18-declarations.md#184-global-variable-declarations).
 
 ## 25.2 Array and Aggregate Literal Values
 

@@ -1,0 +1,23 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "franko/stdio",
+  "source": "stdio.fr",
+  "bridge": "stdio.ffi.cpp",
+  "functions": [
+    {"name": "__io_stdout_int64"},
+    {"name": "__io_stdout_uint64"},
+    {"name": "__io_stdout_bytes"},
+    {"name": "__io_stderr_int64"},
+    {"name": "__io_stderr_uint64"},
+    {"name": "__io_stderr_bytes"},
+    {"name": "__io_fill"},
+    {"name": "__io_input_pos"},
+    {"name": "__io_input_len"},
+    {"name": "__io_set_input_pos"},
+    {"name": "__io_set_input_len"},
+    {"name": "__io_input_byte"},
+    {"name": "__io_input_memchr"},
+    {"name": "__io_input_copy_to"}
+  ]
+}

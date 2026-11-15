@@ -62,9 +62,9 @@ Target-specific FFI calls are guarded with `#if`:
 
 ```franko
 #if (#IS_WINDOWS) {
-    os::win32::WriteFile(...)
+    os::win32::QueryPerformanceCounter(...)
 } #else #if (#IS_LINUX || #IS_MACOS) {
-    os::posix::write(...)
+    os::posix::clock_gettime(...)
 }
 ```
 
@@ -121,13 +121,22 @@ Rules:
 - Merely importing a module with a bridge adds no bridge code unless a
   bridged function is actually used.
 
-## 34.4 The Bundled `franko/os` Module
+## 34.4 The Bundled FFI Modules
 
-`franko/os` is Franko's standard FFI module. It ships
-`import/franko/os.module.json` and `import/franko/os.ffi.cpp` alongside
-`import/franko/os.fr`. Its functions are documented in
-[`franko/os`](../library_docs/os.md). It uses the same descriptor and
-bridge rules described above.
+`franko/os` and `franko/stdio` are Franko's standard FFI modules.
+
+- `franko/os` ships `import/franko/os.module.json` and
+  `import/franko/os.ffi.cpp` alongside `import/franko/os.fr`. Its functions
+  are documented in [`franko/os`](../library_docs/os.md). Standard streams
+  are reserved for `franko/stdio`; passing a standard fd or handle to the os
+  read/write bridge aborts.
+- `franko/stdio` ships `import/franko/stdio.module.json` and
+  `import/franko/stdio.ffi.cpp` alongside `import/franko/stdio.fr`. It owns
+  integer formatting, byte-view writes, and the stdin read-ahead buffer, so
+  all standard I/O goes through `franko/stdio`. Its API is documented in
+  [`franko/stdio`](../library_docs/stdio.md).
+
+Both use the same descriptor and bridge rules described above.
 
 ## 34.5 Failure Modes
 

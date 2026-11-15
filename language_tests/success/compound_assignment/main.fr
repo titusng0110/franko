@@ -11,14 +11,13 @@ struct Counter {
     int32 n
 }
 
-int32 g = 2
-
 func idx() -> uint32 {
     stdout(-1); // marker: this call happens exactly once per statement
     return 1;
 }
 
 func main() -> int32 {
+    int32 g = 2
     int32 x = 10;
     x += 5;
     x -= 3;

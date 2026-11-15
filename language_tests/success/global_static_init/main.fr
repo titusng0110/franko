@@ -1,29 +1,27 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: Global Static Address Initializers
+// LANGUAGE TEST: Global Static Initializers
 // ============================================================
-// Covers: pointer globals initialized with getptr/getmview/getview
-// over another global (including hoisted string-literal globals),
-// permission downgrades in the initializer, and forward references
-// between globals (the backend forward-declares globals, so source
-// order does not matter).
+// Covers: globals initialized from constant values, read-only views of
+// other globals, string expressions, array literals, and static-to-
+// dynamic literal view decay. Mutable pointers to globals are rejected
+// in the failure suite.
 // ============================================================
 
-view<[byte, 5]> v = getview(greeting);
-ptr<[byte, 5]> p = getptr(greeting);
-mview<[byte, 5]> m = getmview(greeting);
-view<[byte, 5]> s = "hello";
-[byte, 5] greeting;
+int32 greeting = 7
+
+view<int32> v = getview(greeting)
+view<[byte, 5]> s = "hello"
+view<[int32, 4]> G = [1, 2, 3, 4]
+view<[int32]> D = [5, 6, 7]
 
 func main() -> int32 {
-    greeting.memset(7);
-
-    stdout($(v).length());
-    stdout($(p)[0]);
-    stdout($(m)[1]);
-    stdout($(s).length());
-    stdout($(s)[0]);
-
-    return 0;
+    stdout($(v))              // 7
+    stdout($(s).length())     // 5
+    stdout($(s)[0])           // 104
+    stdout($(G)[3])           // 4
+    stdout($(D).length())     // 3
+    stdout($(D)[1])           // 6
+    return 0
 }

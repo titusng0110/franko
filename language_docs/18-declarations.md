@@ -50,53 +50,83 @@ Local variables must be declared before they are used.
 
 ## 18.4 Global Variable Declarations
 
-Variable declarations are allowed at global scope. Global variables are statically allocated.
+Variable declarations are allowed at global scope and inside namespace
+bodies. Both are **global variables**: a namespace only changes the
+qualified name, not the rules.
 
-Two different initializer forms exist for declarations, and they follow different rules at global scope.
+Global rules:
 
-**Constant initializers.** A global declaration may end with `= constExpr`:
+- **Every global is implicitly `const`.** The `const` keyword is accepted
+  but redundant. A global cannot be assigned, compound-assigned,
+  incremented, or written through a field or element access.
+- **The type must be value-assignable:** a primitive integer, an enum, a
+  pointer (`ptr<T>`, `mview<T>`, `view<T>`), or a struct/tuple whose parts
+  are all value-assignable. Arrays, dynamic arrays, and pointer-only
+  aggregates cannot be globals.
+- A global is initialized once before `main` and never mutated after that.
+- `getptr(global)` and `getmview(global)` are rejected; `getview(global)`
+  is allowed. A global `view` therefore provides read-only access without
+  exposing mutable storage.
+
+**Default initialization.** A global without an initializer starts with its
+type's default value: primitives `0`, pointers `null`, enums their first
+variant, and structs/tuples recursively zero/default-initialized. Declared
+primitive field defaults are applied on top of that zero state.
+
+**Allowed initializers.** A global may be initialized with a static value:
+
+- an integer constant expression for a primitive global;
+- an enum variant reference for an enum global;
+- `null` for a pointer global;
+- a compile-time string expression for a pointer global;
+- an array literal for a pointer global (a `view<[T, N]>` value over
+  immutable constant storage);
+- `getview` over another global (a read-only static address);
+- a struct or tuple aggregate literal whose entries are recursively static
+  values, including nested aggregate literals, enum variants, `null`,
+  compile-time strings, array literals, and `getview` of globals.
+
+Omitted fields in a global aggregate literal receive their declared default
+or the type default (`0`, `null`, first enum variant, recursively). This is
+the same zero/default state as an uninitialized global.
 
 ```franko
-int32 g = 1 + 2
-uint64 mask = 1 << 8
+struct Point {
+    int32 x
+    int32 y = 5
+    view<int32> link
+}
+
+enum<uint8> Mode { idle = 5, active = 9 }
+
+int32 G = 7
+Mode mode = Mode::active
+Point origin = Point { x = 1 }          // y = 5, link = null
+Point blank                             // x = 0, y = 5, link = null
+(int32, int32) pair = (int32, int32) { 4 }   // _0 = 4, _1 = 0
+view<int32> g_view = getview(G)
+view<[byte, 5]> greeting = "hello"
+view<[int32, 3]> numbers = [1, 2, 3]
+
+namespace util {
+    int32 offset = 100                  // namespace global, same rules
+}
 ```
 
-The initializer must be a constant expression built from literals, so it is folded at compile time and may not reference variables. Only primitive globals accept this form: struct, array, and ptr globals reject `= constExpr` as a type mismatch.
+`Point origin { x = 1 }` field-wise initialization remains local-only;
+global aggregates use the `Point origin = Point { ... }` literal form.
 
-**Static address initializers.** A pointer-typed global may be
-initialized with `null`, with `getptr`/`getmview`/`getview` over another
-global variable, or with a materialized string expression (which folds and
-becomes a view over immutable constant storage; see
-[String Literals](24-string-literals.md)):
+**Rejected initializers.** Runtime expressions are not allowed at global
+scope. Calls, casts, dereferences, indexing, member reads, and reads of
+other variables are compile errors:
 
 ```franko
-[byte, 5] greeting
-view<[byte, 5]> v = getview(greeting)
-view<[byte, 5]> s = "he" + "llo"
-ptr<[byte, 5]> p = null
+int32 a = otherGlobal               // invalid: reads a runtime global
+Point p = Point { x = readInput() } // invalid: runtime call
+int32 b = cast<int32>(someValue)    // invalid: runtime cast
 ```
 
-The initializer must be a statically representable address of the right
-type (a permission downgrade is allowed, an upgrade is not).
-
-An array literal may initialize a pointer-typed global (it is a
-`view<[T, N]>` value over immutable constant storage, like a string
-literal):
-
-```franko
-view<[int32, 4]> G = [1, 2, 3, 4]   // valid
-```
-
-**Ordinary declaration initialization.** The `= expr` form described in this chapter and in [Assignment](16-assignment.md), when the expression is not constant, performs an executable initialization. Executable statements are not allowed at global scope, so this form is invalid on global declarations:
-
-```franko
-int32 g = h                     // invalid: the initializer must be constant
-[int32, 3] xs = [1, 2, 3]  // invalid: arrays are not assignable from literals
-[byte, 6] s = "hello"        // invalid: strings cannot initialize arrays
-```
-
-The constant-initializer, static-address, and array-literal forms above
-are the only ways to initialize a global at its declaration.
+Executable statements are not allowed at global scope.
 
 ## 18.5 Uninitialized Values
 
@@ -110,7 +140,12 @@ A **local** declaration without an initializer default-initializes the variable:
 
 There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
 
-**Global** declarations are statically allocated: primitives, static array elements, and aggregate storage without an explicit default start at zero (pointer storage starts null) before `main` runs, and dynamic arrays start empty. Global constant initializers and field defaults (see Global Variable Declarations above) are applied on top of that.
+**Global** declarations are statically allocated and initialized before
+`main` runs: primitives and aggregate storage without an explicit default
+start at zero, pointer storage starts null, enums start at their first
+variant, and struct/tuple storage is zero/default-initialized recursively.
+Declared field defaults and global initializers are applied on top of that.
+Globals cannot be arrays or dynamic arrays; those types must be local.
 
 ## 18.6 Struct Fields
 
@@ -189,9 +224,10 @@ The rules:
    `const` is not part of overload identity or mangling: `f(const int32)` and
    `f(int32)` are duplicate declarations. A method's `self` slot is always
    implicitly const; writing `const self` is allowed but redundant.
-8. **Const globals are allowed** for value-assignable types, using the
-   existing global initializer forms (constant initializer, static address,
-   string expression, or array literal through a pointer type). A const global
-   cannot be assigned from any function.
+8. **Every global is implicitly const.** The `const` keyword is optional
+   and redundant on globals. Globals use the static initializer forms in
+   [Global Variable Declarations](#184-global-variable-declarations) and
+   cannot be assigned from any function. Namespace variables follow the
+   same rule.
 
 `#is_value_assignable` is exactly the type predicate `const` requires.

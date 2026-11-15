@@ -877,12 +877,23 @@ public class Cpp14Codegen {
         }
 
         if (node.staticInitializer != null) {
-            initializer = " = " + expressionEmitter.emitExpr(this, node.staticInitializer);
+            initializer = " = "
+                    + (sym.kind == SymbolKind.GLOBAL
+                        ? expressionEmitter.emitStaticInitializer(
+                                this, node.staticInitializer)
+                        : expressionEmitter.emitExpr(
+                                this, node.staticInitializer));
         }
 
         if (initializer.isEmpty()
                 && sym.type.kind == SastTypeKind.PTR) {
             initializer = " = nullptr";
+        }
+
+        if (initializer.isEmpty()
+                && (sym.type.kind == SastTypeKind.STRUCT
+                    || sym.type.kind == SastTypeKind.TUPLE)) {
+            initializer = " = {}";
         }
 
         emitLine(declaration + initializer + ";");

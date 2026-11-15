@@ -2,9 +2,9 @@
 // A static address initializer must be a pointer type match or a
 // permission downgrade: initializing a ptr<T> global from getview(...)
 // raises permissions and is rejected.
-[byte, 5] greeting;
+int32 greeting = 7;
 
-ptr<[byte, 5]> global_value = getview(greeting);
+ptr<int32> global_value = getview(greeting);
 
 func main() -> int32 {
     return 0;

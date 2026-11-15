@@ -1,0 +1,7 @@
+// Failure fixture: global_immutable/array_global
+// Arrays are not value-assignable, so they cannot be global.
+[int32, 3] values
+
+func main() -> int32 {
+    return 0
+}

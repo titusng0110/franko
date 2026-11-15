@@ -445,7 +445,8 @@ Dynamic array fields are not allocated as part of the struct declaration; alloca
 
 ## 38.19 Struct Globals
 
-Global variable declarations accept constant initializers.
+Global variables are implicitly const and are initialized before `main`.
+A struct global must be value-assignable.
 
 ```franko
 struct Point {
@@ -454,19 +455,21 @@ struct Point {
 }
 
 int32 scale = 2;
-Point origin;
+Point origin = Point { x = 2 };   // y gets its field default
+Point blank;                      // x = 0, y = 0
 
 func main() -> int32 {
-    origin.x = scale;
-
     stdout(origin.x);   // 2
+    stdout(origin.y);   // 0
+    stdout(blank.x);    // 0
     stdout(scale);      // 2
 
     return 0;
 }
 ```
 
-Global declarations are checked before `main` runs; executable statements remain invalid at global scope.
+Global declarations are checked before `main` runs; executable statements and
+assignments to globals remain invalid.
 
 ## 38.20 Array `length()`
 

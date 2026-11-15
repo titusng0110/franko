@@ -3,8 +3,8 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Struct Globals
 // ============================================================
-// Covers: a struct-typed global variable, field defaults applied
-// to globals, and assigning a global struct field in main.
+// Covers: a struct-typed global variable and field defaults applied
+// to globals. Globals are read-only, so mutation uses a local twin.
 // ============================================================
 
 struct Conf {
@@ -18,11 +18,13 @@ Conf g;
 func main() -> int32 {
     // Fields with defaults print their defaults.
     stdout(g.w, end = " "); stdout(g.h);
+    stdout(g.label);
 
-    // Assign fields in main.
-    g.w = 800;
-    g.label = 24;
-    stdout(g.w, end = " "); stdout(g.label);
+    // Mutable struct state lives in a local.
+    Conf local;
+    local.w = 800;
+    local.label = 24;
+    stdout(local.w, end = " "); stdout(local.label);
 
     return 0;
 }

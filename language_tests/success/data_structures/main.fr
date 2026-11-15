@@ -14,9 +14,6 @@ struct Config {
     [int32, 4] data
 }
 
-// --- Static array of bytes ---
-[byte, 12] grid;
-
 func main() -> int32 {
     // --- Static Array declaration with array literal initializer ---
     [int32, 3] static_arr;

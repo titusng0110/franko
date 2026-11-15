@@ -1,0 +1,9 @@
+// Failure fixture: global_immutable/assign_global
+// Global variables are implicitly const; assigning one is rejected even
+// without the const keyword.
+int32 G = 1
+
+func main() -> int32 {
+    G = 2
+    return 0
+}

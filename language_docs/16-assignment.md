@@ -27,6 +27,23 @@ x += 1         // error
 x++            // error: equivalent to x += 1
 ```
 
+Every global variable is implicitly const, even when the declaration omits
+the `const` keyword. Namespace variables are globals too:
+
+```franko
+int32 G = 1
+G = 2          // error: Cannot assign to global variable 'G'
+
+namespace util {
+    int32 offset = 100
+}
+
+util::offset = 5   // error: Cannot assign to global variable 'offset'
+```
+
+Global mutations are rejected by the same const-storage rules as local
+const variables; see [Declarations](18-declarations.md#184-global-variable-declarations).
+
 The restriction follows the storage root. `p.field = 1`, `p[i] = 1`, and
 `p = v` are all rejected when `p` is const, but `$(p) = v` and
 `$(p).field = v` write the pointee and are allowed when `p` is a const

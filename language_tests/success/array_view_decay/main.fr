@@ -32,8 +32,7 @@ func f(view<[int32]> x) -> int32 {
     return 2;
 }
 
-[int32, 3] global_xs;
-mview<[int32]> global_m = getmview(global_xs);
+view<[int32]> global_m = [1, 2, 3]
 
 func main() -> int32 {
     [int32, 4] xs;
@@ -108,10 +107,9 @@ func main() -> int32 {
     }
     stdout(i);
 
-    // decay in a global initializer
-    global_xs[0] = 7;
-    $(global_m)[0] = 8;
-    stdout(global_xs[0]);
+    // decay in a global initializer: an array literal becomes a
+    // dynamic view over shared constant storage
+    stdout($(global_m)[0]);
     stdout($(global_m).length());
 
     return 0;

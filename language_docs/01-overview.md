@@ -25,10 +25,11 @@ Franko is a small statically typed language with:
   [Functions](19-functions.md));
 - struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](28-methods.md));
 - `void` and non-`void` return types;
-- global variable declarations;
+- global variable declarations, which are always implicitly `const`,
+  read-only, and limited to value-assignable types;
 - global function declarations;
-- `const` storage on locals, parameters, and globals for value-assignable
-  types (see [Declarations](18-declarations.md));
+- `const` storage on locals and parameters for value-assignable types
+  (globals are implicitly const; see [Declarations](18-declarations.md));
 - assignment;
 - blocks;
 - `if`;

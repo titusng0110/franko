@@ -225,8 +225,9 @@ func main() -> int32 {
 `G` refers to the literal's constant `[int32, 4]` storage; the literal is
 not copied.
 
-Array-typed globals are not assignable from literals (22.5); use
-element assignments in an initializer function.
+Array-typed globals are rejected because arrays are not value-assignable.
+Use a local array and copy the literal with `memcpy`, or keep the literal
+as a read-only `view` global as above.
 
 ## 22.9 Summary
 

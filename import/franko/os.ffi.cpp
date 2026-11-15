@@ -43,12 +43,14 @@
 //
 //   - os::posix::read/write map to ::read/::write and are POSIX-only.
 //     os.fr declares the posix namespace only for linux/macos, so this
-//     block is never inserted into a Windows build.
-//   - os::win32::* are the Win32 File API (fileapi.h: ReadFile/WriteFile;
-//     processenv.h: GetStdHandle; both arrive via <windows.h>). os.fr
-//     declares the win32 namespace only for Windows, so this block is
-//     never inserted into a POSIX build. lpOverlapped is dropped: the
-//     bridge always passes NULL (synchronous I/O).
+//     block is never inserted into a Windows build. Fds 0, 1, and 2 are
+//     reserved for franko/stdio and abort if passed to read or write.
+//   - os::win32::ReadFile/WriteFile are the Win32 File API (fileapi.h,
+//     via <windows.h>). os.fr declares the win32 namespace only for
+//     Windows, so this block is never inserted into a POSIX build.
+//     lpOverlapped is dropped: the bridge always passes NULL
+//     (synchronous I/O). The standard input/output/error handles are
+//     reserved for franko/stdio and abort if passed to either function.
 //   - os::posix::clock_gettime and the os::win32 timing trio are thin
 //     wrappers over the platform clock primitives: clock_gettime on
 //     POSIX, and QueryPerformanceCounter/QueryPerformanceFrequency plus
@@ -68,9 +70,29 @@
 #    define NOMINMAX
 #  endif
 #  include <windows.h>
+
+namespace {
+inline bool os_is_standard_handle(uint64_t value) {
+    HANDLE handle = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(value));
+
+    if (handle == nullptr || handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    return handle == ::GetStdHandle(STD_INPUT_HANDLE)
+            || handle == ::GetStdHandle(STD_OUTPUT_HANDLE)
+            || handle == ::GetStdHandle(STD_ERROR_HANDLE);
+}
+}
 #else
 #  include <unistd.h>
 #  include <time.h>
+
+namespace {
+inline bool os_is_standard_fd(int32_t fd) {
+    return fd >= 0 && fd <= 2;
+}
+}
 #endif
 // @@end
 
@@ -79,6 +101,10 @@ namespace NS_os {
 namespace NS_posix {
 int64_t FUNC_read_bee7609e(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint64_t PARAM_count)
 {
+    if (os_is_standard_fd(PARAM_fd)) {
+        franko_panic("os::posix::read: standard streams are reserved for franko/stdio");
+    }
+
     uint8_t* buffer;
     uint32_t length;
 
@@ -109,6 +135,10 @@ namespace NS_os {
 namespace NS_posix {
 int64_t FUNC_write_7c35a12f(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint64_t PARAM_count)
 {
+    if (os_is_standard_fd(PARAM_fd)) {
+        franko_panic("os::posix::write: standard streams are reserved for franko/stdio");
+    }
+
     uint8_t* buffer;
     uint32_t length;
 
@@ -155,23 +185,15 @@ int32_t FUNC_clock_gettime_de6e7c37(int32_t PARAM_clock_id, Franko_Thin_Pointer<
 }
 // @@end
 
-// @@os::win32::GetStdHandle
-namespace NS_os {
-namespace NS_win32 {
-uint64_t FUNC_GetStdHandle_882a7740(uint32_t PARAM_nStdHandle)
-{
-    HANDLE h = ::GetStdHandle(static_cast<DWORD>(PARAM_nStdHandle));
-    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(h));
-}
-}
-}
-// @@end
-
 // @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
 int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesRead)
 {
+    if (os_is_standard_handle(PARAM_hFile)) {
+        franko_panic("os::win32::ReadFile: standard handles are reserved for franko/stdio");
+    }
+
     uint8_t* buffer;
     uint32_t length;
 
@@ -207,6 +229,10 @@ namespace NS_os {
 namespace NS_win32 {
 int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesWritten)
 {
+    if (os_is_standard_handle(PARAM_hFile)) {
+        franko_panic("os::win32::WriteFile: standard handles are reserved for franko/stdio");
+    }
+
     uint8_t* buffer;
     uint32_t length;
 
