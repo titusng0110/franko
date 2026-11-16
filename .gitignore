@@ -2,6 +2,7 @@
 *.exe
 *.out
 *.class
+*.dSYM/
 build/
 .venv/
 __pycache__/
