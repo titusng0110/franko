@@ -3,14 +3,14 @@
 // would leave a dangling pointer after the callee returns; the store
 // rule rejects it. Globals are also immutable, so caller-owned storage
 // is the surviving out-parameter form of this check.
-func f(ptr<ptr<[int32]>> out) -> int32 {
+func f(ptr<view<[int32]>> out) -> int32 {
     [int32] d
     d.init(1)
-    $(out) = getptr(d)
+    $(out) = view(d)
     return 0
 }
 
 func main() -> int32 {
-    ptr<[int32]> result
-    return f(getptr(result))
+    view<[int32]> result
+    return f(ptr(result))
 }

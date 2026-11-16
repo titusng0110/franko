@@ -69,9 +69,9 @@ final class PointerPermissions {
 
     static String creationIntrinsic(PtrPermission permission) {
         switch (permission) {
-            case OWNER: return "getptr";
-            case MUTABLE: return "getmview";
-            case READ_ONLY: return "getview";
+            case OWNER: return "ptr";
+            case MUTABLE: return "mview";
+            case READ_ONLY: return "view";
             default: throw new IllegalStateException("Unknown permission: " + permission);
         }
     }

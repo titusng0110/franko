@@ -135,7 +135,7 @@ public class DeclarationChecker {
                     + " initialized once before main from static values. Use "
                     + type.describe()
                     + " { ... } with constant, null, enum, string, array,"
-                    + " getview, or nested aggregate values.");
+                    + " view, or nested aggregate values.");
                 return;
             }
         } else {
@@ -162,7 +162,7 @@ public class DeclarationChecker {
             diagnostics.error("Variable '"
                 + node.symbol.qualifiedName()
                 + "' has a static address initializer, but only pointer "
-                + "globals can be initialized with getptr/getmview/getview."
+                + "globals can be initialized with ptr/mview/view."
                 + " Those intrinsics produce an address, so the global"
                 + " must be a pointer with a compatible referent type."
                 + " Declare the global as ptr<T>, mview<T>, or view<T>,"
@@ -191,7 +191,7 @@ public class DeclarationChecker {
                 + " of the declared pointer type, allowing only"
                 + " permission downgrades."
                 + " Match the declared pointer type, or insert an"
-                + " explicit getview/getmview conversion.");
+                + " explicit view/mview conversion.");
         }
     }
 
@@ -250,7 +250,7 @@ public class DeclarationChecker {
         SastType type,
         String where
     ) {
-        types.ensureNoOwnedPointerInAggregate(type, where);
+        types.ensureNoEmbeddedOwnedPointer(type, where);
         checkDeclaredType(type, where, new HashMap<>(), new HashSet<>());
     }
 
@@ -514,13 +514,13 @@ public class DeclarationChecker {
             + node.symbol.qualifiedName()
             + "' has a constant initializer, but only primitive globals "
             + "can have constant initializers (pointer globals accept "
-            + "null, getptr/getmview/getview over a global, or a string "
+            + "null, ptr/mview/view over a global, or a string "
             + "literal)."
             + " Global constant initializers are folded into static"
             + " storage, which only primitive values can represent"
             + " directly."
             + " Use a primitive global, or use one of the accepted"
-            + " pointer forms such as null, getptr/getmview/getview over"
+            + " pointer forms such as null, ptr/mview/view over"
             + " a global, or a string literal.");
     }
 

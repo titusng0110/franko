@@ -64,7 +64,7 @@ Global rules:
   are all value-assignable. Arrays, dynamic arrays, and pointer-only
   aggregates cannot be globals.
 - A global is initialized once before `main` and never mutated after that.
-- `getptr(global)` and `getmview(global)` are rejected; `getview(global)`
+- `ptr(global)` and `mview(global)` are rejected; `view(global)`
   is allowed. A global `view` therefore provides read-only access without
   exposing mutable storage.
 
@@ -81,10 +81,10 @@ primitive field defaults are applied on top of that zero state.
 - a compile-time string expression for a pointer global;
 - an array literal for a pointer global (a `view<[T, N]>` value over
   immutable constant storage);
-- `getview` over another global (a read-only static address);
+- `view` over another global (a read-only static address);
 - a struct or tuple aggregate literal whose entries are recursively static
   values, including nested aggregate literals, enum variants, `null`,
-  compile-time strings, array literals, and `getview` of globals.
+  compile-time strings, array literals, and `view` of globals.
 
 Omitted fields in a global aggregate literal receive their declared default
 or the type default (`0`, `null`, first enum variant, recursively). This is
@@ -104,7 +104,7 @@ Mode mode = Mode::active
 Point origin = Point { x = 1 }          // y = 5, link = null
 Point blank                             // x = 0, y = 5, link = null
 (int32, int32) pair = (int32, int32) { 4 }   // _0 = 4, _1 = 0
-view<int32> g_view = getview(G)
+view<int32> g_view = view(G)
 view<[byte, 5]> greeting = "hello"
 view<[int32, 3]> numbers = [1, 2, 3]
 
@@ -200,8 +200,8 @@ The rules:
    variable is also const storage. A dereference starts a new storage region:
    `$(p) = v` is allowed when `p` is a const pointer; only `p = v` is
    rejected.
-2. **No mutable pointer to const storage.** `getptr(constVar)` and
-   `getmview(constVar)` are rejected; `getview(constVar)` is allowed.
+2. **No mutable pointer to const storage.** `ptr(constVar)` and
+   `mview(constVar)` are rejected; `view(constVar)` is allowed.
 3. **Declaration initialization only.** A const variable is initialized by
    its declaration. Both the plain form `const T x = expr` and the field-wise
    form `const P p { field = v }` are declaration initialization, not a
@@ -215,7 +215,7 @@ The rules:
    `Struct fields cannot be const`. A value-assignable struct may itself be
    const.
 6. **Const struct receivers allow only `view<X> self` methods.** The hidden
-   receiver argument uses `getptr`, `getmview`, or `getview` matching the
+   receiver argument uses `ptr`, `mview`, or `view` matching the
    declared `self` type, so `ptr<X> self` and `mview<X> self` calls on a const
    value are rejected and `view<X> self` is allowed. Direct field reads are
    allowed; field writes are rejected.

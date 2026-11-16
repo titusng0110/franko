@@ -2,7 +2,7 @@ import "franko/stdio"
 
 func main() -> int32 {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
 
     if (p != null) {
         p = null

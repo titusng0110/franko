@@ -166,13 +166,13 @@ import "franko/string"
 func main() -> int32 {
     std::String s
     s.from("hello")
-    stdout(getview(s))                 // hello + newline
-    stdout(getview(s), end = "!")      // hello!
+    stdout(view(s))                 // hello + newline
+    stdout(view(s), end = "!")      // hello!
     stdout()                           // newline
 
     std::String end
     end.from(" world")
-    stdout(getview(s), getview(end))   // hello world
+    stdout(view(s), view(end))   // hello world
     stdout()                           // newline
 
     s.uninit()
@@ -213,7 +213,7 @@ import "franko/stdio"
 func main() -> int32 {
     [byte] buf;
     buf.init(64);
-    (uint32 val, int32 err) result = stdin_bytes(getmview(buf), 64);
+    (uint32 val, int32 err) result = stdin_bytes(mview(buf), 64);
     if (result.err != 0) {
         stdout(result.err);
     } else {
@@ -257,7 +257,7 @@ import "franko/string"
 func main() -> int32 {
     stdout("What's your name? ", end = null);
     std::String name;
-    if (stdin_line(getptr(name)) != 0) {
+    if (stdin_line(ptr(name)) != 0) {
         stdout("input error");
     } else {
         stdout(name.length());   // name length without the newline

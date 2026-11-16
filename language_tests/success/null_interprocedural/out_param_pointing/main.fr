@@ -2,13 +2,13 @@ import "franko/stdio"
 
 int32 G = 7
 
-func set(ptr<ptr<int32>> out, ptr<int32> value) -> void {
-    $(out) = getptr($(value))
+func set(ptr<view<int32>> out, view<int32> value) -> void {
+    $(out) = value
 }
 
 func main() -> int32 {
-    ptr<int32> p
-    set(getptr(p), getptr(G))
+    view<int32> p
+    set(ptr(p), view(G))
     stdout($(p))
     return 0
 }

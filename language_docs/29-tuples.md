@@ -32,7 +32,7 @@ Rules:
 - each element may carry an optional declaration-site name;
 - tuple types may appear wherever an ordinary declared type is allowed;
 - `void` is not a valid tuple element type;
-- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 
 A tuple declaration uses the tuple type followed by the variable name:
 
@@ -194,8 +194,8 @@ The same rule used for struct fields applies:
 ```franko
 res.val = 1
 lazy._0 = 3
-getptr(res.val)
-getview(lazy._1)
+ptr(res.val)
+view(lazy._1)
 ```
 
 Tuple element access composes with the ordinary access chains:
@@ -228,7 +228,7 @@ const (int32, int32) defaults
 ```
 
 The const rules are the usual ones: no later assignment, no mutable pointer
-through `getptr`/`getmview`, and `getview` only. A tuple containing an array
+through `ptr`/`mview`, and `view` only. A tuple containing an array
 is pointer-only and cannot be `const`. See
 [Declarations](18-declarations.md#188-const-storage).
 
@@ -276,7 +276,7 @@ or returned by value. Use a pointer to the tuple instead:
 
 ```franko
 (int32, [int32, 3]) value
-ptr<(int32, [int32, 3])> p = getptr(value)
+ptr<(int32, [int32, 3])> p = ptr(value)
 ```
 
 Tuple element names are not part of the function signature. These two
@@ -361,7 +361,7 @@ Tuples are deliberately limited to ordinary aggregate values:
   signature;
 - at least two elements are required;
 - a tuple containing a static array or dynamic array is pointer-only;
-- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden)).
+- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded)).
 
 Tuple values are produced by declarations, element writes, aggregate
 literals, whole-tuple assignment, and function returns.

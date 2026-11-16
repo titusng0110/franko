@@ -83,7 +83,7 @@ func main() -> int32 {
     arr[0].bump()
     stdout(arr[0].get())
     ptr<Counter> p
-    p = getptr(c)
+    p = ptr(c)
     $(p).bump()
     stdout(c.get())
     Counter d

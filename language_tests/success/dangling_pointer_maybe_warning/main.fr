@@ -2,7 +2,7 @@ func maybe(uint32 pick, ptr<int32> q) -> ptr<int32> {
     int32 x = 0
     ptr<int32> p
     if (pick != 0) {
-        p = getptr(x)
+        p = ptr(x)
     } else {
         p = q
     }
@@ -11,6 +11,6 @@ func maybe(uint32 pick, ptr<int32> q) -> ptr<int32> {
 
 func main() -> int32 {
     int32 z = 0
-    ptr<int32> p = maybe(0, getptr(z))
+    ptr<int32> p = maybe(0, ptr(z))
     return 0
 }

@@ -25,7 +25,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -75,7 +75,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -207,7 +207,7 @@ func main() -> int32 {
     uint32 line_len = 0
 
     // Header: n m source.
-    if (text::read_line_len(getmview(line), 256, getmview(line_len)) != 0) {
+    if (text::read_line_len(mview(line), 256, mview(line_len)) != 0) {
         return 1
     }
 
@@ -215,15 +215,15 @@ func main() -> int32 {
     uint32 m = 0
     uint32 source = 0
     uint32 pos = 0
-    view<[byte]> line_view = getview(line)
+    view<[byte]> line_view = view(line)
 
-    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(n)) == 0) {
+    if (parse_next_uint32(line_view, line_len, mview(pos), mview(n)) == 0) {
         return 1
     }
-    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(m)) == 0) {
+    if (parse_next_uint32(line_view, line_len, mview(pos), mview(m)) == 0) {
         return 1
     }
-    if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(source)) == 0) {
+    if (parse_next_uint32(line_view, line_len, mview(pos), mview(source)) == 0) {
         return 1
     }
 
@@ -247,7 +247,7 @@ func main() -> int32 {
 
     for (uint32 i = 0; i < m; i++) {
         line_len = 0
-        if (text::read_line_len(getmview(line), 256, getmview(line_len)) != 0) {
+        if (text::read_line_len(mview(line), 256, mview(line_len)) != 0) {
             return 1
         }
 
@@ -256,13 +256,13 @@ func main() -> int32 {
         uint32 w = 0
         pos = 0
 
-        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(u)) == 0) {
+        if (parse_next_uint32(line_view, line_len, mview(pos), mview(u)) == 0) {
             return 1
         }
-        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(v)) == 0) {
+        if (parse_next_uint32(line_view, line_len, mview(pos), mview(v)) == 0) {
             return 1
         }
-        if (parse_next_uint32(line_view, line_len, getmview(pos), getmview(w)) == 0) {
+        if (parse_next_uint32(line_view, line_len, mview(pos), mview(w)) == 0) {
             return 1
         }
         if (u >= n || v >= n) {

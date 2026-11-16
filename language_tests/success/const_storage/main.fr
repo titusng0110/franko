@@ -39,12 +39,12 @@ func main() -> int32 {
     stdout($(xs)[0] + $(xs)[2])
 
     int32 mutable_value = 4
-    const ptr<int32> pv = getptr(mutable_value)
+    const ptr<int32> pv = ptr(mutable_value)
     $(pv) = 9
     stdout(mutable_value)
 
     const Point cv = Point { x = 7, y = 8 }
-    view<Point> v = getview(cv)
+    view<Point> v = view(cv)
     stdout($(v).x)
     stdout(cv.sum())
     stdout(cv.sum_const())

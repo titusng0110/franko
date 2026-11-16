@@ -11,7 +11,7 @@ import "franko/stdio"
 
 int32 greeting = 7
 
-view<int32> v = getview(greeting)
+view<int32> v = view(greeting)
 view<[byte, 5]> s = "hello"
 view<[int32, 4]> G = [1, 2, 3, 4]
 view<[int32]> D = [5, 6, 7]

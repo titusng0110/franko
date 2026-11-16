@@ -10,6 +10,6 @@ func check(ptr<int32> p) -> int32 {
 func main() -> int32 {
     stdout(check(null))
     int32 x = 5
-    stdout(check(getptr(x)))
+    stdout(check(ptr(x)))
     return 0
 }

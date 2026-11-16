@@ -4,7 +4,7 @@ func main() -> int32 {
     src.memset(1);
     [byte, 3] dst;
     dst.memset(2);
-    view<[byte, 3]> v = getview(dst);
-    $(v).memcpy(getptr(src));
+    view<[byte, 3]> v = view(dst);
+    $(v).memcpy(ptr(src));
     return 0;
 }

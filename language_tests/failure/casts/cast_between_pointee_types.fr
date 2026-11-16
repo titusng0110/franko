@@ -3,7 +3,7 @@
 // referenced type.
 func main() -> int32 {
     [int32, 4] nums;
-    ptr<[int32, 4]> p = getptr(nums);
+    ptr<[int32, 4]> p = ptr(nums);
     view<[byte, 4]> v = cast<view<[byte, 4]>>(p);
     return 0;
 }

@@ -21,7 +21,7 @@ func main() -> int32 {
 
     [int32] dd2
     dd2.init_zero(2)
-    dd2.memcpy(getptr(dd))
+    dd2.memcpy(ptr(dd))
     stdout(dd2[0], end = " "); stdout(dd2[1])
 
     // static <- static with different lengths.
@@ -33,25 +33,25 @@ func main() -> int32 {
 
     [int32, 2] s2
     s2.memset(0)
-    s2.memcpy(getptr(s5))
+    s2.memcpy(ptr(s5))
     stdout(s2[0], end = " "); stdout(s2[1])
 
     // dynamic <- static.
     [int32] ds
     ds.init_zero(3)
-    ds.memcpy(getptr(s5))
+    ds.memcpy(ptr(s5))
     stdout(ds[0], end = " "); stdout(ds[1], end = " "); stdout(ds[2])
 
     // static <- dynamic.
     [int32, 3] sd
     sd.memset(0)
-    sd.memcpy(getptr(dd))
+    sd.memcpy(ptr(dd))
     stdout(sd[0], end = " "); stdout(sd[1], end = " "); stdout(sd[2])
 
     // Ranged memcpy: dst[1..2] = src[2..3].
     [int32, 4] rd
     rd.memset(0)
-    rd.memcpy(getptr(dd), 1, 2, 2)
+    rd.memcpy(ptr(dd), 1, 2, 2)
     stdout(rd[0], end = " "); stdout(rd[1], end = " "); stdout(rd[2], end = " "); stdout(rd[3])
 
     dd.uninit()

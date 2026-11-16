@@ -2,7 +2,7 @@ func main() -> int32 {
     ptr<int32> p
     {
         int32 y = 1
-        p = getptr(y)
+        p = ptr(y)
     }
     return $(p)
 }

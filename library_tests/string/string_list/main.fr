@@ -33,17 +33,17 @@ func test_basic() -> int32 {
 
     std::String needle
     needle.from("aa")
-    (uint32 idx, int32 err) hit = list.find(getview(needle))
+    (uint32 idx, int32 err) hit = list.find(view(needle))
     stdout(hit.idx)
     stdout(hit.err)
-    hit = list.find_next(getview(needle), 1)
+    hit = list.find_next(view(needle), 1)
     stdout(hit.idx)
     stdout(hit.err)
-    stdout(list.count(getview(needle)))
-    stdout(list.count_from(getview(needle), 1))
+    stdout(list.count(view(needle)))
+    stdout(list.count_from(view(needle), 1))
     std::String missing
     missing.from("zz")
-    hit = list.find(getview(missing))
+    hit = list.find(view(missing))
     stdout(hit.idx)
     stdout(hit.err)
 
@@ -63,29 +63,29 @@ func test_basic() -> int32 {
     stdout(hit.err)
 
     std::String got
-    stdout(list.get(1, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(list.get(1, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(list.get(99, getptr(got)))
+    stdout(list.get(99, ptr(got)))
 
     [byte] gotb
     gotb.init(1)
-    stdout(list.get(2, getptr(gotb)))
+    stdout(list.get(2, ptr(gotb)))
     stdout(gotb.length())
-    stdout(getview(gotb))
+    stdout(view(gotb))
     if (gotb.length() != 0) {
         gotb.uninit()
     }
 
     stdout(list.set(1, "cc"))
     stdout(list.set(99, "cc"))
-    stdout(list.set(0, getview(needle)))
+    stdout(list.set(0, view(needle)))
 
     stdout(list.insert("dd", 2))
-    stdout(list.insert(getview(missing), 0))
+    stdout(list.insert(view(missing), 0))
     stdout(list.length())
     stdout(list.insert("xx", 99))
 
@@ -99,21 +99,21 @@ func test_basic() -> int32 {
     std::StringList source
     source.append("one")
     source.append("two")
-    stdout(list.from(getview(source)))
+    stdout(list.from(view(source)))
     stdout(list.length())
-    stdout(list.get(0, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(list.get(0, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(list.get(1, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(list.get(1, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(list.from(getview(list)))
+    stdout(list.from(view(list)))
     stdout(list.length())
 
     view<std::StringList> empty_list = null
@@ -121,9 +121,9 @@ func test_basic() -> int32 {
     stdout(list.length())
     stdout(list.append("new"))
     stdout(list.length())
-    stdout(list.get(0, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(list.get(0, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -140,15 +140,15 @@ func test_basic() -> int32 {
     addbytes[1] = 101
     added += addbytes
     stdout(added.length())
-    stdout(added.get(0, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(added.get(0, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(added.get(3, getptr(got)))
-    stdout(got.to(getptr(out)))
-    stdout(getview(out))
+    stdout(added.get(3, ptr(got)))
+    stdout(got.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -158,52 +158,52 @@ func test_basic() -> int32 {
         odd.append("x")
     }
     stdout(odd.length())            // 41
-    stdout(list_capacity_0(getview(odd)))       // 64
+    stdout(list_capacity_0(view(odd)))       // 64
     stdout(odd.shrink_to_fit())     // 0
-    stdout(list_capacity_0(getview(odd)))       // 41: exact fit
+    stdout(list_capacity_0(view(odd)))       // 41: exact fit
     stdout(odd.append("y"))         // 0
     stdout(odd.length())            // 42
-    stdout(list_capacity_0(getview(odd)))       // 64: back on the power-of-two ladder
+    stdout(list_capacity_0(view(odd)))       // 64: back on the power-of-two ladder
     stdout(odd.shrink_to_fit())     // 0
-    stdout(list_capacity_0(getview(odd)))       // 42
+    stdout(list_capacity_0(view(odd)))       // 42
     stdout(odd.append("z"))         // 0
-    stdout(list_capacity_0(getview(odd)))       // 64
+    stdout(list_capacity_0(view(odd)))       // 64
     odd.uninit()
 
     std::StringList big
     big.append("x")
     stdout(big.length())            // 1
-    stdout(list_capacity_0(getview(big)))       // 64: initial buffer
+    stdout(list_capacity_0(view(big)))       // 64: initial buffer
     for (uint32 i = 1; i < 65; i = i + 1) {
         big.append("x")
     }
     stdout(big.length())            // 65
-    stdout(list_capacity_0(getview(big)))       // 128: doubled once
+    stdout(list_capacity_0(view(big)))       // 128: doubled once
     for (uint32 i = 65; i < 130; i = i + 1) {
         big.append("x")
     }
     stdout(big.length())            // 130
-    stdout(list_capacity_0(getview(big)))       // 256: doubled again
+    stdout(list_capacity_0(view(big)))       // 256: doubled again
     stdout(big.shrink_to_fit())
-    stdout(list_capacity_0(getview(big)))       // 130: trimmed to the live count
+    stdout(list_capacity_0(view(big)))       // 130: trimmed to the live count
     stdout(big.from(empty_list))
     stdout(big.length())
-    stdout(list_capacity_0(getview(big)))
+    stdout(list_capacity_0(view(big)))
     stdout(big.append("again"))
     stdout(big.length())
-    stdout(list_capacity_0(getview(big)))
+    stdout(list_capacity_0(view(big)))
     big.clear()
     stdout(big.length())
-    stdout(list_capacity_0(getview(big)))       // clear keeps the list buffer
+    stdout(list_capacity_0(view(big)))       // clear keeps the list buffer
     stdout(big.append("after"))
     stdout(big.length())
-    stdout(list_capacity_0(getview(big)))
+    stdout(list_capacity_0(view(big)))
     stdout(big.shrink_to_fit())
-    stdout(list_capacity_0(getview(big)))       // 1: trimmed to one live element
+    stdout(list_capacity_0(view(big)))       // 1: trimmed to one live element
     big.clear()
     stdout(big.length())
     stdout(big.shrink_to_fit())
-    stdout(list_capacity_0(getview(big)))       // 0: empty list frees the buffer
+    stdout(list_capacity_0(view(big)))       // 0: empty list frees the buffer
     big.uninit()
 
     list.clear()

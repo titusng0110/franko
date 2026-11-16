@@ -3,7 +3,7 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: View and MView Basics
 // ============================================================
-// Covers: getptr/getmview/getview creation, implicit permission
+// Covers: ptr/mview/view creation, implicit permission
 // downgrades on assignment and argument passing (ptr -> mview ->
 // view), reads through views, writes through ptr/mview, explicit
 // downgrades via cast<T>, length() through every permission, and
@@ -28,9 +28,9 @@ func main() -> int32 {
     buf.memset(0);
 
     // Creation intrinsics over storage-backed lvalues.
-    ptr<[byte, 3]> p = getptr(buf);
-    mview<[byte, 3]> m = getmview(buf);
-    view<[byte, 3]> v = getview(buf);
+    ptr<[byte, 3]> p = ptr(buf);
+    mview<[byte, 3]> m = mview(buf);
+    view<[byte, 3]> v = view(buf);
 
     // Writes through ptr and mview, reads through view.
     $(p)[0] = 5;
@@ -73,7 +73,7 @@ func main() -> int32 {
 
     // Reassigning a view variable is fine: the pointer variable itself
     // is owner-protected local storage.
-    v = getview(buf);
+    v = view(buf);
     stdout($(v)[0]);
 
     return 0;

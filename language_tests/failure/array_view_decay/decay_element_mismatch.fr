@@ -3,7 +3,7 @@
 // storage with different element layouts.
 func main() -> int32 {
     [int32, 3] xs;
-    view<[int32, 3]> v = getview(xs);
+    view<[int32, 3]> v = view(xs);
     view<[int64]> w = v;
     return 0;
 }

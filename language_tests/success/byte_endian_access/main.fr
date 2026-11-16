@@ -80,7 +80,7 @@ func main() -> int32 {
     dyn.uninit()
 
     // Read-only access through a view.
-    view<[byte, 16]> ro = getview(buf)
+    view<[byte, 16]> ro = view(buf)
     stdout($(ro).read_uint16_BE(2))
 
     return 0

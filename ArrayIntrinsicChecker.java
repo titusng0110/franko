@@ -117,8 +117,8 @@ final class ArrayIntrinsicChecker {
                 diagnostics.error("memcmp() source must be an pointer to an array, got "
                         + types.describeSafe(sourcePtr.type)
                         + ". memcmp reads the source through a pointer so it can use the"
-                        + " array's element type and length. Pass getview(array),"
-                        + " getptr(array), or an existing pointer/view instead of the"
+                        + " array's element type and length. Pass view(array),"
+                        + " ptr(array), or an existing pointer/view instead of the"
                         + " array value.");
             } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcmp() source must be an pointer to an array, got ptr<"
@@ -126,7 +126,7 @@ final class ArrayIntrinsicChecker {
                         + ">. memcmp needs a pointer whose referent is an array, because"
                         + " a pointer to one value has no length or element stride to"
                         + " compare. Pass a pointer/view of the whole array, such as"
-                        + " getview(array), rather than a pointer to one element.");
+                        + " view(array), rather than a pointer to one element.");
             } else {
                 sourceArrayType = sourcePtr.type.referencedType;
             }
@@ -240,15 +240,15 @@ final class ArrayIntrinsicChecker {
                 diagnostics.error("memmem() needle must be an pointer to an array, got "
                         + types.describeSafe(needle.type)
                         + ". memmem reads the needle through a pointer so it can use the"
-                        + " pattern array's byte length and data. Pass getview(pattern),"
-                        + " getptr(pattern), or an existing pointer/view instead of the"
+                        + " pattern array's byte length and data. Pass view(pattern),"
+                        + " ptr(pattern), or an existing pointer/view instead of the"
                         + " array value.");
             } else if (!types.isArrayType(needle.type.referencedType)) {
                 diagnostics.error("memmem() needle must be an pointer to an array, got ptr<"
                         + types.describeSafe(needle.type.referencedType)
                         + ">. memmem needs a pointer whose referent is an array, because"
                         + " a pointer to one byte has no needle length. Pass a pointer/view"
-                        + " of the whole byte array, such as getview(pattern), rather than"
+                        + " of the whole byte array, such as view(pattern), rather than"
                         + " a pointer to one element.");
             } else {
                 SastType needleElem =
@@ -640,8 +640,8 @@ final class ArrayIntrinsicChecker {
                 diagnostics.error("memcpy() source must be an pointer to an array, got "
                         + types.describeSafe(sourcePtr.type)
                         + ". memcpy reads the source through a pointer so it can use the"
-                        + " array's element type and length. Pass getview(source),"
-                        + " getptr(source), or an existing pointer/view instead of the"
+                        + " array's element type and length. Pass view(source),"
+                        + " ptr(source), or an existing pointer/view instead of the"
                         + " array value.");
             } else if (!types.isArrayType(sourcePtr.type.referencedType)) {
                 diagnostics.error("memcpy() source must be an pointer to an array, got ptr<"

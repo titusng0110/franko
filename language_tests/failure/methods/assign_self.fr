@@ -10,6 +10,6 @@ struct X {
 func main() -> int32 {
     X a
     X b
-    a.retarget(getptr(b))
+    a.retarget(ptr(b))
     return 0
 }

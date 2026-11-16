@@ -45,11 +45,11 @@ func test_err_overloads() -> int32 {
 
     std::String s
     s.from("string")
-    stderr(getview(s))
+    stderr(view(s))
     std::String end
     end.from("!")
-    stderr(getview(s), getview(end))
-    stderr(getview(s), end = "?")
+    stderr(view(s), view(end))
+    stderr(view(s), end = "?")
     s.uninit()
     end.uninit()
     return 0
@@ -70,39 +70,39 @@ import "franko/string"
 func test_std_string() -> int32 {
     std::String s
     s.from("hello")
-    stdout(getview(s))
-    stdout(getview(s), end = "!")
+    stdout(view(s))
+    stdout(view(s), end = "!")
     stdout()
 
     std::String end
     end.from(" world")
-    stdout(getview(s), getview(end))
+    stdout(view(s), view(end))
     stdout()
 
     std::String empty
-    stdout(getview(empty))
-    stdout(getview(empty), end = "x")
+    stdout(view(empty))
+    stdout(view(empty), end = "x")
     stdout()
 
     view<[byte]> no_end = null
-    stdout(getview(s), end = no_end)
+    stdout(view(s), end = no_end)
     stdout()
 
     view<std::String> nil = null
     stdout(nil)
     stdout(nil, end = "y")
     stdout()
-    stdout(nil, getview(end))
+    stdout(nil, view(end))
     stdout()
-    stdout(getview(s), nil)
+    stdout(view(s), nil)
     stdout()
 
-    stdout(getview(empty), getview(end))
+    stdout(view(empty), view(end))
     stdout()
 
     std::String unicode
     unicode.from("你好")
-    stdout(getview(unicode))
+    stdout(view(unicode))
 
     s.uninit()
     end.uninit()
@@ -151,7 +151,7 @@ func test_reads() -> int32 {
     [byte] buf
     buf.init(16)
 
-    (uint32 val, int32 err) r = stdin_bytes(getmview(buf), 6)
+    (uint32 val, int32 err) r = stdin_bytes(mview(buf), 6)
     stdout(r.val)
     stdout(r.err)
     stdout(buf[0])
@@ -163,17 +163,17 @@ func test_reads() -> int32 {
     mview<[byte]> nilbuf = null
     r = stdin_bytes(nilbuf, 1)
     stdout(r.err)
-    r = stdin_bytes(getmview(buf), 99)
+    r = stdin_bytes(mview(buf), 99)
     stdout(r.err)
-    r = stdin_bytes(getmview(buf), 0)
+    r = stdin_bytes(mview(buf), 0)
     stdout(r.val)
     stdout(r.err)
 
     std::String line
-    stdout(stdin_line(getptr(line)))
-    stdout(getview(line))
-    stdout(stdin_line(getptr(line)))
-    stdout(getview(line))
+    stdout(stdin_line(ptr(line)))
+    stdout(view(line))
+    stdout(stdin_line(ptr(line)))
+    stdout(view(line))
 
     ptr<std::String> nilout = null
     stdout(stdin_line(nilout))

@@ -5,7 +5,7 @@ import "franko/stdio"
 // ============================================================
 // Covers: memset whole-array and ranged forms on a static
 // array, memset on a dynamic array, memcpy between static and
-// dynamic arrays in both directions via getptr(source), and
+// dynamic arrays in both directions via ptr(source), and
 // memmove with overlapping ranges inside one array.
 // memset fills byte-wise: each 4-byte int32 element becomes
 // value * 0x01010101.
@@ -32,14 +32,14 @@ func main() -> int32 {
     // memcpy static -> dynamic
     [int32] e;
     e.init_zero(4);
-    e.memcpy(getptr(a));
+    e.memcpy(ptr(a));
     stdout(e[0], end = " "); stdout(e[1], end = " "); stdout(e[2], end = " "); stdout(e[3]);
     e.uninit();
 
     // memcpy dynamic -> static
     [int32, 3] f;
     f.memset(0);
-    f.memcpy(getptr(d));
+    f.memcpy(ptr(d));
     stdout(f[0], end = " "); stdout(f[1], end = " "); stdout(f[2]);
 
     // memmove with overlapping ranges inside one array

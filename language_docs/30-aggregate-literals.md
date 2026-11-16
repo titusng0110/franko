@@ -277,7 +277,7 @@ Literal { x = 1 }.x       // illegal: literal is not a member-access base
 Literal { x = 1 }         // illegal: standalone expression statement
 1 + Literal { x = 1 }     // illegal: operand
 cast<int32>(Literal {})   // illegal: cast operand
-getview(Literal {})       // illegal: creation-intrinsic operand
+view(Literal {})       // illegal: creation-intrinsic operand
 ```
 
 The sole purpose of aggregate literals is constructing a value to assign,
@@ -404,7 +404,7 @@ Literal global_lit = Literal { x = 1 }     // valid: static aggregate initialize
 
 The declared global type must be value-assignable. Every aggregate entry must
 be a static value: an integer constant expression, an enum variant, `null`, a
-compile-time string expression, an array literal, a `getview` of another
+compile-time string expression, an array literal, a `view` of another
 global, or a nested aggregate literal. Calls, casts, dereferences, indexing,
 member reads, and reads of other variables are rejected. Omitted fields
 receive their declared default or type default (`0`, `null`, first enum

@@ -18,18 +18,18 @@ func test_from_to() -> int32 {
     stdout(s.to(nil_out))
 
     [byte] out
-    stdout(s.to(getptr(out)))
+    stdout(s.to(ptr(out)))
     stdout(out.length())
-    stdout(getview(out))
+    stdout(view(out))
     out.uninit()
 
     std::String t
-    stdout(t.from(getview(s)))
+    stdout(t.from(view(s)))
     stdout(t.length())
     stdout(t == s)
 
     std::String u
-    stdout(s.to(getptr(u)))
+    stdout(s.to(ptr(u)))
     stdout(u == s)
 
     [byte, 3] fixed
@@ -37,10 +37,10 @@ func test_from_to() -> int32 {
     fixed[1] = 121
     fixed[2] = 122
     std::String w
-    stdout(w.from(getview(fixed)))
+    stdout(w.from(view(fixed)))
     stdout(w.length())
-    stdout(w.to(getptr(out)))
-    stdout(getview(out))
+    stdout(w.to(ptr(out)))
+    stdout(view(out))
     out.uninit()
 
     view<[byte]> nil = null
@@ -74,21 +74,21 @@ func test_reserve() -> int32 {
     [byte] p63
     p63.init_zero(63)
     std::String a
-    stdout(a.from(getview(p63)))
+    stdout(a.from(view(p63)))
     stdout(a.length())
     stdout(a.is_utf8_compliant())
 
     [byte] p64
     p64.init_zero(64)
     std::String b
-    stdout(b.from(getview(p64)))
+    stdout(b.from(view(p64)))
     stdout(b.length())
     stdout(b.is_utf8_compliant())
 
     [byte] p65
     p65.init_zero(65)
     std::String d
-    stdout(d.from(getview(p65)))
+    stdout(d.from(view(p65)))
     stdout(d.length())
     stdout(d.is_utf8_compliant())
 
@@ -101,7 +101,7 @@ func test_reserve() -> int32 {
     c *= 0
     stdout(c.length())
     stdout(c.is_utf8_compliant())
-    stdout(c.from(getview(p65)))
+    stdout(c.from(view(p65)))
     stdout(c.length())
     stdout(c.is_utf8_compliant())
 
@@ -110,15 +110,15 @@ func test_reserve() -> int32 {
     stdout(c.is_utf8_compliant())
     stdout(c.from("reuse"))
     stdout(c.length())
-    stdout(getview(c))
+    stdout(view(c))
     stdout(c.shrink_to_fit())
     stdout(c.length())
-    stdout(getview(c))
+    stdout(view(c))
     c.clear()
     stdout(c.shrink_to_fit())
     stdout(c.length())
     stdout(c.from("again"))
-    stdout(getview(c))
+    stdout(view(c))
 
     p63.uninit()
     p64.uninit()
@@ -170,144 +170,144 @@ func test_utf8() -> int32 {
     [byte, 2] two
     two[0] = 0xC2
     two[1] = 0xA2
-    check_2(getview(two))
+    check_2(view(two))
 
     [byte, 3] three
     three[0] = 0xE4
     three[1] = 0xBD
     three[2] = 0xA0
-    check_2(getview(three))
+    check_2(view(three))
 
     [byte, 4] four
     four[0] = 0xF0
     four[1] = 0x9F
     four[2] = 0x98
     four[3] = 0xAD
-    check_2(getview(four))
+    check_2(view(four))
 
     [byte, 2] two_min
     two_min[0] = 0xC2
     two_min[1] = 0x80
-    check_2(getview(two_min))
+    check_2(view(two_min))
 
     [byte, 2] two_max
     two_max[0] = 0xDF
     two_max[1] = 0xBF
-    check_2(getview(two_max))
+    check_2(view(two_max))
 
     [byte, 3] three_min
     three_min[0] = 0xE0
     three_min[1] = 0xA0
     three_min[2] = 0x80
-    check_2(getview(three_min))
+    check_2(view(three_min))
 
     [byte, 3] three_surrogate_max
     three_surrogate_max[0] = 0xED
     three_surrogate_max[1] = 0x9F
     three_surrogate_max[2] = 0xBF
-    check_2(getview(three_surrogate_max))
+    check_2(view(three_surrogate_max))
 
     [byte, 3] three_private
     three_private[0] = 0xEE
     three_private[1] = 0x80
     three_private[2] = 0x80
-    check_2(getview(three_private))
+    check_2(view(three_private))
 
     [byte, 3] three_max
     three_max[0] = 0xEF
     three_max[1] = 0xBF
     three_max[2] = 0xBF
-    check_2(getview(three_max))
+    check_2(view(three_max))
 
     [byte, 4] four_min
     four_min[0] = 0xF0
     four_min[1] = 0x90
     four_min[2] = 0x80
     four_min[3] = 0x80
-    check_2(getview(four_min))
+    check_2(view(four_min))
 
     [byte, 4] four_max
     four_max[0] = 0xF4
     four_max[1] = 0x8F
     four_max[2] = 0xBF
     four_max[3] = 0xBF
-    check_2(getview(four_max))
+    check_2(view(four_max))
 
     [byte, 1] continuation
     continuation[0] = 0x80
-    check_2(getview(continuation))
+    check_2(view(continuation))
 
     [byte, 2] overlong_two
     overlong_two[0] = 0xC0
     overlong_two[1] = 0x80
-    check_2(getview(overlong_two))
+    check_2(view(overlong_two))
 
     [byte, 3] overlong_three
     overlong_three[0] = 0xE0
     overlong_three[1] = 0x9F
     overlong_three[2] = 0xBF
-    check_2(getview(overlong_three))
+    check_2(view(overlong_three))
 
     [byte, 3] surrogate
     surrogate[0] = 0xED
     surrogate[1] = 0xA0
     surrogate[2] = 0x80
-    check_2(getview(surrogate))
+    check_2(view(surrogate))
 
     [byte, 4] overlong_four
     overlong_four[0] = 0xF0
     overlong_four[1] = 0x8F
     overlong_four[2] = 0xBF
     overlong_four[3] = 0xBF
-    check_2(getview(overlong_four))
+    check_2(view(overlong_four))
 
     [byte, 4] above_max
     above_max[0] = 0xF4
     above_max[1] = 0x90
     above_max[2] = 0x80
     above_max[3] = 0x80
-    check_2(getview(above_max))
+    check_2(view(above_max))
 
     [byte, 4] bad_lead_five
     bad_lead_five[0] = 0xF5
     bad_lead_five[1] = 0x80
     bad_lead_five[2] = 0x80
     bad_lead_five[3] = 0x80
-    check_2(getview(bad_lead_five))
+    check_2(view(bad_lead_five))
 
     [byte, 1] truncated_two
     truncated_two[0] = 0xC2
-    check_2(getview(truncated_two))
+    check_2(view(truncated_two))
 
     [byte, 2] truncated_three
     truncated_three[0] = 0xE0
     truncated_three[1] = 0xA0
-    check_2(getview(truncated_three))
+    check_2(view(truncated_three))
 
     [byte, 3] truncated_four
     truncated_four[0] = 0xF0
     truncated_four[1] = 0x90
     truncated_four[2] = 0x80
-    check_2(getview(truncated_four))
+    check_2(view(truncated_four))
 
     [byte, 2] bad_second
     bad_second[0] = 0xE0
     bad_second[1] = 0x80
-    check_2(getview(bad_second))
+    check_2(view(bad_second))
 
     [byte, 1] bad_lead_fe
     bad_lead_fe[0] = 0xFE
-    check_2(getview(bad_lead_fe))
+    check_2(view(bad_lead_fe))
 
     [byte, 1] bad_lead_ff
     bad_lead_ff[0] = 0xFF
-    check_2(getview(bad_lead_ff))
+    check_2(view(bad_lead_ff))
 
     [byte, 3] embedded_nul
     embedded_nul[0] = 0x41
     embedded_nul[1] = 0x00
     embedded_nul[2] = 0x42
-    check_2(getview(embedded_nul))
+    check_2(view(embedded_nul))
 
     return 0
 }
@@ -336,7 +336,7 @@ func test_find_count() -> int32 {
     hit = s.find("c,")
     stdout(hit.idx)
     stdout(hit.err)
-    hit = s.find(getview(needle))
+    hit = s.find(view(needle))
     stdout(hit.idx)
     stdout(hit.err)
     hit = s.find("zz")
@@ -352,7 +352,7 @@ func test_find_count() -> int32 {
     hit = s.find_next("c", 0)
     stdout(hit.idx)
     stdout(hit.err)
-    hit = s.find_next(getview(needle), 4)
+    hit = s.find_next(view(needle), 4)
     stdout(hit.idx)
     stdout(hit.err)
     hit = s.find_next(44, 99)
@@ -364,11 +364,11 @@ func test_find_count() -> int32 {
 
     stdout(s.count(44))
     stdout(s.count("c"))
-    stdout(s.count(getview(needle)))
+    stdout(s.count(view(needle)))
     stdout(s.count(empty))
     stdout(s.count_from(44, 4))
     stdout(s.count_from("c", 0))
-    stdout(s.count_from(getview(needle), 0))
+    stdout(s.count_from(view(needle), 0))
     stdout(s.count_from(empty, 7))
     stdout(s.count_from(empty, 99))
 
@@ -406,68 +406,68 @@ func test_from_integer() -> int32 {
 
     int8 a = -128
     stdout(s.from_integer(a))
-    stdout(getview(s))
+    stdout(view(s))
     a = 0
     stdout(s.from_integer(a))
-    stdout(getview(s))
+    stdout(view(s))
     a = 127
     stdout(s.from_integer(a))
-    stdout(getview(s))
+    stdout(view(s))
 
     int16 b = -32768
     stdout(s.from_integer(b))
-    stdout(getview(s))
+    stdout(view(s))
     b = 32767
     stdout(s.from_integer(b))
-    stdout(getview(s))
+    stdout(view(s))
 
     int32 c = -2147483648
     stdout(s.from_integer(c))
-    stdout(getview(s))
+    stdout(view(s))
     c = 2147483647
     stdout(s.from_integer(c))
-    stdout(getview(s))
+    stdout(view(s))
 
     int64 d = -9223372036854775808
     stdout(s.from_integer(d))
-    stdout(getview(s))
+    stdout(view(s))
     d = 9223372036854775807
     stdout(s.from_integer(d))
-    stdout(getview(s))
+    stdout(view(s))
 
     uint8 e = 0
     stdout(s.from_integer(e))
-    stdout(getview(s))
+    stdout(view(s))
     e = 255
     stdout(s.from_integer(e))
-    stdout(getview(s))
+    stdout(view(s))
 
     uint16 f = 0
     stdout(s.from_integer(f))
-    stdout(getview(s))
+    stdout(view(s))
     f = 65535
     stdout(s.from_integer(f))
-    stdout(getview(s))
+    stdout(view(s))
 
     uint32 g = 0
     stdout(s.from_integer(g))
-    stdout(getview(s))
+    stdout(view(s))
     g = 4294967295
     stdout(s.from_integer(g))
-    stdout(getview(s))
+    stdout(view(s))
 
     uint64 h = 0
     stdout(s.from_integer(h))
-    stdout(getview(s))
+    stdout(view(s))
     h = 18446744073709551615
     stdout(s.from_integer(h))
-    stdout(getview(s))
+    stdout(view(s))
 
     s.from("long text")
     int32 small = 7
     stdout(s.from_integer(small))
     stdout(s.length())
-    stdout(getview(s))
+    stdout(view(s))
 
     s.uninit()
     return 0
@@ -492,17 +492,17 @@ func test_slice_edit() -> int32 {
     stdout(s.append("ef"))
     std::String tail
     tail.from("gh")
-    stdout(s.append(getview(tail)))
+    stdout(s.append(view(tail)))
     stdout(s.length())
-    stdout(s.to(getptr(out)))
-    stdout(getview(out))
+    stdout(s.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String d
     d.from("xy")
-    stdout(d.append(getview(d)))
+    stdout(d.append(view(d)))
     stdout(d.length())
     stdout(d.append("xy"))
     stdout(d.length())
@@ -513,42 +513,42 @@ func test_slice_edit() -> int32 {
     arr[1] = 87
     std::String e
     e.from("ab")
-    stdout(e.append(getview(arr)))
+    stdout(e.append(view(arr)))
     stdout(e.length())
-    stdout(e.to(getptr(out)))
-    stdout(getview(out))
+    stdout(e.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
     arr.uninit()
 
     std::String part
-    stdout(s.get_slice(1, 4, getptr(part)))
+    stdout(s.get_slice(1, 4, ptr(part)))
     stdout(part.length())
-    stdout(part.to(getptr(out)))
-    stdout(getview(out))
+    stdout(part.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(s.get_slice(4, 1, getptr(part)))
-    stdout(s.get_slice(1, 99, getptr(part)))
-    stdout(s.get_slice(0, 0, getptr(part)))
+    stdout(s.get_slice(4, 1, ptr(part)))
+    stdout(s.get_slice(1, 99, ptr(part)))
+    stdout(s.get_slice(0, 0, ptr(part)))
     stdout(part.length())
 
     std::String selfs
     selfs.from("abcdef")
-    stdout(selfs.get_slice(2, 5, getptr(selfs)))
+    stdout(selfs.get_slice(2, 5, ptr(selfs)))
     stdout(selfs.length())
-    stdout(selfs.to(getptr(out)))
-    stdout(getview(out))
+    stdout(selfs.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
     [byte] bslice
     bslice.init(1)
-    stdout(selfs.get_slice(0, 2, getptr(bslice)))
+    stdout(selfs.get_slice(0, 2, ptr(bslice)))
     stdout(bslice.length())
-    stdout(getview(bslice))
+    stdout(view(bslice))
     if (bslice.length() != 0) {
         bslice.uninit()
     }
@@ -557,36 +557,36 @@ func test_slice_edit() -> int32 {
     ins.from("abcd")
     stdout(ins.insert(45, 2))
     stdout(ins.insert("XY", 0))
-    stdout(ins.insert(getview(tail), 7))
+    stdout(ins.insert(view(tail), 7))
     stdout(ins.length())
-    stdout(ins.to(getptr(out)))
-    stdout(getview(out))
+    stdout(ins.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
     stdout(ins.insert(33, 99))
     stdout(ins.insert("z", 9))
     stdout(ins.length())
-    stdout(ins.to(getptr(out)))
-    stdout(getview(out))
+    stdout(ins.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String si
     si.from("ab")
-    stdout(si.insert(getview(si), 1))
+    stdout(si.insert(view(si), 1))
     stdout(si.length())
-    stdout(si.to(getptr(out)))
-    stdout(getview(out))
+    stdout(si.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
     stdout(si.erase(0))
     stdout(si.erase(1, 2))
     stdout(si.length())
-    stdout(si.to(getptr(out)))
-    stdout(getview(out))
+    stdout(si.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -630,15 +630,15 @@ func test_split_join() -> int32 {
     text.from("a,b,,c,")
     std::StringList parts
 
-    stdout(text.split(44, getptr(parts)))
+    stdout(text.split(44, ptr(parts)))
     stdout(parts.length())
     for (uint32 i = 0; i < parts.length(); i++) {
         std::String item
-        stdout(parts.get(i, getptr(item)))
+        stdout(parts.get(i, ptr(item)))
         stdout(item.length())
         if (item.length() != 0) {
-            stdout(item.to(getptr(out)))
-            stdout(getview(out))
+            stdout(item.to(ptr(out)))
+            stdout(view(out))
             if (out.length() != 0) {
                 out.uninit()
             }
@@ -648,14 +648,14 @@ func test_split_join() -> int32 {
         item.uninit()
     }
 
-    stdout(text.split(",,", getptr(parts)))
+    stdout(text.split(",,", ptr(parts)))
     stdout(parts.length())
     for (uint32 i = 0; i < parts.length(); i++) {
         std::String item
-        stdout(parts.get(i, getptr(item)))
+        stdout(parts.get(i, ptr(item)))
         stdout(item.length())
-        stdout(item.to(getptr(out)))
-        stdout(getview(out))
+        stdout(item.to(ptr(out)))
+        stdout(view(out))
         if (out.length() != 0) {
             out.uninit()
         }
@@ -664,67 +664,67 @@ func test_split_join() -> int32 {
 
     std::String sep
     sep.from(",,")
-    stdout(text.split(getview(sep), getptr(parts)))
+    stdout(text.split(view(sep), ptr(parts)))
     stdout(parts.length())
 
     view<[byte]> empty = null
-    stdout(text.split(empty, getptr(parts)))
+    stdout(text.split(empty, ptr(parts)))
     stdout(parts.length())
     std::String whole
-    stdout(parts.get(0, getptr(whole)))
+    stdout(parts.get(0, ptr(whole)))
     stdout(whole.length())
-    stdout(whole.to(getptr(out)))
-    stdout(getview(out))
+    stdout(whole.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
     whole.uninit()
 
-    stdout(text.split("zz", getptr(parts)))
+    stdout(text.split("zz", ptr(parts)))
     stdout(parts.length())
 
     std::StringList words
     words.append("cc")
     words.append("aa")
     std::String joined
-    stdout(joined.join(44, getview(words)))
-    stdout(joined.to(getptr(out)))
-    stdout(getview(out))
+    stdout(joined.join(44, view(words)))
+    stdout(joined.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
-    stdout(joined.join(getview(words)))
-    stdout(joined.to(getptr(out)))
-    stdout(getview(out))
+    stdout(joined.join(view(words)))
+    stdout(joined.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String sep2
     sep2.from("--")
-    stdout(joined.join(getview(sep2), getview(words)))
-    stdout(joined.to(getptr(out)))
-    stdout(getview(out))
+    stdout(joined.join(view(sep2), view(words)))
+    stdout(joined.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     std::String sep3
     sep3.from("|")
-    stdout(joined.join(getview(sep3), getview(words)))
-    stdout(joined.to(getptr(out)))
-    stdout(getview(out))
+    stdout(joined.join(view(sep3), view(words)))
+    stdout(joined.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
 
     view<[byte]> nojoiner = null
-    stdout(joined.join(nojoiner, getview(words)))
+    stdout(joined.join(nojoiner, view(words)))
     stdout(joined.length())
 
     std::StringList empty_list
-    stdout(joined.join(44, getview(empty_list)))
+    stdout(joined.join(44, view(empty_list)))
     stdout(joined.length())
 
     view<std::StringList> nil_list = null
@@ -736,9 +736,9 @@ func test_split_join() -> int32 {
     std::StringList jl
     jl.append("a")
     jl.append("b")
-    stdout(js.join(getview(js), getview(jl)))
-    stdout(js.to(getptr(out)))
-    stdout(getview(out))
+    stdout(js.join(view(js), view(jl)))
+    stdout(js.to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -746,14 +746,14 @@ func test_split_join() -> int32 {
     std::StringList selflist
     selflist.append("ab")
     selflist.append("cd")
-    stdout(selflist._data[0].join(44, getview(selflist)))
-    stdout(selflist._data[0].to(getptr(out)))
-    stdout(getview(out))
+    stdout(selflist._data[0].join(44, view(selflist)))
+    stdout(selflist._data[0].to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
-    stdout(selflist._data[1].to(getptr(out)))
-    stdout(getview(out))
+    stdout(selflist._data[1].to(ptr(out)))
+    stdout(view(out))
     if (out.length() != 0) {
         out.uninit()
     }
@@ -1064,12 +1064,12 @@ func test_assign_append_multiply() -> int32 {
     std::String b
     b = "cd"
     a += b
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
 
     a += "ef"
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
     stdout(a.length())
 
     [byte] arr
@@ -1077,25 +1077,25 @@ func test_assign_append_multiply() -> int32 {
     arr[0] = 88
     arr[1] = 89
     a = arr
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
     stdout(a.length())
 
     a += arr
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
 
     a *= 2
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
 
     a *= 1
-    stdout(a.to(getptr(out)))
-    stdout(getview(out))
+    stdout(a.to(ptr(out)))
+    stdout(view(out))
 
     a *= 0
     stdout(a.length())
-    stdout(a.to(getptr(out)))
+    stdout(a.to(ptr(out)))
     stdout(out.length())
 
     std::String c
@@ -1104,14 +1104,14 @@ func test_assign_append_multiply() -> int32 {
 
     std::String dup
     dup = "xy"
-    stdout(dup.from(getview(dup)))
+    stdout(dup.from(view(dup)))
     stdout(dup.length())
-    stdout(dup.to(getptr(out)))
-    stdout(getview(out))
+    stdout(dup.to(ptr(out)))
+    stdout(view(out))
     out.uninit()
     dup += dup
-    stdout(dup.to(getptr(out)))
-    stdout(getview(out))
+    stdout(dup.to(ptr(out)))
+    stdout(view(out))
     out.uninit()
 
     a.uninit()

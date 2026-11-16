@@ -30,9 +30,9 @@ func main() -> int32 {
     c.bump()
     c.bump()
     stdout(c.value())
-    stdout(read_it(getptr(c)))
+    stdout(read_it(ptr(c)))
     ptr<util::Counter> q
-    q = getptr(c)
+    q = ptr(c)
     stdout($(q).value())
     return 0
 }

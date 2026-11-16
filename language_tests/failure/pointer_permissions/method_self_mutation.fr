@@ -1,4 +1,4 @@
-// An mview<X> self method synthesizes getmview(receiver): a view
+// An mview<X> self method synthesizes mview(receiver): a view
 // receiver does not carry mutation rights.
 struct Box {
     int32 x
@@ -10,7 +10,7 @@ struct Box {
 
 func main() -> int32 {
     Box b;
-    view<Box> v = getview(b);
+    view<Box> v = view(b);
     $(v).touch();
     return 0;
 }

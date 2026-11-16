@@ -106,7 +106,7 @@ namespace std {
                 return 0
             }
             uint8 self_source = 0
-            if (in == getview($(self)._data)) {
+            if (in == view($(self)._data)) {
                 self_source = 1
             }
             uint32 n = $(in).length()
@@ -131,7 +131,7 @@ namespace std {
                 $(self)._data_size = 0
                 return 0
             }
-            if (in == getview($(self))) {
+            if (in == view($(self))) {
                 return 0
             }
             uint32 n = $(in)._data_size
@@ -140,7 +140,7 @@ namespace std {
                 return -1
             }
             if (n != 0) {
-                view<[byte]> src = getview($(in)._data)
+                view<[byte]> src = view($(in)._data)
                 $(self)._data.memcpy(src, 0, 0, n)
             }
             $(self)._data_size = n
@@ -203,7 +203,7 @@ namespace std {
                     return -1
                 }
             }
-            view<[byte]> src = getview($(self)._data)
+            view<[byte]> src = view($(self)._data)
             $(out).memcpy(src, 0, 0, n)
             return 0
         }
@@ -358,7 +358,7 @@ namespace std {
                 return 0
             }
             uint8 self_source = 0
-            if (payload == getview($(self)._data)) {
+            if (payload == view($(self)._data)) {
                 self_source = 1
             }
             uint32 old = $(self)._data_size
@@ -395,7 +395,7 @@ namespace std {
                 return 0
             }
             uint8 self_source = 0
-            if (payload == getview($(self))) {
+            if (payload == view($(self))) {
                 self_source = 1
             }
             uint32 old = $(self)._data_size
@@ -415,7 +415,7 @@ namespace std {
             if (self_source != 0) {
                 $(self)._data.memmove(old, 0, n)
             } else {
-                view<[byte]> src = getview($(payload)._data)
+                view<[byte]> src = view($(payload)._data)
                 $(self)._data.memcpy(src, old, 0, n)
             }
             $(self)._data_size = old + n
@@ -1465,7 +1465,7 @@ namespace std {
             if (n < m) {
                 return result
             }
-            view<[byte]> needle_data = getview($(substring)._data)
+            view<[byte]> needle_data = view($(substring)._data)
             byte first = $(substring)._data[0]
             uint32 i = 0
             while (i <= n - m) {
@@ -1568,7 +1568,7 @@ namespace std {
             if (n - start_idx < m) {
                 return result
             }
-            view<[byte]> needle_data = getview($(substring)._data)
+            view<[byte]> needle_data = view($(substring)._data)
             byte first = $(substring)._data[0]
             uint32 i = start_idx
             while (i <= n - m) {
@@ -1660,7 +1660,7 @@ namespace std {
             if (n < m) {
                 return 0
             }
-            view<[byte]> needle_data = getview($(substring)._data)
+            view<[byte]> needle_data = view($(substring)._data)
             byte first = $(substring)._data[0]
             uint32 total = 0
             uint32 i = 0
@@ -1762,7 +1762,7 @@ namespace std {
             if (n - start_idx < m) {
                 return 0
             }
-            view<[byte]> needle_data = getview($(substring)._data)
+            view<[byte]> needle_data = view($(substring)._data)
             byte first = $(substring)._data[0]
             uint32 total = 0
             uint32 i = start_idx
@@ -1822,7 +1822,7 @@ namespace std {
                 return -1
             }
             uint32 len = end - start
-            if (getview($(out)) == self) {
+            if (view($(out)) == self) {
                 if (len == 0) {
                     if ($(out).length() != 0) {
                         $(out).uninit()
@@ -1843,7 +1843,7 @@ namespace std {
             if (st != 0) {
                 return -1
             }
-            view<[byte]> src = getview($(self)._data)
+            view<[byte]> src = view($(self)._data)
             $(out)._data.memcpy(src, 0, start, len)
             $(out)._data_size = len
             return 0
@@ -1865,7 +1865,7 @@ namespace std {
             }
             uint32 len = end - start
             uint8 self_source = 0
-            if (self != null && getview($(out)) == getview($(self)._data)) {
+            if (self != null && view($(out)) == view($(self)._data)) {
                 self_source = 1
             }
             if (len == 0) {
@@ -1895,7 +1895,7 @@ namespace std {
                     return -1
                 }
             }
-            view<[byte]> src = getview($(self)._data)
+            view<[byte]> src = view($(self)._data)
             $(out).memcpy(src, 0, start, len)
             return 0
         }
@@ -1937,7 +1937,7 @@ namespace std {
                 return 0
             }
             uint8 self_source = 0
-            if (payload == getview($(self)._data)) {
+            if (payload == view($(self)._data)) {
                 self_source = 1
             }
             if (self_source != 0) {
@@ -1980,7 +1980,7 @@ namespace std {
                 return 0
             }
             uint8 self_source = 0
-            if (payload == getview($(self))) {
+            if (payload == view($(self))) {
                 self_source = 1
             }
             if (self_source != 0) {
@@ -2000,7 +2000,7 @@ namespace std {
             if (self_source != 0) {
                 $(self)._data.memmove(idx, 0, n)
             } else {
-                view<[byte]> src = getview($(payload)._data)
+                view<[byte]> src = view($(payload)._data)
                 $(self)._data.memcpy(src, idx, 0, n)
             }
             $(self)._data_size = old + n
@@ -2102,14 +2102,14 @@ namespace std {
                     found = 1
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out)._data[seg])
+                ptr<String> dest = ptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
                 }
                 if (len != 0) {
                     if (self != null) {
-                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                        $(dest)._data.memcpy(view($(self)._data), 0, start, len)
                     }
                 }
                 $(dest)._data_size = len
@@ -2196,14 +2196,14 @@ namespace std {
                     }
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out)._data[seg])
+                ptr<String> dest = ptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
                 }
                 if (len != 0) {
                     if (self != null) {
-                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                        $(dest)._data.memcpy(view($(self)._data), 0, start, len)
                     }
                 }
                 $(dest)._data_size = len
@@ -2241,7 +2241,7 @@ namespace std {
             }
             view<[byte]> splitter_data = null
             if (splitter != null) {
-                splitter_data = getview($(splitter)._data)
+                splitter_data = view($(splitter)._data)
             }
             uint32 segments = 1
             if (m != 0) {
@@ -2295,14 +2295,14 @@ namespace std {
                     }
                 }
                 uint32 len = end - start
-                ptr<String> dest = getptr($(out)._data[seg])
+                ptr<String> dest = ptr($(out)._data[seg])
                 int32 st = $(dest)._reserve(len)
                 if (st != 0) {
                     return -1
                 }
                 if (len != 0) {
                     if (self != null) {
-                        $(dest)._data.memcpy(getview($(self)._data), 0, start, len)
+                        $(dest)._data.memcpy(view($(self)._data), 0, start, len)
                     }
                 }
                 $(dest)._data_size = len
@@ -2325,7 +2325,7 @@ namespace std {
                 return 0
             }
             uint32 count = $(in)._data_size
-            view<String> self_view = getview($(self))
+            view<String> self_view = view($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
@@ -2335,7 +2335,7 @@ namespace std {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in)._data[i]) == self_view) {
+                if (view($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 i = i + 1
@@ -2347,7 +2347,7 @@ namespace std {
             String result
             ptr<String> dest = self
             if (self_source != 0) {
-                dest = getptr(result)
+                dest = ptr(result)
             }
             int32 st = $(dest)._reserve(total)
             if (st != 0) {
@@ -2359,7 +2359,7 @@ namespace std {
             while (i < count) {
                 uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in)._data[i]._data)
+                    view<[byte]> src = view($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2372,7 +2372,7 @@ namespace std {
                     result.uninit()
                     return -1
                 }
-                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data.memcpy(view(result._data), 0, 0, total)
                 $(self)._data_size = total
                 result.uninit()
             }
@@ -2386,7 +2386,7 @@ namespace std {
                 return 0
             }
             uint32 count = $(in)._data_size
-            view<String> self_view = getview($(self))
+            view<String> self_view = view($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
@@ -2396,7 +2396,7 @@ namespace std {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in)._data[i]) == self_view) {
+                if (view($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2414,7 +2414,7 @@ namespace std {
             String result
             ptr<String> dest = self
             if (self_source != 0) {
-                dest = getptr(result)
+                dest = ptr(result)
             }
             int32 st = $(dest)._reserve(total)
             if (st != 0) {
@@ -2426,7 +2426,7 @@ namespace std {
             while (i < count) {
                 uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in)._data[i]._data)
+                    view<[byte]> src = view($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2443,7 +2443,7 @@ namespace std {
                     result.uninit()
                     return -1
                 }
-                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data.memcpy(view(result._data), 0, 0, total)
                 $(self)._data_size = total
                 result.uninit()
             }
@@ -2461,7 +2461,7 @@ namespace std {
             if (joiner != null) {
                 joiner_len = $(joiner).length()
             }
-            view<String> self_view = getview($(self))
+            view<String> self_view = view($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
@@ -2471,7 +2471,7 @@ namespace std {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in)._data[i]) == self_view) {
+                if (view($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2487,13 +2487,13 @@ namespace std {
                 return 0
             }
             uint8 joiner_source = 0
-            if (joiner != null && joiner == getview($(self)._data)) {
+            if (joiner != null && joiner == view($(self)._data)) {
                 joiner_source = 1
             }
             String result
             ptr<String> dest = self
             if (self_source != 0 || joiner_source != 0) {
-                dest = getptr(result)
+                dest = ptr(result)
             }
             int32 st = $(dest)._reserve(total)
             if (st != 0) {
@@ -2505,7 +2505,7 @@ namespace std {
             while (i < count) {
                 uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in)._data[i]._data)
+                    view<[byte]> src = view($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
@@ -2526,7 +2526,7 @@ namespace std {
                     result.uninit()
                     return -1
                 }
-                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data.memcpy(view(result._data), 0, 0, total)
                 $(self)._data_size = total
                 result.uninit()
             }
@@ -2544,7 +2544,7 @@ namespace std {
             if (joiner != null) {
                 joiner_len = $(joiner)._data_size
             }
-            view<String> self_view = getview($(self))
+            view<String> self_view = view($(self))
             uint8 self_source = 0
             uint32 total = 0
             uint32 i = 0
@@ -2554,7 +2554,7 @@ namespace std {
                     return -1
                 }
                 total = total + piece
-                if (getview($(in)._data[i]) == self_view) {
+                if (view($(in)._data[i]) == self_view) {
                     self_source = 1
                 }
                 if (i + 1 < count) {
@@ -2576,7 +2576,7 @@ namespace std {
             String result
             ptr<String> dest = self
             if (self_source != 0 || joiner_source != 0) {
-                dest = getptr(result)
+                dest = ptr(result)
             }
             int32 st = $(dest)._reserve(total)
             if (st != 0) {
@@ -2588,14 +2588,14 @@ namespace std {
             while (i < count) {
                 uint32 piece = $(in)._data[i]._data_size
                 if (piece != 0) {
-                    view<[byte]> src = getview($(in)._data[i]._data)
+                    view<[byte]> src = view($(in)._data[i]._data)
                     $(dest)._data.memcpy(src, pos, 0, piece)
                     pos = pos + piece
                 }
                 if (i + 1 < count) {
                     if (joiner != null) {
                         if (joiner_len != 0) {
-                            $(dest)._data.memcpy(getview($(joiner)._data), pos, 0, joiner_len)
+                            $(dest)._data.memcpy(view($(joiner)._data), pos, 0, joiner_len)
                             pos = pos + joiner_len
                         }
                     }
@@ -2609,7 +2609,7 @@ namespace std {
                     result.uninit()
                     return -1
                 }
-                $(self)._data.memcpy(getview(result._data), 0, 0, total)
+                $(self)._data.memcpy(view(result._data), 0, 0, total)
                 $(self)._data_size = total
                 result.uninit()
             }
@@ -2746,7 +2746,7 @@ namespace std {
                 common = b
             }
             if (common != 0) {
-                int32 cmp = $(self)._data.memcmp(getview($(other)._data), 0, 0, common)
+                int32 cmp = $(self)._data.memcmp(view($(other)._data), 0, 0, common)
                 if (cmp != 0) {
                     return cmp
                 }
@@ -2869,7 +2869,7 @@ namespace std {
 
         // Replace the list with a copy of another list's live elements.
         func from(ptr<StringList> self, view<StringList> in) -> int32 {
-            if (in != null && in == getview($(self))) {
+            if (in != null && in == view($(self))) {
                 return 0
             }
             uint32 old = $(self)._data_size
@@ -2893,7 +2893,7 @@ namespace std {
             $(self)._data_size = n
             i = 0
             while (i < n) {
-                st = $(self)._data[i].from(getview($(in)._data[i]))
+                st = $(self)._data[i].from(view($(in)._data[i]))
                 if (st != 0) {
                     return -1
                 }
@@ -3192,7 +3192,7 @@ namespace std {
             if (idx >= $(self)._data_size) {
                 return -1
             }
-            return $(out).from(getview($(self)._data[idx]))
+            return $(out).from(view($(self)._data[idx]))
         }
 
         // Copy element `idx` into a byte array, completely replacing it.
@@ -3245,14 +3245,14 @@ namespace std {
             $(self)._data_size = old + 1
             uint32 i = old
             while (i > idx) {
-                st = $(self)._data[i].from(getview($(self)._data[i - 1]))
+                st = $(self)._data[i].from(view($(self)._data[i - 1]))
                 if (st != 0) {
                     tmp.uninit()
                     return -1
                 }
                 i = i - 1
             }
-            st = $(self)._data[idx].from(getview(tmp))
+            st = $(self)._data[idx].from(view(tmp))
             tmp.uninit()
             if (st != 0) {
                 return -1
@@ -3280,14 +3280,14 @@ namespace std {
             $(self)._data_size = old + 1
             uint32 i = old
             while (i > idx) {
-                st = $(self)._data[i].from(getview($(self)._data[i - 1]))
+                st = $(self)._data[i].from(view($(self)._data[i - 1]))
                 if (st != 0) {
                     tmp.uninit()
                     return -1
                 }
                 i = i - 1
             }
-            st = $(self)._data[idx].from(getview(tmp))
+            st = $(self)._data[idx].from(view(tmp))
             tmp.uninit()
             if (st != 0) {
                 return -1
@@ -3303,7 +3303,7 @@ namespace std {
             }
             uint32 i = idx
             while (i + 1 < n) {
-                int32 st = $(self)._data[i].from(getview($(self)._data[i + 1]))
+                int32 st = $(self)._data[i].from(view($(self)._data[i + 1]))
                 if (st != 0) {
                     return -1
                 }
@@ -3326,7 +3326,7 @@ namespace std {
             }
             uint32 i = start
             while (i + count < n) {
-                int32 st = $(self)._data[i].from(getview($(self)._data[i + count]))
+                int32 st = $(self)._data[i].from(view($(self)._data[i + count]))
                 if (st != 0) {
                     return -1
                 }

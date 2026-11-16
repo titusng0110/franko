@@ -444,7 +444,7 @@ func test_write_active_indices() -> int32 {
     std::GenerationalSparseSetAllocator a;
     [uint32] out;
     out.init(4);
-    stdout(a.write_active_indices(getptr(out)));
+    stdout(a.write_active_indices(ptr(out)));
     stdout(a.init(4));
     (uint32 idx, uint32 gen, int32 err) i_result = a.new_index();
     uint32 i = i_result.idx;
@@ -452,17 +452,17 @@ func test_write_active_indices() -> int32 {
     uint32 j = j_result.idx;
     (uint32 idx, uint32 gen, int32 err) k_result = a.new_index();
     uint32 k = k_result.idx;
-    stdout(a.write_active_indices(getptr(out)));
+    stdout(a.write_active_indices(ptr(out)));
     stdout(out[0], end = " "); stdout(out[1], end = " "); stdout(out[2]);
     stdout(a.free_index(i));
-    stdout(a.write_active_indices(getptr(out)));
+    stdout(a.write_active_indices(ptr(out)));
     stdout(out[0], end = " "); stdout(out[1]);
     [uint32] small;
     small.init(1);
-    stdout(a.write_active_indices(getptr(small)));
+    stdout(a.write_active_indices(ptr(small)));
     stdout(a.write_active_indices(null));
     stdout(a.uninit());
-    stdout(a.write_active_indices(getptr(out)));
+    stdout(a.write_active_indices(ptr(out)));
     out.uninit();
     small.uninit();
     return 0

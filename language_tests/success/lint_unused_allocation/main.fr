@@ -13,7 +13,7 @@ func main() -> int32 {
     buf.memset(0);
 
     // Writes only: mutation rights, never allocation rights.
-    ptr<[byte, 3]> p = getptr(buf);
+    ptr<[byte, 3]> p = ptr(buf);
     $(p)[0] = 5;
     stdout($(p)[0]);
 

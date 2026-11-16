@@ -16,9 +16,9 @@ func main() -> int32 {
     d.init(2);
     [mview<[byte]>] store;
     store.init(1);
-    store[0] = getmview(d);
+    store[0] = mview(d);
 
-    ptr<[mview<[byte]>]> v = getptr(store);
+    ptr<[mview<[byte]>]> v = ptr(store);
     $($(v)[0])[0] = 9;
     stdout($(store[0]).length());
     stdout($(store[0])[0]);

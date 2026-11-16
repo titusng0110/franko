@@ -14,6 +14,6 @@ func main() -> int32 {
     [int32, 4] a
     a.memset(0)
     [int32] b
-    stdout(compare(getptr(a), getptr(b)))
+    stdout(compare(ptr(a), ptr(b)))
     return 0
 }

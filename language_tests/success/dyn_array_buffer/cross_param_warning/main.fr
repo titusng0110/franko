@@ -10,7 +10,7 @@ func mutate(ptr<[int32]> d, ptr<int32> e) -> void {
 func main() -> int32 {
     [int32] d
     d.init(2)
-    mutate(getptr(d), getptr(d[0]))
+    mutate(ptr(d), ptr(d[0]))
     d.uninit()
     return 0
 }

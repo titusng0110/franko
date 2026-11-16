@@ -1,4 +1,4 @@
-// A ptr<X> self method synthesizes getptr(receiver): a view receiver
+// A ptr<X> self method synthesizes ptr(receiver): a view receiver
 // does not carry allocation rights.
 struct Box {
     int32 x
@@ -10,7 +10,7 @@ struct Box {
 
 func main() -> int32 {
     Box b;
-    view<Box> v = getview(b);
+    view<Box> v = view(b);
     $(v).bump();
     return 0;
 }

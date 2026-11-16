@@ -8,8 +8,8 @@ func main() -> int32 {
     ptr<int32> p2
     ptr<int32> q2
 
-    p2 = getptr(x2)
-    q2 = getptr(x2)
+    p2 = ptr(x2)
+    q2 = ptr(x2)
 
     stdout(p2 < q2)
 

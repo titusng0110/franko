@@ -36,7 +36,7 @@ Design rules:
   need: `ptr<X> self` for the lifecycle operations (`init`, `uninit`,
   `grow`), `mview<X> self` for `new_index`/`free_index`, and
   `view<X> self` for the observers. The compiler synthesizes the
-  matching `getptr(...)`/`getmview(...)`/`getview(...)`.
+  matching `ptr(...)`/`mview(...)`/`view(...)`.
 - A pool owns dynamic arrays, so it is pointer-only: it cannot be
   passed or returned by value, and no assignment copies its storage.
 - Lifecycle: a declaration produces the empty pool (`capacity() == 0`,

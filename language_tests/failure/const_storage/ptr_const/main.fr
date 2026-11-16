@@ -1,5 +1,5 @@
 func main() -> int32 {
     const int32 x = 1
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     return 0
 }

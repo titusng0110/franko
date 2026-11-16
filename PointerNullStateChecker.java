@@ -952,7 +952,7 @@ public final class PointerNullStateChecker {
                                     + " undefined behavior and crashes at run"
                                     + " time. Check the pointer for null before"
                                     + " dereferencing, or assign it a non-null"
-                                    + " value such as getptr(...).",
+                                    + " value such as ptr(...).",
                             "null.deref." + deref.expr.symbol.qualifiedName()
                     );
                 } else {

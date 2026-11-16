@@ -5,7 +5,7 @@ func main() -> int32 {
     [[int32], 2] g;
     g[0].init(2);
     g[1].init(2);
-    mview<[[int32], 2]> m = getmview(g);
+    mview<[[int32], 2]> m = mview(g);
     mview<[[int32]]> d = m;
     $(d)[0].init(5);
     return 0;

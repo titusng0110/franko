@@ -513,7 +513,7 @@ public class ExpressionChecker {
                     + "> instead. Arrays are passed by pointer in Franko, "
                     + "and an array-typed parameter would require copying the "
                     + "whole array by value. Declare the parameter as ptr<T> "
-                    + "or view<T>, and pass getptr or getview of the array.");
+                    + "or view<T>, and pass ptr or view of the array.");
             return;
         }
 
@@ -521,10 +521,10 @@ public class ExpressionChecker {
             diagnostics.error("Argument " + (index + 1)
                     + " of call to '"
                     + function.signatureString()
-                    + "' passes array value directly; use getptr(...) and an "
+                    + "' passes array value directly; use ptr(...) and an "
                     + "ptr<[...]> parameter. Array values are not copied into "
                     + "calls, so callees receive pointer access instead. Pass "
-                    + "getptr(xs) for a mutable parameter or getview(xs) for a "
+                    + "ptr(xs) for a mutable parameter or view(xs) for a "
                     + "read-only parameter.");
             return;
         }
@@ -687,16 +687,16 @@ public class ExpressionChecker {
                         + "variable '" + storage.name + "'; global variables"
                         + " are implicitly const and read-only. A mutable or"
                         + " owning pointer would allow writes that violate the"
-                        + " declaration. Use getview(...) to read the global,"
+                        + " declaration. Use view(...) to read the global,"
                         + " or move mutable storage into a function.");
             } else {
                 diagnostics.error("Cannot create a mutable pointer to const "
                         + "variable '"
                         + storage.name
-                        + "'; const storage only allows getview(...). const makes "
+                        + "'; const storage only allows view(...). const makes "
                         + "the storage immutable, so a mutable or owning pointer "
                         + "would allow writes that violate the declaration. Use "
-                        + "getview(...) instead, or remove const from '"
+                        + "view(...) instead, or remove const from '"
                         + storage.name
                         + "'.");
             }
@@ -753,7 +753,7 @@ public class ExpressionChecker {
                     + "pointee to read or write. Guard the pointer with a "
                     + "null check and dereference it only on the non-null "
                     + "path, or initialize it from live storage with "
-                    + "getptr/getview/getmview.");
+                    + "ptr/view/mview.");
             return;
         }
 
@@ -779,6 +779,8 @@ public class ExpressionChecker {
         if (!types.ensureValueExpression(node.expr, "Operand of '" + syntax + "'")) {
             return;
         }
+
+        types.ensureNoEmbeddedOwnedPointer(node.type, "Cast target");
 
         if (node.type.kind == SastTypeKind.PTR) {
             visitPermissionCast(node, node.type);
@@ -942,7 +944,7 @@ public class ExpressionChecker {
                     + ". Pointer casts only adjust permission or decay an "
                     + "array view; they never create a pointer from a "
                     + "non-pointer value. Pass a pointer or null, or create a "
-                    + "pointer with getptr/getview/getmview.");
+                    + "pointer with ptr/view/mview.");
             return;
         }
 

@@ -1,6 +1,6 @@
 func main() -> int32 {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     while (p != null) {
         if (p == null) {
             break

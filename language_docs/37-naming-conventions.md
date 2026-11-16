@@ -105,8 +105,8 @@ though an ordinary Franko function would be written `read_handle`. Ordinary
 Franko functions and methods still use snake case.
 
 Built-in names are fixed and are not renamed. Array intrinsics (`memcpy`,
-`memset`, `length`, `read_uint16_LE`, ...) and pointer intrinsics (`getptr`,
-`getmview`, `getview`) keep their existing spelling.
+`memset`, `length`, `read_uint16_LE`, ...) and pointer intrinsics (`ptr`,
+`mview`, `view`) keep their existing spelling.
 
 Operator methods are the other fixed-name exception: `OPERATOR_EQ`,
 `OPERATOR_MOV`, and the other reserved `OPERATOR_*` names are exact,

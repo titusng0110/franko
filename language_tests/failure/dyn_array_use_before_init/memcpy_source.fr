@@ -2,7 +2,7 @@ func main() -> int32 {
     [int32] src
     [int32] dst
     dst.init(4)
-    dst.memcpy(getptr(src))
+    dst.memcpy(ptr(src))
     dst.uninit()
     return 0
 }

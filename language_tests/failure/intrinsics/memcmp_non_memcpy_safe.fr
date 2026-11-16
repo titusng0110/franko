@@ -4,7 +4,7 @@ func main() -> int32 {
     [[int32], 2] a;
     a[0].init(2);
     a[1].init(2);
-    a.memcmp(getptr(a));
+    a.memcmp(ptr(a));
     a[0].uninit();
     a[1].uninit();
     return 0;

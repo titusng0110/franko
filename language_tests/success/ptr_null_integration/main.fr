@@ -8,7 +8,7 @@ import "franko/stdio"
 //
 //   - null is only valid for pointers (0 is not null)
 //   - pointer declarations are guaranteed null-initialized
-//   - getptr(...) certifies an pointer as non-null
+//   - ptr(...) certifies an pointer as non-null
 //   - assignment from another pointer copies its exact null state
 //   - guard refinement: deref inside if (p != null) is valid
 //   - loop-guard refinement and provable null after loop exit
@@ -48,8 +48,8 @@ func main() -> int32 {
     stdout(p == null)
     stdout(p != null)
 
-    // getptr certifies the variable as non-null.
-    p = getptr(x)
+    // ptr certifies the variable as non-null.
+    p = ptr(x)
     stdout(p != null)
 
     $(p) = 42
@@ -80,7 +80,7 @@ func main() -> int32 {
 
     // Loop-guard refinement, and provable null after loop exit.
     ptr<int32> w
-    w = getptr(x)
+    w = ptr(x)
     while (w != null) {
         $(w) = $(w) + 1
         if ($(w) > 2) {
@@ -93,7 +93,7 @@ func main() -> int32 {
 
     // Global pointer variable is null-initialized.
     stdout(g == null)
-    g = getptr(g_target)
+    g = ptr(g_target)
     stdout(g != null)
 
     stdout(4)
@@ -101,17 +101,18 @@ func main() -> int32 {
     // Struct field of pointer type defaults to null.
     Box bo
     stdout(bo.link == null)
-    bo.link = getmview(x)
+    bo.link = mview(x)
     stdout(bo.link != null)
     $(bo.link) = 5
     stdout($(bo.link))
 
     stdout(5)
 
-    // ptr<ptr<int32>> null handling.
-    ptr<ptr<int32>> pp
+    // ptr<view<int32>> null handling.
+    view<int32> vv = view(x)
+    ptr<view<int32>> pp
     stdout(pp == null)
-    pp = getptr(p)
+    pp = ptr(vv)
     stdout(pp != null)
 
     // Assignment from a certified variable chain stays certified.
@@ -123,7 +124,7 @@ func main() -> int32 {
 
     // null across function boundaries.
     stdout(take_ptr(null))
-    stdout(take_ptr(getptr(x)))
+    stdout(take_ptr(ptr(x)))
 
     ptr<int32> r = make_null()
     stdout(r == null)

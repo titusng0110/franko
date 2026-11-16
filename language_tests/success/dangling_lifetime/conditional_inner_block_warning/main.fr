@@ -6,7 +6,7 @@ func main() -> int32 {
     ptr<int32> p
     if (C != 0) {
         int32 y = 1
-        p = getptr(y)
+        p = ptr(y)
     }
     int32 v = 0
     if (p != null) {

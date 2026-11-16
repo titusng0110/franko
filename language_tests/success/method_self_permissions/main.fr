@@ -5,7 +5,7 @@ import "franko/stdio"
 // ============================================================
 // Covers: methods whose self parameter is ptr<X>, mview<X>, or
 // view<X>. The hidden self argument is synthesized with
-// getptr/getmview/getview matching the declaration, so the
+// ptr/mview/view matching the declaration, so the
 // receiver must carry at least that permission (see
 // failure/pointer_permissions/method_self_*).
 // ============================================================
@@ -34,11 +34,11 @@ func main() -> int32 {
     stdout(b.peek());
 
     // Read-only receiver: only a view<X> self method is callable.
-    view<Box> v = getview(b);
+    view<Box> v = view(b);
     stdout($(v).peek());
 
     // Mutable receiver: mview<X> self works.
-    mview<Box> m = getmview(b);
+    mview<Box> m = mview(b);
     $(m).touch();
     stdout(b.x);
 

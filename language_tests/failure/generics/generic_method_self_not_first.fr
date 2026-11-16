@@ -8,6 +8,6 @@ struct S {
 
 func main() -> int32 {
     S s
-    stdout(s.f<int32>(1, getptr(s), 2))
+    stdout(s.f<int32>(1, ptr(s), 2))
     return 0
 }

@@ -6,7 +6,7 @@ import "franko/stdio"
 // Covers: s.field on a local, $(p).field (assigned through),
 // $(a.next).field (an mview-typed field dereferenced then a
 // field accessed), xs[i].field on a static array of structs, and
-// getptr(s.field) used to write a field through its pointer.
+// ptr(s.field) used to write a field through its pointer.
 // ============================================================
 
 struct Link {
@@ -26,7 +26,7 @@ func main() -> int32 {
 
     // $(p).field, assigned through.
     ptr<Cell> p;
-    p = getptr(s);
+    p = ptr(s);
     $(p).v = 10;
     stdout($(p).v);
 
@@ -36,7 +36,7 @@ func main() -> int32 {
     Link l2;
     l1.val = 100;
     l2.val = 200;
-    l1.next = getmview(l2);
+    l1.next = mview(l2);
     $(l1.next).val = 222;
     stdout(l1.val, end = " "); stdout($(l1.next).val);
 
@@ -47,15 +47,15 @@ func main() -> int32 {
     xs[2].v = 7;
     stdout(xs[0].v, end = " "); stdout(xs[1].v, end = " "); stdout(xs[2].v);
 
-    // getptr(s.field): write the field through its pointer.
+    // ptr(s.field): write the field through its pointer.
     ptr<int32> fa;
-    fa = getptr(s.v);
+    fa = ptr(s.v);
     $(fa) = 42;
     stdout(s.v);
 
-    // getptr of an array-element field.
+    // ptr of an array-element field.
     ptr<int32> fa2;
-    fa2 = getptr(xs[2].v);
+    fa2 = ptr(xs[2].v);
     $(fa2) = 77;
     stdout(xs[2].v);
 

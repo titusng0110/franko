@@ -6,7 +6,7 @@ func id(ptr<int32> p) -> ptr<int32> {
 
 func main() -> int32 {
     int32 x = 4
-    ptr<int32> p = id(getptr(x))
+    ptr<int32> p = id(ptr(x))
     stdout($(p))
     return 0
 }

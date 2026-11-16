@@ -1,0 +1,7 @@
+// ptr() of view-protected storage would launder the permission.
+func main() -> int32 {
+    [byte, 3] buf;
+    view<[byte, 3]> v = view(buf);
+    ptr<[byte, 3]> p = ptr($(v));
+    return 0;
+}

@@ -1536,16 +1536,16 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
             );
         }
 
-        if (ctx.getPtrExpr() != null) {
-            return visit(ctx.getPtrExpr());
+        if (ctx.ptrExpr() != null) {
+            return visit(ctx.ptrExpr());
         }
 
-        if (ctx.getViewExpr() != null) {
-            return visit(ctx.getViewExpr());
+        if (ctx.viewExpr() != null) {
+            return visit(ctx.viewExpr());
         }
 
-        if (ctx.getMViewExpr() != null) {
-            return visit(ctx.getMViewExpr());
+        if (ctx.mViewExpr() != null) {
+            return visit(ctx.mViewExpr());
         }
 
         if (ctx.derefExpr() != null) {
@@ -1573,19 +1573,19 @@ public class FrankoASTVisitor extends FrankoBaseVisitor<AstNode> {
     }
 
     @Override
-    public AstNode visitGetPtrExpr(FrankoParser.GetPtrExprContext ctx) {
+    public AstNode visitPtrExpr(FrankoParser.PtrExprContext ctx) {
         AstNode target = visit(ctx.lvalue());
         return AstNode.getPtr(span(ctx), PtrPermission.OWNER, target);
     }
 
     @Override
-    public AstNode visitGetViewExpr(FrankoParser.GetViewExprContext ctx) {
+    public AstNode visitViewExpr(FrankoParser.ViewExprContext ctx) {
         AstNode target = visit(ctx.lvalue());
         return AstNode.getPtr(span(ctx), PtrPermission.READ_ONLY, target);
     }
 
     @Override
-    public AstNode visitGetMViewExpr(FrankoParser.GetMViewExprContext ctx) {
+    public AstNode visitMViewExpr(FrankoParser.MViewExprContext ctx) {
         AstNode target = visit(ctx.lvalue());
         return AstNode.getPtr(span(ctx), PtrPermission.MUTABLE, target);
     }

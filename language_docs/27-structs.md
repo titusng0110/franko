@@ -51,7 +51,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](23-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -165,9 +165,9 @@ xs[i].field           // element of a static or dynamic array
 ```
 
 - `s.field` is a storage-backed lvalue exactly when its base expression is one, so field accesses can be assigned to: `s.field = v;`, `$(p).field = v;`, `xs[i].field = v;` (see [lvalues and storage-backed expressions](15-lvalues-and-storage-backed-expressions.md)).
-- `getptr(s.field)` is valid and yields `ptr<T>` for the field's type `T`.
+- `ptr(s.field)` is valid and yields `ptr<T>` for the field's type `T`.
 - A field may itself be an array, and array intrinsics work on fields:
-  `b.data.init(4)`, `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(getptr(other))`, `b.data[i]`, and `b.data.uninit()`.
+  `b.data.init(4)`, `b.data.init_zero(n)`, `b.data.memset(0)`, `b.data.memcpy(ptr(other))`, `b.data[i]`, and `b.data.uninit()`.
 - Struct methods also use member-call syntax (`s.increment()`); see [Methods](28-methods.md). Only struct methods and the built-in array intrinsics use member-call syntax.
 - A field whose type is a tuple is accessed with the tuple's own element names; tuple elements are lvalues by the same base-expression rule. See [Tuples](29-tuples.md).
 
@@ -205,7 +205,7 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `stdout` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
 - Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
-- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 - A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); a dynamic-array field breaks the cycle.
 - A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.

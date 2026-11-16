@@ -186,7 +186,7 @@ assignment rules. Compound assignment has no built-in struct fallback:
 
 Operator methods are fixed-shape: they cannot declare optional parameters,
 and operator calls reject named arguments. Explicit calls such as
-`a.OPERATOR_EQ(getview(b))` follow the same rule.
+`a.OPERATOR_EQ(view(b))` follow the same rule.
 
 A struct that is value-assignable (all fields value-assignable, recursively)
 **cannot declare `OPERATOR_MOV`**: its whole-value assignment is always the
@@ -199,14 +199,14 @@ into custom whole-value assignment; see
 Operator methods may still be called explicitly:
 
 ```franko
-a.OPERATOR_EQ(getview(b))
+a.OPERATOR_EQ(view(b))
 ```
 
 Operator operands may be arbitrary value expressions. Lvalue operands use
 their address; rvalue operands are borrowed for the duration of the full
-expression. User-written `getview`
-still requires a storage-backed lvalue, so `getview(5)` and
-`getview(make_x())` remain invalid. The left-hand side of an assignment
+expression. User-written `view`
+still requires a storage-backed lvalue, so `view(5)` and
+`view(make_x())` remain invalid. The left-hand side of an assignment
 must still be a storage-backed lvalue.
 
 The right-hand operand is always borrowed as `view<T>` where `T` is its

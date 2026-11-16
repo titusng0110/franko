@@ -22,7 +22,7 @@ func main() -> int32 {
     uint32 choose = 1
 
     if (choose != 0) {
-        maybe = getview(x)
+        maybe = view(x)
     }
 
     [int32] data

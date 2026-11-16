@@ -6,7 +6,7 @@ func main() -> int32 {
     int32 x6 = 0
     ptr<int32> p6
 
-    p6 = getptr(x6)
+    p6 = ptr(x6)
 
     while (p6 != null) {
         p6 = null

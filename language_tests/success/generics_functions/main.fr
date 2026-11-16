@@ -19,7 +19,7 @@ func main() -> int32 {
     arr.init(2)
     arr[0] = 7
     arr[1] = 8
-    stdout(goo<int32>(getview(arr)))
+    stdout(goo<int32>(view(arr)))
 
     (int32 val, int32 err) p = pair<int32>(42)
     stdout(p.val)

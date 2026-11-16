@@ -7,7 +7,7 @@ func main() -> int32 {
     stdout(mathx::scale(6, 7))
 
     int32 counter = 41
-    stdout(mathx::bump(getptr(counter)))
+    stdout(mathx::bump(ptr(counter)))
     stdout(counter)
 
     return 0

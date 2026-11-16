@@ -1,10 +1,10 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: Pointers — nested pointers and arrays behind ptr
+// LANGUAGE TEST: Pointers — nested pointer slots and arrays behind ptr
 // ============================================================
 // Covers:
-//   - ptr<ptr<int32>>: getptr of an ptr variable, double
+//   - ptr<mview<int32>>: ptr of a mutable view slot, double
 //     dereference to write and read through both levels
 //   - ptr<[int32]>: $(p).init(n) and
 //     element writes through the dereference
@@ -13,15 +13,15 @@ import "franko/stdio"
 // ============================================================
 
 func main() -> int32 {
-    // --- Nested pointers: pointer of an pointer variable ---
+    // --- Nested pointers: pointer of a mutable view slot ---
     int32 x = 0
-    ptr<int32> p
-    p = getptr(x)
+    mview<int32> p
+    p = mview(x)
 
-    ptr<ptr<int32>> pp
-    pp = getptr(p)
+    ptr<mview<int32>> pp
+    pp = ptr(p)
 
-    // Double dereference writes x through both pointer levels.
+    // Double dereference writes x through both levels.
     $($(pp)) = 7
     stdout($($(pp)))
     stdout(x)
@@ -33,7 +33,7 @@ func main() -> int32 {
     // --- Pointer of a dynamic array ---
     [int32] dyn
     ptr<[int32]> ap
-    ap = getptr(dyn)
+    ap = ptr(dyn)
 
     // Allocate through the pointer.
     $(ap).init(4)
@@ -48,7 +48,7 @@ func main() -> int32 {
     // --- Pointer of a static array: initializer list through deref ---
     [int32, 3] xs
     ptr<[int32, 3]> sp
-    sp = getptr(xs)
+    sp = ptr(xs)
 
     // Equivalent to copying [1, 2, 3] into the pointee array.
     $(sp).memcpy([1, 2, 3])

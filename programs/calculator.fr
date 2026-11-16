@@ -21,7 +21,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -71,7 +71,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -89,7 +89,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -127,12 +127,12 @@ namespace text {
             return
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return
         }
         view<[byte]> no_end = null
-        stdout(getview(token), end = no_end)
+        stdout(view(token), end = no_end)
         token.uninit()
         return
     }
@@ -242,7 +242,7 @@ struct Parser {
 
             uint32 count = i - start
             int64 number = 0
-            if (text::parse_int64(src, start, count, getmview(number)) == 0) {
+            if (text::parse_int64(src, start, count, mview(number)) == 0) {
                 $(self).current.kind = TokenKind::invalid
             } else {
                 $(self).current.kind = TokenKind::integer
@@ -427,12 +427,12 @@ func main() -> int32 {
     [byte, 256] line
     uint32 len = 0
 
-    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+    if (text::read_line_len(mview(line), 256, mview(len)) != 0) {
         return 1
     }
 
     uint32 start = 0
-    text::skip_spaces(getview(line), getmview(start))
+    text::skip_spaces(view(line), mview(start))
 
     uint32 end = len
     while (end > start) {
@@ -448,21 +448,21 @@ func main() -> int32 {
     }
 
     uint32 expression_count = 0
-    if (text::parse_uint32(getview(line), start, end - start, getmview(expression_count)) == 0) {
+    if (text::parse_uint32(view(line), start, end - start, mview(expression_count)) == 0) {
         return 1
     }
 
     for (uint32 i = 0; i < expression_count; i++) {
         len = 0
-        if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        if (text::read_line_len(mview(line), 256, mview(len)) != 0) {
             return 1
         }
 
         // Echo the expression exactly, then evaluate and report.
-        text::print_slice(getview(line), 0, len)
+        text::print_slice(view(line), 0, len)
         stdout(" = ", end = null)
 
-        (int64 value, CalcError error) result = evaluate(getview(line), len)
+        (int64 value, CalcError error) result = evaluate(view(line), len)
 
         if (result.error == CalcError::none) {
             stdout(result.value)

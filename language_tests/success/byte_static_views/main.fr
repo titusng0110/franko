@@ -7,7 +7,7 @@ import "franko/stdio"
 // view or an inner row of a nested static byte array. Both cases wrap
 // the underlying storage in a Franko_Fat_Pointer<uint8_t> (mode 2,
 // count N) and share the same checked implementation:
-//   - getview([byte, N]) decayed to view<[byte]>: memchr, endian read;
+//   - view([byte, N]) decayed to view<[byte]>: memchr, endian read;
 //   - grid[i] inner [byte, N] row: memset, write_bit/read_bit,
 //     endian write/read, flip_bit, memchr, count_set_bits.
 // No descriptor is built for the decay, and the inner row is bounds
@@ -21,7 +21,7 @@ func main() -> int32 {
     buf[2] = 67
     buf[3] = 68
 
-    view<[byte]> v = getview(buf)
+    view<[byte]> v = view(buf)
     stdout($(v).length())
     stdout($(v).memchr(67))
     stdout($(v).read_uint16_LE(0))

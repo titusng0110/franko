@@ -10,7 +10,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -60,7 +60,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -356,7 +356,7 @@ namespace topo {
         }
 
         uint32 len = 0
-        if (text::read_line_len(buf, cap, getmview(len)) != 0) {
+        if (text::read_line_len(buf, cap, mview(len)) != 0) {
             return 0
         }
         return parse_one(buf, len, out)
@@ -374,7 +374,7 @@ namespace topo {
         }
 
         uint32 len = 0
-        if (text::read_line_len(buf, cap, getmview(len)) != 0) {
+        if (text::read_line_len(buf, cap, mview(len)) != 0) {
             return 0
         }
         return parse_pair(buf, len, first, second)
@@ -393,7 +393,7 @@ namespace topo {
         for (uint32 edge_index = 0; edge_index < edges; edge_index++) {
             uint32 from = 0
             uint32 dest = 0
-            if (read_pair(line, cap, getmview(from), getmview(dest)) == 0) {
+            if (read_pair(line, cap, mview(from), mview(dest)) == 0) {
                 graph.deinit()
                 return -1
             }
@@ -411,7 +411,7 @@ func main() -> int32 {
     [byte, 256] line
     uint32 case_count = 0
 
-    if (topo::read_one(getmview(line), 256, getmview(case_count)) == 0) {
+    if (topo::read_one(mview(line), 256, mview(case_count)) == 0) {
         return 1
     }
 
@@ -419,11 +419,11 @@ func main() -> int32 {
         uint32 nodes = 0
         uint32 edges = 0
 
-        if (topo::read_pair(getmview(line), 256, getmview(nodes), getmview(edges)) == 0) {
+        if (topo::read_pair(mview(line), 256, mview(nodes), mview(edges)) == 0) {
             return 1
         }
 
-        if (topo::solve_case(nodes, edges, getmview(line), 256, case_number) != 0) {
+        if (topo::solve_case(nodes, edges, mview(line), 256, case_number) != 0) {
             return 1
         }
     }

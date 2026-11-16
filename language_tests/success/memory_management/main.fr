@@ -3,7 +3,7 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Memory Management (Pointers)
 // ============================================================
-// Covers: ptr<T>, getptr, deref, and null literals.
+// Covers: ptr<T>, ptr, deref, and null literals.
 // ============================================================
 
 func main() -> int32 {
@@ -11,11 +11,11 @@ func main() -> int32 {
     int32 stack_var = 42;
 
     // --- Pointers & dereferencing ---
-    ptr<int32> p = getptr(stack_var);
+    ptr<int32> p = ptr(stack_var);
     int32 deref_val = $(p);
 
     // --- Writes through an pointer ---
-    ptr<int32> stack_ptr = getptr(stack_var);
+    ptr<int32> stack_ptr = ptr(stack_var);
     $(stack_ptr) = 200;
 
     // --- Null pointer ---
@@ -23,7 +23,7 @@ func main() -> int32 {
     if (null_ptr == null) {
         stdout(1);
     }
-    null_ptr = getptr(stack_var);
+    null_ptr = ptr(stack_var);
     if (null_ptr != null) {
         stdout(0);
     }
@@ -31,13 +31,13 @@ func main() -> int32 {
     // --- Pointer of array ---
     [int32] arr;
     arr.init(10);
-    ptr<[int32]> arr_ptr = getptr(arr);
+    ptr<[int32]> arr_ptr = ptr(arr);
     $(arr_ptr)[0] = 1;
     int32 arr_val = $(arr_ptr)[0];
 
     // --- Pointer of array with static size ---
     [int32, 5] static_arr;
-    ptr<[int32, 5]> static_arr_ptr = getptr(static_arr);
+    ptr<[int32, 5]> static_arr_ptr = ptr(static_arr);
     $(static_arr_ptr)[0] = 5;
 
     stdout(deref_val);

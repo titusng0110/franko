@@ -25,7 +25,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -75,7 +75,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -110,12 +110,12 @@ namespace text {
             return
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return
         }
         view<[byte]> no_end = null
-        stdout(getview(token), end = no_end)
+        stdout(view(token), end = no_end)
         token.uninit()
         return
     }
@@ -240,7 +240,7 @@ struct WordTrie {
                 }
             } else {
                 if (word_len > 0) {
-                    int32 status = $(self).insert(getview($(self).word), word_len)
+                    int32 status = $(self).insert(view($(self).word), word_len)
                     if (status != 0) {
                         return -1
                     }
@@ -250,7 +250,7 @@ struct WordTrie {
         }
 
         if (word_len > 0) {
-            int32 status = $(self).insert(getview($(self).word), word_len)
+            int32 status = $(self).insert(view($(self).word), word_len)
             if (status != 0) {
                 return -1
             }
@@ -288,12 +288,12 @@ func main() -> int32 {
     [byte, 512] path
     uint32 line_len = 0
 
-    if (text::read_line_len(getmview(line), 512, getmview(line_len)) != 0) {
+    if (text::read_line_len(mview(line), 512, mview(line_len)) != 0) {
         return 1
     }
 
     uint32 line_count = 0
-    if (text::parse_uint32(getview(line), 0, line_len, getmview(line_count)) == 0) {
+    if (text::parse_uint32(view(line), 0, line_len, mview(line_count)) == 0) {
         return 1
     }
 
@@ -303,11 +303,11 @@ func main() -> int32 {
     }
 
     for (uint32 i = 0; i < line_count; i++) {
-        if (text::read_line_len(getmview(line), 512, getmview(line_len)) != 0) {
+        if (text::read_line_len(mview(line), 512, mview(line_len)) != 0) {
             trie.uninit()
             return 1
         }
-        if (trie.process_line(getview(line), line_len) != 0) {
+        if (trie.process_line(view(line), line_len) != 0) {
             trie.uninit()
             return 1
         }
@@ -317,7 +317,7 @@ func main() -> int32 {
     stdout(trie.total)
     stdout("distinct words: ", end = null)
     stdout(trie.distinct)
-    trie.walk(trie.root, 0, getmview(path))
+    trie.walk(trie.root, 0, mview(path))
 
     trie.uninit()
     return 0

@@ -88,7 +88,7 @@ struct LifeGrid {
             }
         }
 
-        $(self).cells.memcpy(getview($(self).next))
+        $(self).cells.memcpy(view($(self).next))
         return
     }
 
@@ -122,7 +122,7 @@ struct LifeGrid {
                     row_buffer[col] = 46
                 }
             }
-            stdout(getview(row_buffer))
+            stdout(view(row_buffer))
         }
 
         row_buffer.uninit()

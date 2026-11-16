@@ -34,7 +34,7 @@
 // (v.push(7)) and declare the permission they need: ptr<Vector> self
 // for the lifecycle operations (init/push grow/uninit), mview<Vector>
 // self for the mutating ones, view<Vector> self for the read-only
-// ones. The compiler synthesizes getptr/getmview/getview(v) as self.
+// ones. The compiler synthesizes ptr/mview/view(v) as self.
 // ============================================================
 
 namespace std {

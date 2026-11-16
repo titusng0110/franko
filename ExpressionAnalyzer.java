@@ -506,11 +506,11 @@ public final class ExpressionAnalyzer {
             String intrinsicName;
 
             if (n.permission == PtrPermission.OWNER) {
-                intrinsicName = "getptr";
+                intrinsicName = "ptr";
             } else if (n.permission == PtrPermission.MUTABLE) {
-                intrinsicName = "getmview";
+                intrinsicName = "mview";
             } else {
-                intrinsicName = "getview";
+                intrinsicName = "view";
             }
 
             SastNode target = analyzeRequiredLValueExpr(
@@ -539,12 +539,12 @@ public final class ExpressionAnalyzer {
                         + "pointee to read or write. Guard the pointer with a "
                         + "null check and dereference it only on the non-null "
                         + "path, or initialize it from live storage with "
-                        + "getptr/getview/getmview.");
+                        + "ptr/view/mview.");
             } else {
                 ctx.error("Cannot dereference non-pointer type. The $ "
                         + "operator reads the pointee of ptr, mview, or view "
                         + "storage and has no meaning for ordinary values. "
-                        + "Create a pointer with getptr/getview/getmview, or "
+                        + "Create a pointer with ptr/view/mview, or "
                         + "remove the $ and use the value directly.");
             }
 

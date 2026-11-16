@@ -17,10 +17,10 @@ func init_use_free(ptr<[int32]> p) -> void {
 func main() -> int32 {
     [int32] d
     d.init(2)
-    fill(getptr(d))
+    fill(ptr(d))
     stdout(d[0])
-    teardown(getptr(d))
+    teardown(ptr(d))
     [int32] e
-    init_use_free(getptr(e))
+    init_use_free(ptr(e))
     return 0
 }

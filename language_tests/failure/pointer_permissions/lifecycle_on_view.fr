@@ -1,7 +1,7 @@
 // Lifecycle intrinsics are blocked on view<T> receivers as well.
 func main() -> int32 {
     [byte] d;
-    view<[byte]> v = getview(d);
+    view<[byte]> v = view(d);
     $(v).init(3);
     return 0;
 }

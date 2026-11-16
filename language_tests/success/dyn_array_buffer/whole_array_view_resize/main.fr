@@ -4,7 +4,7 @@ func main() -> int32 {
     [int32] d
     d.init(2)
     d[0] = 5
-    view<[int32]> v = getview(d)
+    view<[int32]> v = view(d)
     d.resize(4)
     stdout($(v)[0])
     d.uninit()

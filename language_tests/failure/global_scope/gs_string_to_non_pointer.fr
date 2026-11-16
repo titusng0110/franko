@@ -1,6 +1,6 @@
 // Failure fixture: global_scope/gs_string_to_non_pointer
 // A string literal is a view<[byte, N]> value: only pointer-typed
-// globals may be initialized with one (or with getptr/getmview/getview
+// globals may be initialized with one (or with ptr/mview/view
 // over a global, or null).
 [byte, 6] global_value = "hello";
 

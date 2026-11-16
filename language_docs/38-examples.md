@@ -199,7 +199,7 @@ func main() -> int32 {
     [int32, 3] xs;
     ptr<[int32, 3]> p;
 
-    p = getptr(xs);
+    p = ptr(xs);
 
     $(p).memcpy([1, 2, 3]);
 
@@ -218,7 +218,7 @@ func main() -> int32 {
     [int32, 3] xs;
     ptr<[int32, 3]> p;
 
-    p = getptr(xs);
+    p = ptr(xs);
 
     $(p)[0] = 1;
     $(p)[1] = 2;
@@ -266,7 +266,7 @@ func fill(ptr<[[byte, 3], 2]> grid) -> void {
 func main() -> int32 {
     [[byte, 3], 2] grid;
 
-    fill(getptr(grid));
+    fill(ptr(grid));
 
     stdout(grid[0][1]);
     stdout(grid[1][2]);
@@ -404,7 +404,7 @@ func main() -> int32 {
 
     stdout(dist2(p));   // 25
 
-    move(getptr(p));
+    move(ptr(p));
 
     stdout(p.x);        // 4
     stdout(p.y);        // 5
@@ -553,8 +553,8 @@ func main() -> int32 {
     // Compare whole byte arrays.
     [byte, 8] copy;
     copy.memset(0);
-    copy.memcpy(getptr(packet));
-    stdout(copy.memcmp(getptr(packet)) == 0);   // 1
+    copy.memcpy(ptr(packet));
+    stdout(copy.memcmp(ptr(packet)) == 0);   // 1
 
     // Bit flags across byte boundaries.
     [byte, 2] flags;
@@ -686,10 +686,10 @@ func main() -> int32 {
     const (int32, int32) pair = (int32, int32) { 1, 2 }
 
     int32 value = 7
-    const ptr<int32> link = getptr(value)
+    const ptr<int32> link = ptr(value)
     $(link) = 8                     // pointee write is allowed
 
-    view<Point> v = getview(p)      // const storage: getview only
+    view<Point> v = view(p)      // const storage: view only
 
     stdout(width)                    // 3
     stdout(p.sum())                  // 9

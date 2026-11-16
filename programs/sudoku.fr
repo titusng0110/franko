@@ -20,7 +20,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -212,7 +212,7 @@ struct Sudoku {
                     line[col] = v + 48
                 }
             }
-            stdout(getview(line))
+            stdout(view(line))
         }
         return
     }
@@ -228,7 +228,7 @@ struct Sudoku {
                     line[col] = v + 48
                 }
             }
-            stdout(getview(line))
+            stdout(view(line))
         }
         return
     }
@@ -244,10 +244,10 @@ func main() -> int32 {
 
     for (uint32 row = 0; row < 9; row++) {
         line_len = 0
-        if (text::read_line_len(getmview(line), 64, getmview(line_len)) != 0) {
+        if (text::read_line_len(mview(line), 64, mview(line_len)) != 0) {
             return 1
         }
-        if (s.load_line(row, getview(line), line_len) == 0) {
+        if (s.load_line(row, view(line), line_len) == 0) {
             input_ok = 0
         }
     }

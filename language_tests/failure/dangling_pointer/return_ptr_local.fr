@@ -1,6 +1,6 @@
 func bad() -> ptr<int32> {
     int32 x = 0
-    return getptr(x)
+    return ptr(x)
 }
 
 func main() -> int32 {

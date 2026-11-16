@@ -1,10 +1,10 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: Pointers — nullness certification via getptr
+// LANGUAGE TEST: Pointers — nullness certification via ptr
 // ============================================================
 // Covers:
-//   - getptr(x) is the only certification of a non-null pointer
+//   - ptr(x) is the only certification of a non-null pointer
 //   - certification propagates through a copy (q = p)
 //   - certification propagates transitively (r = q, s = r)
 //   - a null state also propagates through copies
@@ -13,9 +13,9 @@ import "franko/stdio"
 func main() -> int32 {
     int32 x = 0
 
-    // getptr certifies p as pointing, so deref is valid.
+    // ptr certifies p as pointing, so deref is valid.
     ptr<int32> p
-    p = getptr(x)
+    p = ptr(x)
     $(p) = 5
     stdout($(p))
 

@@ -10,11 +10,12 @@ A declared variable type is valid if it is one of:
 - static array of a valid non-`void` type with valid size;
 - pointer of a valid non-`void` type.
 
-An **owning** pointer (`ptr<T>`) may not appear inside an array, struct, or
-tuple, recursively. `mview<T>` and `view<T>` are allowed in aggregates, but
-their referent types may not recursively contain an owning `ptr<T>`. This is a
-type-validity error, not a warning; see
-[Pointers](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+An **owning** pointer (`ptr<T>`) may not appear inside an array, struct,
+tuple, or another pointer's referent, recursively. `mview<T>` and `view<T>`
+are allowed in aggregates and as nested pointer referents, but their referent
+types may not recursively contain an owning `ptr<T>`. This is a type-validity
+error, not a warning; see
+[Pointers](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 
 Valid:
 
@@ -52,6 +53,10 @@ struct S { ptr<int32> p } // invalid: owning ptr inside a struct
 (ptr<int32>, int32) pair; // invalid: owning ptr inside a tuple
 [view<ptr<int32>>] nested; // invalid: a view whose referent is an owning ptr
 ptr<[ptr<int32>]> p;       // invalid: pointer to an array of owning ptrs
+ptr<ptr<int32>> pp;        // invalid: owning ptr behind another pointer
+view<ptr<int32>> vp;       // invalid: owning ptr behind a view
+mview<ptr<int32>> mp;      // invalid: owning ptr behind an mview
+ptr<view<ptr<int32>>> deep; // invalid: owning ptr deeper in the referent
 ```
 
 Static arrays nest: every level of `[[byte, 20], 12]` must satisfy the static array size rules (see [Arrays](21-arrays.md)).

@@ -5,7 +5,7 @@ import "franko/stdio"
 // ============================================================
 // Covers: primitive declarations (int, int32, uint8, uint32),
 // dynamic and static array declarations, ptr<T> declarations with
-// getptr/deref.
+// ptr/deref.
 // ============================================================
 
 func main() -> int32 {
@@ -33,10 +33,10 @@ func main() -> int32 {
     buffer[0] = 255
     buffer[127] = 1
 
-    // Pointer: null-initialized, then certified with getptr of a local.
+    // Pointer: null-initialized, then certified with ptr of a local.
     ptr<int32> p
     stdout(p == null)
-    p = getptr(y)
+    p = ptr(y)
     $(p) = 99
 
     stdout(x)

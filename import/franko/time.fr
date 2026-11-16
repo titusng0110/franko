@@ -44,8 +44,8 @@ namespace std {
             int64 nanosec = 0
             if (os::posix::clock_gettime(
                     os::posix::CLOCK_REALTIME,
-                    getmview(sec),
-                    getmview(nanosec)) != 0) {
+                    mview(sec),
+                    mview(nanosec)) != 0) {
                 return result
             }
             result.sec = sec
@@ -63,10 +63,10 @@ namespace std {
         #if (#IS_WINDOWS) {
             int64 counter = 0
             int64 frequency = 0
-            if (os::win32::QueryPerformanceCounter(getmview(counter)) == 0) {
+            if (os::win32::QueryPerformanceCounter(mview(counter)) == 0) {
                 return 0
             }
-            if (os::win32::QueryPerformanceFrequency(getmview(frequency)) == 0) {
+            if (os::win32::QueryPerformanceFrequency(mview(frequency)) == 0) {
                 return 0
             }
             if (counter <= 0 || frequency <= 0) {
@@ -84,8 +84,8 @@ namespace std {
             int64 nanosec = 0
             if (os::posix::clock_gettime(
                     os::posix::CLOCK_MONOTONIC,
-                    getmview(sec),
-                    getmview(nanosec)) != 0) {
+                    mview(sec),
+                    mview(nanosec)) != 0) {
                 return 0
             }
             result = sec * 1000000000 + nanosec

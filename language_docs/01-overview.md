@@ -11,7 +11,7 @@ Franko is a small statically typed language with:
 - static arrays;
 - typed pointers using `ptr<T>`, `mview<T>`, and `view<T>`;
 - explicit pointer operations:
-  - `getptr(...)`, `getmview(...)`, and `getview(...)`;
+  - `ptr(...)`, `mview(...)`, and `view(...)`;
   - `$(...)`;
 - user-defined functions;
 - function overloading;

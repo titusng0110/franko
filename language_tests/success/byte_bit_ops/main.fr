@@ -77,7 +77,7 @@ func main() -> int32 {
     dyn.uninit()
 
     // Read-only receiver through a view.
-    view<[byte, 4]> ro = getview(m)
+    view<[byte, 4]> ro = view(m)
     stdout($(ro).count_set_bits())
     stdout($(ro).read_bit(2))
 

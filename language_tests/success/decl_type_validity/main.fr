@@ -38,14 +38,14 @@ func main() -> int32 {
     // Pointer of a primitive.
     int32 v = 77;
     ptr<int32> p;
-    p = getptr(v);
+    p = ptr(v);
     $(p) = 88;
 
     // Pointer of a dynamic array type.
     [int32] dyn;
     dyn.init_zero(2);
     ptr<[int32]> ap;
-    ap = getptr(dyn);
+    ap = ptr(dyn);
     $(ap)[1] = 55;
 
     stdout(s.n);

@@ -297,7 +297,7 @@ public class Desugarer {
                 diagnostics.error("Global variable '"
                     + n.name
                     + "': only pointer-typed globals may be initialized with "
-                    + "getptr/getmview/getview. These operations produce a "
+                    + "ptr/mview/view. These operations produce a "
                     + "pointer or view, so a non-pointer global has no "
                     + "compatible storage for the result. Change the global's "
                     + "type to the matching ptr, view, or mview type.");

@@ -1,0 +1,12 @@
+import "franko/stdio"
+
+func main() -> int32 {
+    int32 x = 5
+    view<int32> inner = view(x)
+    ptr<view<int32>> pv = ptr(inner)
+    view<view<int32>> vv = view(inner)
+
+    stdout($($(pv)))
+    stdout($($(vv)))
+    return 0
+}

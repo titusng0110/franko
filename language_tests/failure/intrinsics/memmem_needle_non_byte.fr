@@ -3,6 +3,6 @@
 func main() -> int32 {
     [byte, 4] hay;
     [int32, 2] needle;
-    hay.memmem(getptr(needle));
+    hay.memmem(ptr(needle));
     return 0;
 }

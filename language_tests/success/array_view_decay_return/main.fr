@@ -41,7 +41,7 @@ func main() -> int32 {
     xs[2] = 30
     xs[3] = 40
 
-    view<[int32]> a = return_parameter(getview(xs))
+    view<[int32]> a = return_parameter(view(xs))
     stdout($(a).length())
     stdout($(a)[2])
 
@@ -49,10 +49,10 @@ func main() -> int32 {
     stdout($(b).length())
     stdout($(b)[3])
 
-    view<[int32]> c = return_copied(getview(xs))
+    view<[int32]> c = return_copied(view(xs))
     stdout($(c)[1])
 
-    view<[int32]> d = return_cast(getview(xs))
+    view<[int32]> d = return_cast(view(xs))
     stdout($(d)[0])
 
     return 0

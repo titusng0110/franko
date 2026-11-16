@@ -4,7 +4,7 @@ func setup(ptr<[int32]> p) -> void {
 
 func main() -> int32 {
     [int32] d
-    setup(getptr(d))
+    setup(ptr(d))
     d[0] = 1
     d.uninit()
     return 0

@@ -3,6 +3,6 @@
 func main() -> int32 {
     [int32, 4] a;
     [uint8, 4] b;
-    a.memcpy(getptr(b));
+    a.memcpy(ptr(b));
     return 0;
 }

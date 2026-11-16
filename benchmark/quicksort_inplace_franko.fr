@@ -23,7 +23,7 @@ func parse_uint(view<[byte]> text) -> uint32 {
 func main(view<[[byte]]> args) -> int32 {
     uint32 dataset = 0
     if ($(args).length() >= 2) {
-        view<[byte]> mode_arg = getview($(args)[1])
+        view<[byte]> mode_arg = view($(args)[1])
         if ($(mode_arg).length() >= 1) {
             byte mode_byte = $(mode_arg)[0]
             if (mode_byte == 53) {
@@ -42,14 +42,14 @@ func main(view<[[byte]]> args) -> int32 {
 
     uint32 count = 10000000
     if ($(args).length() >= 3) {
-        uint32 parsed_count = parse_uint(getview($(args)[2]))
+        uint32 parsed_count = parse_uint(view($(args)[2]))
         if (parsed_count > 0) {
             count = parsed_count
         }
     }
     uint32 repeat = 1
     if ($(args).length() >= 4) {
-        uint32 parsed_repeat = parse_uint(getview($(args)[3]))
+        uint32 parsed_repeat = parse_uint(view($(args)[3]))
         if (parsed_repeat > 0) {
             repeat = parsed_repeat
         }
@@ -100,7 +100,7 @@ func main(view<[[byte]]> args) -> int32 {
         }
 
         int64 sort_start_ns = std::mono_time()
-        std::quicksort<int64>(getmview(values), 0, count)
+        std::quicksort<int64>(mview(values), 0, count)
         sort_total_ns = sort_total_ns + (std::mono_time() - sort_start_ns)
 
         uint64 checksum = 0

@@ -275,7 +275,7 @@ func main() -> int32 {
     [Enemy] mob_pool;
     mob_pool.init_zero(10); // Safe: zero-fills, then writes AiState::sleeping (0) to each entity
 
-    update_enemies(getmview(mob_pool));
+    update_enemies(mview(mob_pool));
 
     stdout(mob_pool[0].state == AiState::hunting); // 1 (true)
 

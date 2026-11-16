@@ -129,8 +129,8 @@ func stdout(const view<std::String> str, const view<std::String> end) -> void {
     view<[uint8]> endbytes = null
     if (end != null) {
         uint32 m = $(end).length()
-        if (m != 0 && $(end).to(getptr(endbuf)) == 0) {
-            endbytes = getview(endbuf)
+        if (m != 0 && $(end).to(ptr(endbuf)) == 0) {
+            endbytes = view(endbuf)
         }
     }
     stdout(str, end = endbytes)
@@ -145,8 +145,8 @@ func stdout(const view<std::String> str, const view<[byte]> end = "\n") -> void 
         uint32 n = $(str).length()
         if (n != 0) {
             [byte] buf
-            if ($(str).to(getptr(buf)) == 0) {
-                stdout(getview(buf), end = end)
+            if ($(str).to(ptr(buf)) == 0) {
+                stdout(view(buf), end = end)
             }
             if (buf.length() != 0) {
                 buf.uninit()
@@ -212,8 +212,8 @@ func stderr(const view<std::String> str, const view<std::String> end) -> void {
     view<[uint8]> endbytes = null
     if (end != null) {
         uint32 m = $(end).length()
-        if (m != 0 && $(end).to(getptr(endbuf)) == 0) {
-            endbytes = getview(endbuf)
+        if (m != 0 && $(end).to(ptr(endbuf)) == 0) {
+            endbytes = view(endbuf)
         }
     }
     stderr(str, end = endbytes)
@@ -228,8 +228,8 @@ func stderr(const view<std::String> str, const view<[byte]> end = "\n") -> void 
         uint32 n = $(str).length()
         if (n != 0) {
             [byte] buf
-            if ($(str).to(getptr(buf)) == 0) {
-                stderr(getview(buf), end = end)
+            if ($(str).to(ptr(buf)) == 0) {
+                stderr(view(buf), end = end)
             }
             if (buf.length() != 0) {
                 buf.uninit()
@@ -407,7 +407,7 @@ func stdin_line(ptr<std::String> out) -> int32 {
                         cap = next_cap
                     }
                 }
-                __io_input_copy_to(getmview(line.data), len, pos, take)
+                __io_input_copy_to(mview(line.data), len, pos, take)
                 len = needed
             }
         }
@@ -451,7 +451,7 @@ func stdin_line(ptr<std::String> out) -> int32 {
             return -1
         }
     }
-    int32 st = $(out).from(getview(line.data))
+    int32 st = $(out).from(view(line.data))
     line.data.uninit()
     if (st != 0) {
         return -1

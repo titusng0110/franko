@@ -27,7 +27,7 @@ func main() -> int32 {
     b.memset(0);
     a[0] = 42;
     b[0] = 24;
-    stdout(first(getptr(a)));
-    stdout(first(getptr(b)));
+    stdout(first(ptr(a)));
+    stdout(first(ptr(b)));
     return 0;
 }

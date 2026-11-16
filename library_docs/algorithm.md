@@ -20,8 +20,8 @@ import/franko/algorithm.fr    // pure Franko, no C++ bridge
 Both algorithms are generic and require an explicit element type:
 
 ```franko
-std::quicksort<int32>(getmview(values))
-std::heapsort<int32>(getmview(values))
+std::quicksort<int32>(mview(values))
+std::heapsort<int32>(mview(values))
 ```
 
 The element type `T` must support ordering with `<` and value assignment.
@@ -52,7 +52,7 @@ values[1] = 1;
 values[2] = 3;
 values[3] = 2;
 
-std::quicksort<int32>(getmview(values), 0, values.length());
+std::quicksort<int32>(mview(values), 0, values.length());
 values.uninit();
 ```
 
@@ -87,7 +87,7 @@ names.init(3);
 names[0] = "gamma";
 names[1] = "alpha";
 names[2] = "beta";
-std::heapsort<std::String>(getptr(names));
+std::heapsort<std::String>(ptr(names));
 names.uninit();
 ```
 

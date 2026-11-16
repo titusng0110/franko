@@ -54,7 +54,7 @@
 // init/uninit/grow, mview<X> self for new_index/free_index, and
 // view<X> self for the observers (exist/generation/used/capacity/
 // write_active_indices). The compiler synthesizes the matching
-// getptr/getmview/getview(a) as self.
+// ptr/mview/view(a) as self.
 //
 // Adapted from Python pseudo-code, with these Franko adjustments:
 //

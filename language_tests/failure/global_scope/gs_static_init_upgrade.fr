@@ -1,10 +1,10 @@
 // Failure fixture: global_scope/gs_static_init_upgrade
 // A static address initializer must be a pointer type match or a
-// permission downgrade: initializing a ptr<T> global from getview(...)
+// permission downgrade: initializing a ptr<T> global from view(...)
 // raises permissions and is rejected.
 int32 greeting = 7;
 
-ptr<int32> global_value = getview(greeting);
+ptr<int32> global_value = view(greeting);
 
 func main() -> int32 {
     return 0;

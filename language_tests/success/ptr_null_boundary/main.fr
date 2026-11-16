@@ -29,12 +29,12 @@ func main() -> int32 {
 
     // null as an argument: the callee checks and returns a marker.
     stdout(check_ptr(null))
-    stdout(check_ptr(getptr(x)))
+    stdout(check_ptr(ptr(x)))
 
     // null returned from an ptr<T> function.
-    ptr<int32> r1 = pick_ptr(0, getptr(x))
+    ptr<int32> r1 = pick_ptr(0, ptr(x))
     stdout(r1 == null)
-    ptr<int32> r2 = pick_ptr(1, getptr(x))
+    ptr<int32> r2 = pick_ptr(1, ptr(x))
     stdout(r2 == null)
     if (r2 != null) {
         stdout($(r2))
@@ -42,7 +42,7 @@ func main() -> int32 {
 
     // p = null makes a certified pointer null again.
     ptr<int32> p
-    p = getptr(x)
+    p = ptr(x)
     stdout(p != null)
     p = null
     stdout(p == null)

@@ -1,6 +1,6 @@
 # 28. Methods
 
-A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax; the receiver is passed through `getptr`/`getmview`/`getview(receiver)` matching the declared `self` type (see [Structs](27-structs.md) for fields and [Functions](19-functions.md) for free functions).
+A struct may declare methods: functions bound to the struct whose first parameter is explicitly `self` (`ptr<X> self`, `mview<X> self`, or `view<X> self`). Methods are called with member-call syntax; the receiver is passed through `ptr`/`mview`/`view(receiver)` matching the declared `self` type (see [Structs](27-structs.md) for fields and [Functions](19-functions.md) for free functions).
 
 ```franko
 struct X {
@@ -72,14 +72,14 @@ Rules:
 - A method whose `self` parameter does not have type `ptr<X>`, `mview<X>`, or `view<X>` for the enclosing struct `X` is rejected: `Method 'X.foo' has a 'self' parameter of type T; it must be ptr<X> (or mview<X> or view<X>)`. This covers by-value `X self`, non-pointer `int32 self`, and `ptr<Y> self` for a different struct `Y`.
 - Only the first parameter may be named `self`: `Only the first parameter of a method may be named 'self'`.
 - Method overload identity **excludes `self`'s type**: a struct may not declare two methods with the same name and the same remaining parameter types but different `self` permissions.
-- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y` and `getptr($(self).y)` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](26-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
+- `self` is an ordinary pointer variable of its declared permission inside the body: `$(self).y` and `ptr($(self).y)` behave exactly like any other pointer variable. In particular `self.y` is invalid: member access requires a struct value, so fields are reached as `$(self).y` (see [Pointers](26-pointers.md)). Writing through a `view<X> self` is rejected like any other write through a view.
 - The `self` slot is **implicitly const**. Reassigning it (`self = other`) is
   rejected with `Cannot assign to const variable 'self'`. Writing
   `const self` is allowed but redundant. `const` only makes the pointer slot
   immutable; the declared `ptr`/`mview`/`view` permission still governs the
   pointee. It is not part of the method signature or overload identity.
 - A const struct receiver accepts only `view<X> self` methods. The hidden
-  receiver argument is `getptr`/`getmview`/`getview(receiver)` matching the
+  receiver argument is `ptr`/`mview`/`view(receiver)` matching the
   declared `self` type, so `ptr<X> self` and `mview<X> self` calls on a const
   value fail the const-pointer rule, while `view<X> self` is allowed.
 - Method names may coincide with array intrinsic names (`init`, `memset`, ...). Dispatch keys off the receiver type, not the name: a struct-typed receiver calls the method, while an array-typed receiver calls the intrinsic (see [Array Intrinsics](23-array-intrinsics.md)).
@@ -87,7 +87,7 @@ Rules:
 ## 28.3 Method Calls and Receivers
 
 A method is invoked with member-call syntax. The receiver is passed as
-the `self` argument, using `getptr`, `getmview`, or `getview` matching
+the `self` argument, using `ptr`, `mview`, or `view` matching
 the method's declared `self` type:
 
 ```franko
@@ -99,13 +99,13 @@ s.inner.increment()        // field receiver
 
 The creation intrinsic enforces the receiver's permission: calling a
 `ptr<X> self` method through a `view` receiver is rejected
-(`getptr(...) requires allocation rights (ptr) over its target`), while
+(`ptr(...) requires allocation rights (ptr) over its target`), while
 a `view<X> self` method is callable through any receiver. When the
 receiver is an lvalue reached through an inner pointer (for example
 `$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
 pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
-array, struct, or tuple; see
-[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+array, struct, tuple, or pointer referent; see
+[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 
 Rules:
 
@@ -115,7 +115,7 @@ Rules:
 - Unknown methods and mismatched arguments are rejected: `No matching overload for method call 'X.foo(...)'`, with user argument types only (`self` is implicit and excluded from the printed signature). A struct-typed receiver never falls back to array-intrinsic diagnostics, even when the name coincides with one: `s.init()` with no such method reports the method-call diagnostic.
 - Arity diagnostics exclude `self`: `Method call to 'X.foo' has wrong arity: expected N argument(s) (excluding self), got M`.
 - Array-typed receivers keep their intrinsic meaning (`b.data.init(n)`, `b.data.memset(0)`); struct-typed receivers call methods. The two namespaces coexist because a receiver cannot be both types at once.
-- Methods are never callable as free functions: `X.foo(getptr(s))` and `foo(getptr(s))` are rejected as ordinary overload failures.
+- Methods are never callable as free functions: `X.foo(ptr(s))` and `foo(ptr(s))` are rejected as ordinary overload failures.
 
 Ordinary methods support named and optional user arguments. `self` is hidden
 and is never nameable, cannot have a default, and is never part of the call's
@@ -216,7 +216,7 @@ Rules:
 
 - `self` cannot name a variable, parameter (except a method `self` parameter), field, function, struct, or method: ordinary declarations use `IDENTIFIER` and fail to parse on `self`.
 - A free-function parameter named `self` parses (parameters accept `self` so method declarations share the rule) but is rejected semantically: `'self' is only valid as the first parameter of a struct method`.
-- `self` as an expression (`self`, `getptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
+- `self` as an expression (`self`, `ptr(self)`, `$(self)`) is valid only inside a method body, where it resolves to the `self` parameter. Outside a method it is rejected: `keyword 'self' is only valid inside a method body`.
 - `x.self` parses (member names accept keywords) but always fails resolution. A method named `stdout` is an ordinary method like any other.
 
 ## 28.7 Scope Inside Method Bodies
@@ -283,14 +283,14 @@ Rules:
 - Each operator has its own method; there is no implicit `!=` from
   `==`, and no implicit compound form from a plain operator.
 - Operator methods are still ordinary methods and remain callable with
-  member-call syntax: `a.OPERATOR_EQ(getview(b))`.
+  member-call syntax: `a.OPERATOR_EQ(view(b))`.
 
 Operator syntax is shorthand for a method call:
 
 ```franko
-a == b       // a.OPERATOR_EQ(getview(b))
-a = b        // a.OPERATOR_MOV(getview(b))
-a += b       // a.OPERATOR_ADDMOV(getview(b))
+a == b       // a.OPERATOR_EQ(view(b))
+a = b        // a.OPERATOR_MOV(view(b))
+a += b       // a.OPERATOR_ADDMOV(view(b))
 ```
 
 Rvalue operands are borrowed for the duration of the full expression (see

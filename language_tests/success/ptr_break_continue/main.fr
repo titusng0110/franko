@@ -14,7 +14,7 @@ import "franko/stdio"
 
 func main() -> int32 {
     int32 x = 7;
-    ptr<int32> p = getptr(x);
+    ptr<int32> p = ptr(x);
     int32 i = 0;
 
     // p is certified POINTING by the guard; the break path leaves with
@@ -29,7 +29,7 @@ func main() -> int32 {
 
     // continue path: the guard certification flows around the back
     // edge, so $(p) inside the loop body is accepted on every path.
-    ptr<int32> q = getptr(x);
+    ptr<int32> q = ptr(x);
     int32 j = 0;
     while (q != null) {
         j = j + 1;

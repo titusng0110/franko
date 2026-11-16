@@ -11,9 +11,9 @@ func peek(view<[int32]> v) -> int32 {
 func main() -> int32 {
     [int32] d
     d.init(1)
-    fill(getmview(d))
+    fill(mview(d))
     d[0] = 2
-    stdout(peek(getview(d)))
+    stdout(peek(view(d)))
     d.uninit()
     return 0
 }

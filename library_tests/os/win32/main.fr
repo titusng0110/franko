@@ -14,10 +14,10 @@ func main() -> int32 {
     int64 counter = 0;
     int64 frequency = 0;
     int32 counter_ok = os::win32::QueryPerformanceCounter(
-            getmview(counter)
+            mview(counter)
     );
     int32 frequency_ok = os::win32::QueryPerformanceFrequency(
-            getmview(frequency)
+            mview(frequency)
     );
     uint64 filetime = os::win32::GetSystemTimePreciseAsFileTime();
     stdout(counter_ok);

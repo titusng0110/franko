@@ -8,6 +8,6 @@ struct X {
 }
 func main() -> int32 {
     X s
-    foo(getptr(s))
+    foo(ptr(s))
     return 0
 }

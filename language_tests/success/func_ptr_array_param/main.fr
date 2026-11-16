@@ -4,7 +4,7 @@ import "franko/stdio"
 // LANGUAGE TEST: Array Parameters via ptr<[T]>
 // ============================================================
 // Covers: passing arrays to functions through ptr<[T]>
-// and ptr<[T, N]> parameters with getptr(array) at the
+// and ptr<[T, N]> parameters with ptr(array) at the
 // call site; the callee writes through $(p)[i].
 // ============================================================
 
@@ -23,11 +23,11 @@ func fill_static(ptr<[int32, 8]> p) -> void {
 func main() -> int32 {
     [int32] xs;
     xs.init_zero(4);
-    fill_dynamic(getptr(xs));
+    fill_dynamic(ptr(xs));
     stdout(xs[0], end = " "); stdout(xs[1], end = " "); stdout(xs[2], end = " "); stdout(xs[3]);
 
     [int32, 8] grid;
-    fill_static(getptr(grid));
+    fill_static(ptr(grid));
     stdout(grid[0], end = " "); stdout(grid[7]);
 
     xs.uninit();

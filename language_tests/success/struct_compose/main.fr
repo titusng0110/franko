@@ -32,7 +32,7 @@ func main() -> int32 {
     // Pointer to a struct, fields assigned through $(p).
     Point p;
     ptr<Point> pp;
-    pp = getptr(p);
+    pp = ptr(p);
     $(pp).x = 6;
     $(pp).y = 7;
     stdout($(pp).x + $(pp).y);

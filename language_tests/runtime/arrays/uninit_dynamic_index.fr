@@ -14,6 +14,6 @@ func main() -> int32 {
     if (C != 0) {
         xs.init(1)
     }
-    stdout(read_first(getptr(xs)))
+    stdout(read_first(ptr(xs)))
     return 0
 }

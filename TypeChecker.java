@@ -159,13 +159,13 @@ public class TypeChecker {
         }
     }
 
-    public boolean isForbiddenOwnedPointerAggregate(SastType type) {
+    public boolean isForbiddenOwnedPointerNesting(SastType type) {
         if (type == null) {
             return false;
         }
 
         if (type.kind == SastTypeKind.PTR) {
-            return isForbiddenOwnedPointerAggregate(type.referencedType);
+            return containsOwnedPointer(type.referencedType);
         }
 
         if (type.kind == SastTypeKind.DYNAMIC_ARRAY
@@ -185,7 +185,7 @@ public class TypeChecker {
         return containsOwnedPointer(type);
     }
 
-    public void ensureNoOwnedPointerInAggregate(
+    public void ensureNoEmbeddedOwnedPointer(
             SastType type,
             String where
     ) {
@@ -193,8 +193,8 @@ public class TypeChecker {
             return;
         }
 
-        if (isForbiddenOwnedPointerAggregate(type)) {
-            reportOwnedPointerInAggregate(type, where);
+        if (isForbiddenOwnedPointerNesting(type)) {
+            reportEmbeddedOwnedPointer(type, where);
         }
     }
 
@@ -203,11 +203,11 @@ public class TypeChecker {
             String where
     ) {
         if (isForbiddenAggregateMemberType(type)) {
-            reportOwnedPointerInAggregate(type, where);
+            reportEmbeddedOwnedPointer(type, where);
         }
     }
 
-    private void reportOwnedPointerInAggregate(
+    private void reportEmbeddedOwnedPointer(
             SastType type,
             String where
     ) {
@@ -223,13 +223,15 @@ public class TypeChecker {
                 + " has type '"
                 + describeSafe(type)
                 + "': owning pointer type 'ptr<T>' cannot appear inside an "
-                + "array, struct, or tuple, recursively (including through "
-                + "view<T>/mview<T> referents). Embedded owning pointers let "
-                + "allocation and free responsibility escape into unrelated "
-                + "code, so the storage lifetime cannot be reasoned about. "
-                + "Keep owning pointers in direct variables, parameters, or "
-                + "globals; store view<T>/mview<T> in aggregates; use the "
-                + "pool allocator (franko/pool) for linked or node-like data."
+                + "array, struct, tuple, or pointer, recursively (including "
+                + "the referents of inner ptr<T>, mview<T>, and view<T> "
+                + "types). Embedded owning pointers let allocation and free "
+                + "responsibility escape into unrelated code, so the storage "
+                + "lifetime cannot be reasoned about. Keep owning pointers as "
+                + "the outermost pointer type of direct variables, parameters, "
+                + "returns, and globals; store view<T>/mview<T> in aggregates "
+                + "or under another pointer; use the pool allocator "
+                + "(franko/pool) for linked or node-like data."
                 + nestedArrayHint);
     }
 
@@ -452,7 +454,7 @@ public class TypeChecker {
                     + ", got " + describeSafe(t)
                     + ". This operation requires a pointer to stored data, not a plain"
                     + " value. Pass a ptr<T>, view<T>, or mview<T> value, or take a"
-                    + " pointer with getview(...) or getptr(...).");
+                    + " pointer with view(...) or ptr(...).");
         }
     }
 

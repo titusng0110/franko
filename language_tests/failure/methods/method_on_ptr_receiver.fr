@@ -9,7 +9,7 @@ struct X {
 func main() -> int32 {
     X s
     ptr<X> p
-    p = getptr(s)
+    p = ptr(s)
     p.foo()
     return 0
 }

@@ -1,0 +1,7 @@
+// ptr() of mview-protected storage would raise permissions.
+func main() -> int32 {
+    [byte, 3] buf;
+    mview<[byte, 3]> m = mview(buf);
+    ptr<[byte, 3]> p = ptr($(m));
+    return 0;
+}

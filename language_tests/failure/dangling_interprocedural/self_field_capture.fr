@@ -3,7 +3,7 @@ struct Box {
 
     func set(ptr<Box> self) -> void {
         int32 x = 1
-        $(self).p = getview(x)
+        $(self).p = view(x)
     }
 }
 

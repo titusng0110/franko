@@ -31,7 +31,7 @@ func main() -> int32 {
 
     util::Counter d
     d.value = 100
-    ptr<util::Counter> p = getptr(d)
+    ptr<util::Counter> p = ptr(d)
     $(p).add<7>()
     stdout(d.value)
 

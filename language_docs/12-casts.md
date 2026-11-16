@@ -18,7 +18,7 @@ int32 big = 300;
 uint8 small = unsafe_cast<uint8>(big);   // checked: throws at run time
 ```
 
-Like `$(...)` and `getptr`, both are compiler intrinsics, not function
+Like `$(...)` and `ptr`, both are compiler intrinsics, not function
 calls: they cannot be overloaded, shadowed, or passed around.
 
 ## 12.1 Cast Syntax
@@ -146,7 +146,7 @@ identical and the permission may only weaken
 ```franko
 [byte] buf;
 buf.init(16);
-ptr<[byte]> p = getptr(buf);
+ptr<[byte]> p = ptr(buf);
 view<[byte]> v = cast<view<[byte]>>(p);   // explicit downgrade
 mview<[byte]> m = cast<mview<[byte]>>(p);
 view<[byte]> v2 = cast<view<[byte]>>(m);
@@ -169,7 +169,7 @@ combinations from a `ptr` source) cast to `mview<[T]>`/
 
 ```franko
 [int32, 4] xs;
-mview<[int32, 4]> m = getmview(xs);
+mview<[int32, 4]> m = mview(xs);
 mview<[int32]> d = cast<mview<[int32]>>(m);
 ```
 

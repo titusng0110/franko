@@ -718,13 +718,13 @@ namespace std {
             return
         }
         if (n <= __SMALL_SORT_LIMIT) {
-            __insertion_sort_values<T>(getptr($(values)), lo, lo + n - 1)
+            __insertion_sort_values<T>(ptr($(values)), lo, lo + n - 1)
             return
         }
         uint32 start = n / 2
         while (start > 0) {
             start = start - 1
-            __sift_down_values<T>(getptr($(values)), lo, start, n - 1)
+            __sift_down_values<T>(ptr($(values)), lo, start, n - 1)
         }
         uint32 end = n - 1
         while (end > 0) {
@@ -732,7 +732,7 @@ namespace std {
             $(values)[lo] = $(values)[lo + end]
             $(values)[lo + end] = tmp
             end = end - 1
-            __sift_down_values<T>(getptr($(values)), lo, 0, end)
+            __sift_down_values<T>(ptr($(values)), lo, 0, end)
         }
         return
     }
@@ -799,7 +799,7 @@ namespace std {
             if (span > remaining) {
                 span = remaining
             }
-            uint32 r = __next_random_word(getptr($(ctx).pivot_cursor))
+            uint32 r = __next_random_word(ptr($(ctx).pivot_cursor))
             r = r ^ (j * 0x9E3779B9)
             r = r ^ (r >> 16)
             uint64 scaled = cast<uint64>(r) * cast<uint64>(span)
@@ -872,7 +872,7 @@ namespace std {
                 span = remaining
             }
 
-            uint32 r = __next_random_word(getptr($(ctx).pivot_cursor))
+            uint32 r = __next_random_word(ptr($(ctx).pivot_cursor))
             r = r ^ (j * 0x9E3779B9)
             r = r ^ (r >> 16)
             uint64 scaled = cast<uint64>(r) * cast<uint64>(span)
@@ -880,7 +880,7 @@ namespace std {
             sample[j] = start + block_start + offset
         }
 
-        __sort_sample_indices<T>(getmview(sample), values, k)
+        __sort_sample_indices<T>(mview(sample), values, k)
         $(ctx).sample_pivot_pos = sample[k / 2]
         $(ctx).sample_pivot = $(values)[$(ctx).sample_pivot_pos]
 
@@ -1061,8 +1061,8 @@ namespace std {
                 __heap_sort_values<T>(values, lo, count)
                 return
             }
-            T pivot_value = $(values)[__get_random_pivot_pos(getptr($(ctx).pivot_cursor), lo, hi)]
-        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(values, lo, hi, getview(pivot_value))
+            T pivot_value = $(values)[__get_random_pivot_pos(ptr($(ctx).pivot_cursor), lo, hi)]
+        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(values, lo, hi, view(pivot_value))
             uint32 left_count = 0
             if (bounds.lt > lo) {
                 left_count = bounds.lt - lo
@@ -1111,7 +1111,7 @@ namespace std {
             __heap_sort_values<T>(values, lo, count)
             return
         }
-        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(values, lo, hi, getview($(ctx).sample_pivot))
+        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(values, lo, hi, view($(ctx).sample_pivot))
         uint32 left_count = 0
         if (bounds.lt > lo) {
             left_count = bounds.lt - lo
@@ -1147,7 +1147,7 @@ namespace std {
                 __heap_sort_values<T>(values, lo, count)
                 return
             }
-            uint32 pivot = __partition_lomuto_kernel<T>(values, lo, hi, __get_random_pivot_pos(getptr($(ctx).pivot_cursor), lo, hi))
+            uint32 pivot = __partition_lomuto_kernel<T>(values, lo, hi, __get_random_pivot_pos(ptr($(ctx).pivot_cursor), lo, hi))
             uint32 left_count = pivot - lo
             uint32 right_count = hi - pivot
             if (left_count > right_count) {
@@ -1809,31 +1809,31 @@ namespace std {
             uint32 count = hi - lo + 1
             if (count <= __SMALL_SORT_LIMIT) {
                 if (count <= __NETWORK_LIMIT) {
-                    __sort_network<T>(getptr($(values)), lo, count)
+                    __sort_network<T>(ptr($(values)), lo, count)
                 } else {
-                    __insertion_sort_values<T>(getptr($(values)), lo, hi)
+                    __insertion_sort_values<T>(ptr($(values)), lo, hi)
                 }
                 return
             }
             if (depth == 0) {
-                __heap_sort_values<T>(getptr($(values)), lo, count)
+                __heap_sort_values<T>(ptr($(values)), lo, count)
                 return
             }
-            uint32 split = __median3_partition_lt_4k<T>(getptr($(values)), lo, hi)
+            uint32 split = __median3_partition_lt_4k<T>(ptr($(values)), lo, hi)
             if (split >= hi) {
-                __heap_sort_values<T>(getptr($(values)), lo, count)
+                __heap_sort_values<T>(ptr($(values)), lo, count)
                 return
             }
             uint32 left_count = split - lo + 1
             uint32 right_count = hi - split
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    __quicksort_lt_4k_rec<T>(getptr($(values)), split + 1, hi, depth - 1)
+                    __quicksort_lt_4k_rec<T>(ptr($(values)), split + 1, hi, depth - 1)
                 }
                 hi = split
             } else {
                 if (left_count > 0) {
-                    __quicksort_lt_4k_rec<T>(getptr($(values)), lo, split, depth - 1)
+                    __quicksort_lt_4k_rec<T>(ptr($(values)), lo, split, depth - 1)
                 }
                 lo = split + 1
             }
@@ -1850,18 +1850,18 @@ namespace std {
             uint32 count = hi - lo + 1
             if (count <= __SMALL_SORT_LIMIT) {
                 if (count <= __NETWORK_LIMIT) {
-                    __sort_network<T>(getptr($(values)), lo, count)
+                    __sort_network<T>(ptr($(values)), lo, count)
                 } else {
-                    __insertion_sort_values<T>(getptr($(values)), lo, hi)
+                    __insertion_sort_values<T>(ptr($(values)), lo, hi)
                 }
                 return
             }
             if (depth == 0) {
-                __heap_sort_values<T>(getptr($(values)), lo, count)
+                __heap_sort_values<T>(ptr($(values)), lo, count)
                 return
             }
-            T pivot_value = $(values)[__get_random_pivot_pos(getptr($(ctx).pivot_cursor), lo, hi)]
-        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(getptr($(values)), lo, hi, getview(pivot_value))
+            T pivot_value = $(values)[__get_random_pivot_pos(ptr($(ctx).pivot_cursor), lo, hi)]
+        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(ptr($(values)), lo, hi, view(pivot_value))
             uint32 left_count = 0
             if (bounds.lt > lo) {
                 left_count = bounds.lt - lo
@@ -1872,13 +1872,13 @@ namespace std {
             }
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    __quicksort_ge_4k_dnf_rec<T>(getptr($(values)), bounds.gt + 1, hi, depth - 1, ctx)
+                    __quicksort_ge_4k_dnf_rec<T>(ptr($(values)), bounds.gt + 1, hi, depth - 1, ctx)
                 }
                 depth = depth - 1
                 hi = bounds.lt - 1
             } else {
                 if (left_count > 0) {
-                    __quicksort_ge_4k_dnf_rec<T>(getptr($(values)), lo, bounds.lt - 1, depth - 1, ctx)
+                    __quicksort_ge_4k_dnf_rec<T>(ptr($(values)), lo, bounds.lt - 1, depth - 1, ctx)
                 }
                 if (right_count == 0) {
                     return
@@ -1898,28 +1898,28 @@ namespace std {
             uint32 count = hi - lo + 1
             if (count <= __SMALL_SORT_LIMIT) {
                 if (count <= __NETWORK_LIMIT) {
-                    __sort_network<T>(getptr($(values)), lo, count)
+                    __sort_network<T>(ptr($(values)), lo, count)
                 } else {
-                    __insertion_sort_values<T>(getptr($(values)), lo, hi)
+                    __insertion_sort_values<T>(ptr($(values)), lo, hi)
                 }
                 return
             }
             if (depth == 0) {
-                __heap_sort_values<T>(getptr($(values)), lo, count)
+                __heap_sort_values<T>(ptr($(values)), lo, count)
                 return
             }
-            uint32 pivot = __partition_lomuto_kernel<T>(getptr($(values)), lo, hi, __get_random_pivot_pos(getptr($(ctx).pivot_cursor), lo, hi))
+            uint32 pivot = __partition_lomuto_kernel<T>(ptr($(values)), lo, hi, __get_random_pivot_pos(ptr($(ctx).pivot_cursor), lo, hi))
             uint32 left_count = pivot - lo
             uint32 right_count = hi - pivot
             if (left_count > right_count) {
                 if (right_count > 0) {
-                    __quicksort_ge_4k_lomuto_rec<T>(getptr($(values)), pivot + 1, hi, depth - 1, ctx)
+                    __quicksort_ge_4k_lomuto_rec<T>(ptr($(values)), pivot + 1, hi, depth - 1, ctx)
                 }
                 depth = depth - 1
                 hi = pivot - 1
             } else {
                 if (left_count > 0) {
-                    __quicksort_ge_4k_lomuto_rec<T>(getptr($(values)), lo, pivot - 1, depth - 1, ctx)
+                    __quicksort_ge_4k_lomuto_rec<T>(ptr($(values)), lo, pivot - 1, depth - 1, ctx)
                 }
                 depth = depth - 1
                 lo = pivot + 1
@@ -1938,17 +1938,17 @@ namespace std {
         uint32 count = hi - lo + 1
         if (count <= __SMALL_SORT_LIMIT) {
             if (count <= __NETWORK_LIMIT) {
-                __sort_network<T>(getptr($(values)), lo, count)
+                __sort_network<T>(ptr($(values)), lo, count)
             } else {
-                __insertion_sort_values<T>(getptr($(values)), lo, hi)
+                __insertion_sort_values<T>(ptr($(values)), lo, hi)
             }
             return
         }
         if (depth == 0) {
-            __heap_sort_values<T>(getptr($(values)), lo, count)
+            __heap_sort_values<T>(ptr($(values)), lo, count)
             return
         }
-        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(getptr($(values)), lo, hi, getview($(ctx).sample_pivot))
+        (uint32 lt, uint32 gt) bounds = __partition_dnf_kernel<T>(ptr($(values)), lo, hi, view($(ctx).sample_pivot))
         uint32 left_count = 0
         if (bounds.lt > lo) {
             left_count = bounds.lt - lo
@@ -1958,10 +1958,10 @@ namespace std {
             right_count = hi - bounds.gt
         }
         if (left_count > 0) {
-            __quicksort_ge_4k_dnf_rec<T>(getptr($(values)), lo, bounds.lt - 1, depth - 1, ctx)
+            __quicksort_ge_4k_dnf_rec<T>(ptr($(values)), lo, bounds.lt - 1, depth - 1, ctx)
         }
         if (right_count > 0) {
-            __quicksort_ge_4k_dnf_rec<T>(getptr($(values)), bounds.gt + 1, hi, depth - 1, ctx)
+            __quicksort_ge_4k_dnf_rec<T>(ptr($(values)), bounds.gt + 1, hi, depth - 1, ctx)
         }
         return
     }
@@ -1976,24 +1976,24 @@ namespace std {
         uint32 count = hi - lo + 1
         if (count <= __SMALL_SORT_LIMIT) {
             if (count <= __NETWORK_LIMIT) {
-                __sort_network<T>(getptr($(values)), lo, count)
+                __sort_network<T>(ptr($(values)), lo, count)
             } else {
-                __insertion_sort_values<T>(getptr($(values)), lo, hi)
+                __insertion_sort_values<T>(ptr($(values)), lo, hi)
             }
             return
         }
         if (depth == 0) {
-            __heap_sort_values<T>(getptr($(values)), lo, count)
+            __heap_sort_values<T>(ptr($(values)), lo, count)
             return
         }
-        uint32 pivot = __partition_lomuto_kernel<T>(getptr($(values)), lo, hi, $(ctx).sample_pivot_pos)
+        uint32 pivot = __partition_lomuto_kernel<T>(ptr($(values)), lo, hi, $(ctx).sample_pivot_pos)
         uint32 left_count = pivot - lo
         uint32 right_count = hi - pivot
         if (left_count > 0) {
-            __quicksort_ge_4k_lomuto_rec<T>(getptr($(values)), lo, pivot - 1, depth - 1, ctx)
+            __quicksort_ge_4k_lomuto_rec<T>(ptr($(values)), lo, pivot - 1, depth - 1, ctx)
         }
         if (right_count > 0) {
-            __quicksort_ge_4k_lomuto_rec<T>(getptr($(values)), pivot + 1, hi, depth - 1, ctx)
+            __quicksort_ge_4k_lomuto_rec<T>(ptr($(values)), pivot + 1, hi, depth - 1, ctx)
         }
         return
     }
@@ -2018,28 +2018,28 @@ namespace std {
 
         if (count >= __PROBE16_MIN_ITEMS) {
             if (count >= __MHAT_MIN_ITEMS) {
-                ctx.use_dnf = __estimate_use_dnf<T>(values, start, count, getptr(ctx))
+                ctx.use_dnf = __estimate_use_dnf<T>(values, start, count, ptr(ctx))
             } else if (count >= __PROBE64_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 64, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 64, ptr(ctx))
             } else if (count >= __PROBE49_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 49, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 49, ptr(ctx))
             } else if (count >= __PROBE37_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 37, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 37, ptr(ctx))
             } else if (count >= __PROBE29_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 29, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 29, ptr(ctx))
             } else if (count >= __PROBE22_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 22, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 22, ptr(ctx))
             } else {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 16, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 16, ptr(ctx))
             }
 
             if (ctx.use_dnf != 0) {
-                __quicksort_ge_4k_dnf<T>(getptr($(values)), start, end - 1, depth, getptr(ctx))
+                __quicksort_ge_4k_dnf<T>(ptr($(values)), start, end - 1, depth, ptr(ctx))
             } else {
-                __quicksort_ge_4k_lomuto<T>(getptr($(values)), start, end - 1, depth, getptr(ctx))
+                __quicksort_ge_4k_lomuto<T>(ptr($(values)), start, end - 1, depth, ptr(ctx))
             }
         } else {
-            __quicksort_lt_4k_rec<T>(getptr($(values)), start, end - 1, depth)
+            __quicksort_lt_4k_rec<T>(ptr($(values)), start, end - 1, depth)
         }
         return
     }
@@ -2053,7 +2053,7 @@ namespace std {
             return
         }
         uint32 count = $(values).length()
-        quicksort<T>(getptr($(values)), 0, count)
+        quicksort<T>(ptr($(values)), 0, count)
         return
     }
 
@@ -2077,25 +2077,25 @@ namespace std {
 
         if (count >= __PROBE16_MIN_ITEMS) {
             if (count >= __MHAT_MIN_ITEMS) {
-                ctx.use_dnf = __estimate_use_dnf<T>(values, start, count, getptr(ctx))
+                ctx.use_dnf = __estimate_use_dnf<T>(values, start, count, ptr(ctx))
             } else if (count >= __PROBE64_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 64, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 64, ptr(ctx))
             } else if (count >= __PROBE49_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 49, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 49, ptr(ctx))
             } else if (count >= __PROBE37_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 37, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 37, ptr(ctx))
             } else if (count >= __PROBE29_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 29, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 29, ptr(ctx))
             } else if (count >= __PROBE22_MIN_ITEMS) {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 22, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 22, ptr(ctx))
             } else {
-                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 16, getptr(ctx))
+                ctx.use_dnf = __sample_has_duplicates<T>(values, start, count, 16, ptr(ctx))
             }
 
             if (ctx.use_dnf != 0) {
-                __quicksort_ge_4k_dnf<T>(values, start, end - 1, depth, getptr(ctx))
+                __quicksort_ge_4k_dnf<T>(values, start, end - 1, depth, ptr(ctx))
             } else {
-                __quicksort_ge_4k_lomuto<T>(values, start, end - 1, depth, getptr(ctx))
+                __quicksort_ge_4k_lomuto<T>(values, start, end - 1, depth, ptr(ctx))
             }
         } else {
             __quicksort_lt_4k_rec<T>(values, start, end - 1, depth)
@@ -2149,7 +2149,7 @@ namespace std {
         if (values == null || start >= end) {
             return
         }
-        __heap_sort_values<T>(getptr($(values)), start, end - start)
+        __heap_sort_values<T>(ptr($(values)), start, end - start)
         return
     }
 
@@ -2162,7 +2162,7 @@ namespace std {
             return
         }
         uint32 count = $(values).length()
-        heapsort<T>(getptr($(values)), 0, count)
+        heapsort<T>(ptr($(values)), 0, count)
         return
     }
 }

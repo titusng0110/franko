@@ -1,10 +1,10 @@
-func clear(ptr<ptr<int32>> out) -> void {
+func clear(ptr<view<int32>> out) -> void {
     $(out) = null
 }
 
 func main() -> int32 {
     int32 x = 0
-    ptr<int32> p = getptr(x)
-    clear(getptr(p))
+    view<int32> p = view(x)
+    clear(ptr(p))
     return $(p)
 }

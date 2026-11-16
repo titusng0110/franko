@@ -7,7 +7,7 @@ struct Holder {
 func main() -> int32 {
     Holder h;
     h.data.init(2);
-    mview<Holder> m = getmview(h);
+    mview<Holder> m = mview(h);
     $(m).data.init(3);
     return 0;
 }

@@ -168,7 +168,7 @@ Array intrinsic calls are special expression-statement forms:
 ```franko
 arr.init(10);
 arr.memset(0);
-arr.memcpy(getptr(other));
+arr.memcpy(ptr(other));
 arr.uninit();
 ```
 

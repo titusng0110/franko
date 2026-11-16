@@ -8,7 +8,7 @@ func main() -> int32 {
     ptr<int32> p7
 
     if (x7 != 0) {
-        p7 = getptr(x7)
+        p7 = ptr(x7)
     } else {
         p7 = null
     }

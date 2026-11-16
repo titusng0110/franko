@@ -1,14 +1,14 @@
-func inner(ptr<ptr<int32>> out) -> void {
+func inner(ptr<view<int32>> out) -> void {
     int32 x = 1
-    $(out) = getptr(x)
+    $(out) = ptr(x)
 }
 
-func forward(ptr<ptr<int32>> out) -> void {
+func forward(ptr<view<int32>> out) -> void {
     inner(out)
 }
 
 func main() -> int32 {
-    ptr<int32> p
-    forward(getptr(p))
+    view<int32> p
+    forward(ptr(p))
     return 0
 }

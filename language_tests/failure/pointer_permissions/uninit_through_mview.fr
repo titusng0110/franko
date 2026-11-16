@@ -2,7 +2,7 @@
 func main() -> int32 {
     [byte] d;
     d.init(3);
-    mview<[byte]> m = getmview(d);
+    mview<[byte]> m = mview(d);
     $(m).uninit();
     return 0;
 }

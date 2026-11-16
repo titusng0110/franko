@@ -47,8 +47,8 @@ const variables; see [Declarations](18-declarations.md#184-global-variable-decla
 The restriction follows the storage root. `p.field = 1`, `p[i] = 1`, and
 `p = v` are all rejected when `p` is const, but `$(p) = v` and
 `$(p).field = v` write the pointee and are allowed when `p` is a const
-pointer. `getptr(constValue)` and `getmview(constValue)` are rejected;
-`getview(constValue)` is allowed.
+pointer. `ptr(constValue)` and `mview(constValue)` are rejected;
+`view(constValue)` is allowed.
 
 Const storage must be initialized by its declaration:
 
@@ -112,7 +112,7 @@ xs.memcpy([1, 2, 3]);        // copies min(3, 3) elements
 
 [int32] ys;
 ys.init(3);
-ys.memcpy(getptr(xs));       // dynamic target is initialized first
+ys.memcpy(ptr(xs));       // dynamic target is initialized first
 ```
 
 See [Array Literals](22-array-literals.md) for literal-source rules.
@@ -149,7 +149,7 @@ a = b;    // invalid: struct with non-assignable fields is pointer-only
 ```
 
 Structs with non-assignable fields can still be shared through a pointer
-(for example `ptr<X>` with `getptr(s)`, or `mview`/`view` when only
+(for example `ptr<X>` with `ptr(s)`, or `mview`/`view` when only
 read/write access is needed), and fields are accessed through
 `$(p).field`.
 
@@ -203,7 +203,7 @@ Invalid:
 xs += 1;         // arrays are not arithmetic values
 
 int32 v = 1;
-ptr<int32> p = getptr(v);
+ptr<int32> p = ptr(v);
 p += 1;          // pointers are not arithmetic values
 
 int32 x = 1;
@@ -283,18 +283,18 @@ struct Blob {
     [int32, 4] xs
 
     func OPERATOR_MOV(ptr<Blob> self, view<Blob> other) -> void {
-        $(self).xs.memcpy(getview($(other).xs))
+        $(self).xs.memcpy(view($(other).xs))
         return
     }
 }
 
 Blob a
 Blob b
-b = a          // calls b.OPERATOR_MOV(getview(a))
+b = a          // calls b.OPERATOR_MOV(view(a))
 ```
 
 The right-hand side is always borrowed as `view<T>` where `T` is its
-static type. An lvalue is passed with `getview`; an rvalue is borrowed for
+static type. An lvalue is passed with `view`; an rvalue is borrowed for
 the duration of the full expression. A view value needs a `view<view<...>>`
 parameter:
 

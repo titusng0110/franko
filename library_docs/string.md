@@ -164,7 +164,7 @@ bytes.init(3)
 bytes[0] = 65
 bytes[1] = 66
 bytes[2] = 67
-s.from(getview(bytes)) // "ABC"
+s.from(view(bytes)) // "ABC"
 bytes.uninit()
 ```
 
@@ -187,13 +187,13 @@ std::String s
 s.from("hello")
 
 [byte] out
-s.to(getptr(out))
+s.to(ptr(out))
 stdout(out.length())    // 5
-stdout(getview(out))    // hello
+stdout(view(out))    // hello
 out.uninit()
 
 std::String copy
-s.to(getptr(copy))
+s.to(ptr(copy))
 stdout(copy == s)       // 1
 copy.uninit()
 ```
@@ -247,7 +247,7 @@ stdout(s.is_utf8_compliant())   // 1
 invalid.init(2)
 invalid[0] = 0xC0              // overlong two-byte lead
 invalid[1] = 0x80
-s.from(getview(invalid))
+s.from(view(invalid))
 stdout(s.is_utf8_compliant())   // 0
 invalid.uninit()
 ```
@@ -279,7 +279,7 @@ stdout(s.length())   // 5
 s.clear()
 stdout(s.length())   // 0
 s.from("reuse")     // reuses the existing buffer
-stdout(getview(s))   // reuse
+stdout(view(s))   // reuse
 ```
 
 ### shrink_to_fit
@@ -300,7 +300,7 @@ s.from("hello")
 s.append(" world")
 s.erase(5, 11)      // "hello", buffer still has room
 stdout(s.shrink_to_fit())   // 0: buffer trimmed back to 5 bytes
-stdout(getview(s))          // hello
+stdout(view(s))          // hello
 s.clear()
 stdout(s.shrink_to_fit())   // 0: empty string frees its buffer
 stdout(s.length())          // 0
@@ -351,11 +351,11 @@ existing buffer is reused.
 std::String s
 int32 n = -123
 s.from_integer(n)
-stdout(getview(s))   // -123
+stdout(view(s))   // -123
 
 uint64 big = 18446744073709551615
 s.from_integer(big)
-stdout(getview(s))   // 18446744073709551615
+stdout(view(s))   // 18446744073709551615
 ```
 
 ### to_int8, to_int16, to_int32, to_int64, to_uint8, to_uint16, to_uint32, to_uint64
@@ -477,9 +477,9 @@ Slicing a string into itself is safe.
 std::String s
 s.from("abcdef")
 std::String part
-s.get_slice(1, 4, getptr(part))   // "bcd"
+s.get_slice(1, 4, ptr(part))   // "bcd"
 [byte] bytes
-s.get_slice(2, 5, getptr(bytes))  // "cde"
+s.get_slice(2, 5, ptr(bytes))  // "cde"
 bytes.uninit()
 part.uninit()
 ```
@@ -541,11 +541,11 @@ contains `self` is safe.
 std::String text
 text.from("a,b,,c,")
 std::StringList parts
-text.split(44, getptr(parts))       // ["a", "b", "", "c", ""]
+text.split(44, ptr(parts))       // ["a", "b", "", "c", ""]
 
 std::String joined
-joined.join(44, getview(parts))     // "a,b,,c,"
-joined.join(getview(parts))         // "abc"
+joined.join(44, view(parts))     // "a,b,,c,"
+joined.join(view(parts))         // "abc"
 ```
 
 ## StringList
@@ -672,7 +672,7 @@ stdout(hit.idx)                // 2
 stdout(hit.err)                // 0
 
 std::String out
-list.get(1, getptr(out))      // "bb"
+list.get(1, ptr(out))      // "bb"
 out.uninit()
 
 list.set(1, "cc")
@@ -780,8 +780,8 @@ func main() -> int32 {
     stdout(greeting.is_utf8_compliant())
 
     [byte] out
-    greeting.to(getptr(out))
-    stdout(getview(out))
+    greeting.to(ptr(out))
+    stdout(view(out))
     out.uninit()
 
     std::String other

@@ -24,8 +24,8 @@ func main() -> int32 {
 
     stdout(a.replace<uint8>(200))
     stdout(b.replace<int32>(300))
-    stdout(a.copy_from<uint8>(getview(b)))
-    stdout(a.copy_from<int32>(getview(a)))
+    stdout(a.copy_from<uint8>(view(b)))
+    stdout(a.copy_from<int32>(view(a)))
     stdout(a.get())
     stdout(b.get())
     return 0

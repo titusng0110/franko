@@ -1,0 +1,10 @@
+// Failure fixture: global_scope/gs_ptr_non_pointer
+// Only pointer-typed globals may be initialized with a statically
+// representable address (ptr/mview/view over a global).
+[byte, 3] buf;
+
+int32 global_value = ptr(buf);
+
+func main() -> int32 {
+    return 0;
+}

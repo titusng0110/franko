@@ -2,7 +2,7 @@
 // Mutating byte intrinsics need mutation rights on the receiver region.
 func main() -> int32 {
     [byte, 4] buf;
-    view<[byte, 4]> v = getview(buf);
+    view<[byte, 4]> v = view(buf);
     $(v).write_bit(0, 1);
     return 0;
 }

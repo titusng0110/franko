@@ -3,7 +3,7 @@
 // cannot be assigned to an ptr<int32>.
 func main() -> int32 {
     uint8 b = 7
-    ptr<uint8> pb = getptr(b)
+    ptr<uint8> pb = ptr(b)
     int32 x = 0
     ptr<int32> px = pb
     return 0

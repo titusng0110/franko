@@ -7,7 +7,7 @@ func fill(ptr<[int32]> p) -> void {
 func main() -> int32 {
     [int32] d
     d.init(1)
-    fill(getptr(d))
+    fill(ptr(d))
     stdout(d[0])
     if (d.length() != 0) {
         d.uninit()

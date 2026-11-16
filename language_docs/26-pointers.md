@@ -21,7 +21,7 @@ Examples:
 ```franko
 ptr<int32> p;
 mview<uint8> b;
-view<ptr<int32>> pp;
+view<int32> v;
 ptr<[int32]> ap;
 ```
 
@@ -34,31 +34,30 @@ is not an ordinary value type.
 
 ## 26.1 Creating Pointers
 
-Views are created with intrinsics over storage-backed lvalues, in the
-same shape as `getptr`:
+Pointer values are created with intrinsics over storage-backed lvalues:
 
-- `getptr(expr)` creates a `ptr<T>`.
-- `getmview(expr)` creates an `mview<T>`.
-- `getview(expr)` creates a `view<T>`.
+- `ptr(expr)` creates a `ptr<T>`.
+- `mview(expr)` creates an `mview<T>`.
+- `view(expr)` creates a `view<T>`.
 
 If the operand has type `T`, the result has the corresponding pointer
 type. Creating a pointer demands that the operand's storage carries at
-least the requested permission: `getptr` needs owner access,
-`getmview` needs write access, `getview` always works. This is what
+least the requested permission: `ptr` needs owner access,
+`mview` needs write access, `view` always works. This is what
 prevents laundering a `view` into a `ptr`.
 
-User-written `getview`/`getmview`/`getptr` require a storage-backed
+User-written `view`/`mview`/`ptr` require a storage-backed
 lvalue. The only exception is the implicit borrow used to pass an rvalue
 operand to an overloaded struct operator; it is not available to user code,
-so `getview(5)` or `getview(make_x())` remains invalid. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
+so `view(5)` or `view(make_x())` remains invalid. See [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading).
 
-Const storage allows only `getview`:
+Const storage allows only `view`:
 
 ```franko
 const int32 x = 1
-view<int32> v = getview(x)    // valid
-ptr<int32> p = getptr(x)      // error
-mview<int32> m = getmview(x)  // error
+view<int32> v = view(x)    // valid
+ptr<int32> p = ptr(x)      // error
+mview<int32> m = mview(x)  // error
 ```
 
 This limits a const struct receiver to `view<X> self` methods.
@@ -66,8 +65,8 @@ This limits a const struct receiver to `view<X> self` methods.
 holding `p`: when `p` is a const `ptr<int32>`, `$(p) = 5` is valid and
 `p = ...` is not. See [Declarations](18-declarations.md#188-const-storage).
 
-Every global variable is implicitly const, so `getptr(global)` and
-`getmview(global)` are rejected; use `getview(global)` for read-only
+Every global variable is implicitly const, so `ptr(global)` and
+`mview(global)` are rejected; use `view(global)` for read-only
 access. Taking a mutable pointer to a field or element of a global is
 rejected for the same reason.
 
@@ -89,10 +88,18 @@ $(v).length();  // intrinsic over the pointee
 
 ## 26.3 Nested Pointers
 
-Franko supports pointers to pointers, of any permission:
+A pointer referent may contain another pointer type, but an owning
+`ptr<T>` may not appear anywhere inside a pointer referent. Ownership must
+stay at the outermost pointer level:
 
 ```franko
-view<ptr<int32>> v;   // read-only view of a ptr<int32> slot
+view<view<int32>> vv;      // valid: no ownership is hidden
+ptr<view<int32>> pv;       // valid: the referent contains no owning ptr
+ptr<mview<int32>> pm;      // valid
+
+ptr<ptr<int32>> pp;        // invalid: owning ptr inside a ptr
+view<ptr<int32>> vp;       // invalid: owning ptr inside a view
+mview<ptr<int32>> mp;      // invalid: owning ptr inside an mview
 ```
 
 ## 26.4 Assignment and Implicit Downgrades
@@ -108,7 +115,7 @@ referenced type, and the static-to-dynamic array pointer view decay of
   compile error.
 
 ```franko
-ptr<[byte]> p = getptr(buf);
+ptr<[byte]> p = ptr(buf);
 mview<[byte]> m = p;          // implicit downgrade
 view<[byte]> v = p;           // implicit downgrade
 view<[byte]> v2 = m;          // implicit downgrade
@@ -145,7 +152,7 @@ A pointer to a **static** array implicitly converts to a pointer to a
 
 ```franko
 [int32, 4] xs;
-mview<[int32, 4]> m = getmview(xs);
+mview<[int32, 4]> m = mview(xs);
 view<[int32]> v = m;             // implicit decay
 mview<[int32]> d = cast<mview<[int32]>>(m);   // explicit
 
@@ -202,7 +209,7 @@ Arrays may be pointed to:
 [int32] arr;
 ptr<[int32]> p;
 
-p = getptr(arr);
+p = ptr(arr);
 $(p)(10);
 ```
 
@@ -213,7 +220,7 @@ the dereference produces a storage-backed array lvalue:
 [int32, 3] xs;
 ptr<[int32, 3]> p;
 
-p = getptr(xs);
+p = ptr(xs);
 
 $(p).memcpy([1, 2, 3]);
 ```
@@ -266,13 +273,13 @@ behind those pointers follows each pointer's own type:
 
 ```franko
 mview<[view<[byte]>]> v;
-$(v)[0] = getview(x);        // allowed: overwrite the slot
+$(v)[0] = view(x);        // allowed: overwrite the slot
 $($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
 ```
 
 ```franko
 view<[mview<[byte]>]> v;
-$(v)[0] = getmview(x);       // blocked: the outer view locks its slots
+$(v)[0] = mview(x);       // blocked: the outer view locks its slots
 $($(v)[0])[0] = 5;           // allowed: through the inner mview
 ```
 
@@ -343,13 +350,13 @@ Global storage is statically initialized before `main`: pointer fields and point
 
 The compiler tracks whether a pointer variable is null. The only
 expressions that certify a pointer as non-null are the creation
-intrinsics `getptr(...)`, `getmview(...)`, and `getview(...)`:
+intrinsics `ptr(...)`, `mview(...)`, and `view(...)`:
 
 ```franko
 ptr<int32> p;            // p is null
 $(p);                   // error: cannot dereference null
 
-p = getptr(x);             // p is certified non-null
+p = ptr(x);             // p is certified non-null
 $(p);                   // valid
 
 ptr<int32> q = p;        // q copies p's state: non-null
@@ -364,9 +371,8 @@ The check also follows pointers across function calls. If a callee always
 dereferences a parameter, passing a definitely-null argument is an error and
 passing a possibly-null argument is a warning. A parameter guarded with
 `p != null` on the dereferencing path does not require a non-null argument.
-A callee's return carries the null state of the value it returns, and a callee
-that writes through a `ptr<ptr<T>>` parameter can update the caller's pointer
-variable. Each function still reports its own local maybe-null warnings.
+A callee's return carries the null state of the value it returns. Each
+function still reports its own local maybe-null warnings.
 Dangling pointers are checked separately (see
 [Pointer Lifetime Limitations](#2611-pointer-lifetime-limitations) and
 [Memory Safety Checking](32-memory-safety-checking.md)).
@@ -380,7 +386,7 @@ Dereferencing a variable that is **possibly null** (null on some path, for examp
 ```franko
 ptr<int32> p;
 if (cond != 0) {
-    p = getptr(x);
+    p = ptr(x);
 } else {
     p = null;
 }
@@ -405,11 +411,11 @@ documented in [Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangl
 Pool allocation and index-based links are covered in
 [Pool Allocation](33-pool-allocation.md#331-prefer-pool-indices-to-linked-nodes).
 
-## 26.13 Owning Pointers in Aggregates Are Forbidden
+## 26.13 Owning Pointers Cannot Be Embedded
 
 An owning pointer `ptr<T>` cannot be stored inside an array, struct, or
-tuple, recursively. The compiler rejects the declaration at the legality
-checking stage:
+tuple, and it cannot appear inside another pointer's referent. The
+compiler rejects the declaration at the legality checking stage:
 
 ```franko
 [ptr<int32>] a;              // invalid: array element is an owning pointer
@@ -418,6 +424,10 @@ struct Node { ptr<Node> next } // invalid: owning pointer field
 (ptr<int32>, int32) pair;    // invalid: owning pointer tuple element
 [view<ptr<int32>>] views;    // invalid: the view's referent is a ptr
 ptr<[ptr<int32>]> nested;    // invalid: pointer to an array of owning pointers
+ptr<ptr<int32>> pp;          // invalid: owning pointer behind a pointer
+view<ptr<int32>> vp;         // invalid: owning pointer behind a view
+mview<ptr<int32>> mp;        // invalid: owning pointer behind an mview
+ptr<view<ptr<int32>>> deep;  // invalid: owning pointer further down
 ```
 
 These are allowed:
@@ -427,24 +437,25 @@ view<int32> v;               // views may be aggregate elements
 mview<int32> m;
 [view<int32>] views;
 struct Views { view<int32> a; mview<int32> b }
-ptr<ptr<int32>> pp;          // pointer to a standalone pointer slot
-view<ptr<int32>> vp;         // standalone view of a pointer slot
+view<view<int32>> vv;        // non-owning pointers may nest
+ptr<view<int32>> pv;
 ```
 
 The distinction is ownership. An owning `ptr<T>` carries the right to
 allocate and free the storage it refers to. If it is embedded in an
-aggregate, that responsibility travels with the aggregate into unrelated
-code. The compiler can no longer tell where the storage is released, and a
-same-looking value may be an owner in one place and an alias in another.
-Keeping owning pointers out of aggregates keeps allocation and free
-responsibility local and makes lifetime reasoning tractable.
+aggregate or hidden behind another pointer, that responsibility travels
+with the value into unrelated code. The compiler can no longer tell where
+the storage is released, and a same-looking value may be an owner in one
+place and an alias in another. Keeping owning pointers at the outermost
+level keeps allocation and free responsibility local and makes lifetime
+reasoning tractable.
 
 Use these alternatives:
 
-- `view<T>` or `mview<T>` inside arrays, structs, and tuples when only
-  access is needed;
-- direct `ptr<T>` variables, parameters, and globals when ownership is
-  needed;
+- `view<T>` or `mview<T>` inside arrays, structs, tuples, and pointer
+  referents when only access is needed;
+- direct `ptr<T>` variables, parameters, returns, and globals when
+  ownership is needed;
 - the pool allocator from `franko/pool` for linked or node-like structures.
   Store slot indices, not owning pointers.
 

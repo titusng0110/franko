@@ -1,12 +1,12 @@
-func bad() -> ptr<int32> {
+func bad() -> view<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
-    ptr<ptr<int32>> pp = getptr(p)
-    $(pp) = getptr(x)
+    view<int32> p = view(x)
+    ptr<view<int32>> pp = ptr(p)
+    $(pp) = ptr(x)
     return $(pp)
 }
 
 func main() -> int32 {
-    ptr<int32> p = bad()
+    view<int32> p = bad()
     return 0
 }

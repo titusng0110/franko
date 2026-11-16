@@ -5,8 +5,8 @@ func main() -> int32 {
     t.init(3);
     [view<[byte]>] slots;
     slots.init(1);
-    slots[0] = getview(t);
-    mview<[view<[byte]>]> m = getmview(slots);
+    slots[0] = view(t);
+    mview<[view<[byte]>]> m = mview(slots);
     $($(m)[0])[0] = 5;
     return 0;
 }

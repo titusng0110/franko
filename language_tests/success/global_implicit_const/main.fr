@@ -5,7 +5,7 @@ import "franko/stdio"
 // ============================================================
 // Covers: globals without the const keyword are still read-only,
 // value-assignable enum/struct/pointer defaults, namespace globals
-// with the same rules, and read-only getview access.
+// with the same rules, and read-only view access.
 // ============================================================
 
 struct Config {
@@ -35,7 +35,7 @@ func main() -> int32 {
     stdout(n::X)
     stdout(n::C.a)
 
-    view<int32> v = getview(G)
+    view<int32> v = view(G)
     stdout($(v))
 
     return 0

@@ -13,10 +13,10 @@ func main() -> int32 {
     buf.memset(9);
 
     // Only reads through the pointer.
-    ptr<[byte, 3]> p = getptr(buf);
+    ptr<[byte, 3]> p = ptr(buf);
     stdout($(p)[1]);
 
-    mview<[byte, 3]> m = getmview(buf);
+    mview<[byte, 3]> m = mview(buf);
     stdout($(m)[2]);
 
     return 0;

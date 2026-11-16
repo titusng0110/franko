@@ -66,7 +66,7 @@ Compile-time target constants are built into the language (see
 The target comes from the compiler's required
 `--target <os>-<arch>` flag (`linux-x86_64`, `windows-x86_64`,
 `macos-arm64`, ...); `compile.py` defaults it to the host. References
-fold to integer literals, so assignment or `getptr(...)` on them is
+fold to integer literals, so assignment or `ptr(...)` on them is
 rejected with the ordinary "not a storage-backed lvalue" error.
 
 Select platform-specific FFI calls with `#if`:
@@ -79,14 +79,14 @@ func main() -> int32 {
     int64 value = 0;
 
     #if (#IS_WINDOWS) {
-        os::win32::QueryPerformanceCounter(getmview(value));
+        os::win32::QueryPerformanceCounter(mview(value));
     } #else #if (#IS_LINUX || #IS_MACOS) {
         int64 sec = 0;
         int64 nanosec = 0;
         os::posix::clock_gettime(
                 os::posix::CLOCK_MONOTONIC,
-                getmview(sec),
-                getmview(nanosec)
+                mview(sec),
+                mview(nanosec)
         );
         value = sec;
     }

@@ -31,7 +31,7 @@ Function parameters are treated as local variables inside the function body.
 A parameter may be declared `const`: `func sum(const int32 a, const int32 b)`
 or `func f(const Point p)`. Const parameters have the same assignment
 restrictions as const locals: the parameter cannot be reassigned, and only
-`getview` may take a mutable pointer to it. A const parameter's type must be
+`view` may take a mutable pointer to it. A const parameter's type must be
 value-assignable. `const self` is allowed in methods and only makes the
 pointer slot itself immutable; the declared `ptr`/`mview`/`view` permission
 still governs the pointee.
@@ -45,11 +45,11 @@ A parameter type must be a **passable type**:
 
 - a primitive integer type;
 - a declared enum type (see [Enums](31-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and nested pointers are allowed as the referenced type, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable; an owning `ptr<T>` may not appear inside an array, struct, or tuple, so `ptr<[ptr<int32>]>` is rejected (see [Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden)); or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `getptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and non-owning pointer referents are allowed, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<view<int32>>` are all passable; an owning `ptr<T>` may not appear anywhere inside a pointer referent or inside an array, struct, or tuple, so `ptr<ptr<int32>>`, `view<ptr<int32>>`, and `ptr<[ptr<int32>]>` are rejected (see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded)); or
+- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `ptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
 - a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
 
-Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `getptr`/`getmview`/`getview` expression at the call site.
+Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `ptr`/`mview`/`view` expression at the call site.
 
 `void` cannot be written as a parameter type.
 

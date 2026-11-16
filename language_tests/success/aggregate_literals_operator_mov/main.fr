@@ -51,7 +51,7 @@ func main() -> int32 {
 
     Buffer p { v = 1, source = 2 }
     Buffer q { v = 0, source = 0 }
-    seed(getptr(q), 8)
+    seed(ptr(q), 8)
     p = q
     stdout(p.v)
     stdout(p.source)

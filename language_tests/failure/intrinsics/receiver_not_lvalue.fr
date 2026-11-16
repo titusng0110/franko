@@ -2,7 +2,7 @@
 // The receiver of an array intrinsic must be a storage-backed array lvalue.
 func main() -> int32 {
     [int32] xs;
-    getptr(xs).init(4);
+    ptr(xs).init(4);
     xs.uninit();
     return 0;
 }

@@ -10,7 +10,7 @@ func main() -> int32 {
     int32 x = 1
     ptr<int32> p
     if (C != 0) {
-        p = getptr(x)
+        p = ptr(x)
     } else {
         p = null
     }

@@ -901,7 +901,7 @@ inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8
     Franko code:
     [int, 5] imstatic
     imstatic[0] = 1
-    view<[int,5]> v = getview(imstatic)
+    view<[int,5]> v = view(imstatic)
     $(v)[0] // value is 1
     $(v).memset(0) // Compilation error: it is illegal to memset a view, as view is read only, but the compiler should have already checked that, and the C++ backend doesn't know and doesn't care
     $(v).length() // should be compiled to constant 5
@@ -910,7 +910,7 @@ inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8
     [uint64] imdynamic
     imdynamic.init(10)
     imdynamic[0] = 2
-    mview<[uint64]> v2 = getmview(imdynamic) // mview is a mutable view, so it can call all mutable functions but not memory allocation functions, but this is checked by compiler
+    mview<[uint64]> v2 = mview(imdynamic) // mview is a mutable view, so it can call all mutable functions but not memory allocation functions, but this is checked by compiler
     $(v2).memset(0xFF) // legal
     C++ emission:
     int32_t VAR_imstatic[5]

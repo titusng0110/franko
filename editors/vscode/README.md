@@ -20,7 +20,7 @@ compiler diagnostics, IntelliSense, or a language server.
 The grammar covers the syntax in `Franko.g4`: primitive integer types and
 aliases, `ptr`/`mview`/`view`, tuple and enum types, `struct`/`enum`
 declarations, generic templates, `#if`/`#else`, `$()` dereference,
-`cast`/`unsafe_cast`, `getptr`/`getmview`/`getview`, array and byte-array
+`cast`/`unsafe_cast`, `ptr`/`mview`/`view`, array and byte-array
 intrinsics, namespace qualification with `::`, return arrows, and compound
 assignment operators.
 

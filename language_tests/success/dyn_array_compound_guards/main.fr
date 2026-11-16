@@ -29,11 +29,11 @@ func main() -> int32 {
     d.init(2)
     d[0] = 7
     d[1] = 9
-    stdout(use_when_inited(getptr(d), 1))
-    stdout(use_when_inited(getptr(d), 0))
-    stdout(use_when_nonzero(getptr(d), 1))
-    stdout(use_when_nonzero(getptr(d), 0))
-    stdout(loop_guard(getptr(d), 2))
+    stdout(use_when_inited(ptr(d), 1))
+    stdout(use_when_inited(ptr(d), 0))
+    stdout(use_when_nonzero(ptr(d), 1))
+    stdout(use_when_nonzero(ptr(d), 0))
+    stdout(loop_guard(ptr(d), 2))
     d.uninit()
     return 0
 }

@@ -20,7 +20,7 @@ func return_global() -> view<[int32, 4]> {
 }
 
 func return_caller_pointee(ptr<int32> p) -> ptr<int32> {
-    return getptr($(p))
+    return ptr($(p))
 }
 
 func return_static_literal() -> view<[int32, 4]> {
@@ -41,16 +41,16 @@ func return_global_static_view() -> view<[int32, 4]> {
 
 func local_deref_only() -> int32 {
     int32 x = 7
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     return $(p)
 }
 
 func main() -> int32 {
     int32 x = 3
-    ptr<int32> p = return_param(getptr(x))
+    ptr<int32> p = return_param(ptr(x))
     stdout($(p))
     stdout($(return_global())[1])
-    stdout($(return_caller_pointee(getptr(x))))
+    stdout($(return_caller_pointee(ptr(x))))
     stdout($(return_static_literal())[0])
     stdout($(return_dynamic_literal()).length())
     stdout($(return_global_dynamic_view()).length())

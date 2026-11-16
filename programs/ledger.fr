@@ -26,7 +26,7 @@ namespace text {
             return -1
         }
         std::String line_text
-        if (stdin_line(getptr(line_text)) != 0) {
+        if (stdin_line(ptr(line_text)) != 0) {
             line_text.uninit()
             return -1
         }
@@ -76,7 +76,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -94,7 +94,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -118,7 +118,7 @@ namespace text {
             return 0
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return 0
         }
@@ -185,7 +185,7 @@ struct Money {
         if (other == null) {
             return
         }
-        mview<int64> target = getptr($(self).amount)
+        mview<int64> target = ptr($(self).amount)
         $(target) = $(target) + $(other).amount
         return
     }
@@ -194,7 +194,7 @@ struct Money {
         if (other == null) {
             return
         }
-        mview<int64> target = getptr($(self).amount)
+        mview<int64> target = ptr($(self).amount)
         $(target) = $(target) - $(other).amount
         return
     }
@@ -304,7 +304,7 @@ func parse_uint_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
 
     uint32 start = 0
     uint32 count = 0
-    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+    if (next_token(buf, len, pos, mview(start), mview(count)) == 0) {
         return 0
     }
     return text::parse_uint32(buf, start, count, out)
@@ -324,12 +324,12 @@ func parse_money_token(view<[byte]> buf, const uint32 len, mview<uint32> pos,
 
     uint32 start = 0
     uint32 count = 0
-    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+    if (next_token(buf, len, pos, mview(start), mview(count)) == 0) {
         return 0
     }
 
     int64 value = 0
-    if (text::parse_int64(buf, start, count, getmview(value)) == 0) {
+    if (text::parse_int64(buf, start, count, mview(value)) == 0) {
         return 0
     }
     if (value < 0) {
@@ -350,7 +350,7 @@ func no_more_tokens(view<[byte]> buf, const uint32 len, mview<uint32> pos) -> by
 
     uint32 start = 0
     uint32 count = 0
-    if (next_token(buf, len, pos, getmview(start), getmview(count)) == 0) {
+    if (next_token(buf, len, pos, mview(start), mview(count)) == 0) {
         return 1
     }
     return 0
@@ -365,10 +365,10 @@ func parse_count(view<[byte]> buf, const uint32 len, mview<uint32> out) -> byte 
     }
 
     uint32 pos = 0
-    if (parse_uint_token(buf, len, getmview(pos), out) == 0) {
+    if (parse_uint_token(buf, len, mview(pos), out) == 0) {
         return 0
     }
-    return no_more_tokens(buf, len, getmview(pos))
+    return no_more_tokens(buf, len, mview(pos))
 }
 
 func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> LedgerError {
@@ -383,21 +383,21 @@ func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> Le
     uint32 start = 0
     uint32 count = 0
 
-    if (next_token(buf, len, getmview(pos), getmview(start), getmview(count)) == 0) {
+    if (next_token(buf, len, mview(pos), mview(start), mview(count)) == 0) {
         return LedgerError::invalid_command
     }
 
     if (text::match_word(buf, start, count, "deposit") != 0) {
         $(txn).kind = TxnKind::deposit
-        if (parse_uint_token(buf, len, getmview(pos),
-                             getmview($(txn).account_id)) == 0) {
+        if (parse_uint_token(buf, len, mview(pos),
+                             mview($(txn).account_id)) == 0) {
             return LedgerError::invalid_command
         }
-        if (parse_money_token(buf, len, getmview(pos),
-                              getmview($(txn).amount)) == 0) {
+        if (parse_money_token(buf, len, mview(pos),
+                              mview($(txn).amount)) == 0) {
             return LedgerError::invalid_amount
         }
-        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+        if (no_more_tokens(buf, len, mview(pos)) == 0) {
             return LedgerError::invalid_command
         }
         return LedgerError::ok
@@ -405,15 +405,15 @@ func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> Le
 
     if (text::match_word(buf, start, count, "withdraw") != 0) {
         $(txn).kind = TxnKind::withdraw
-        if (parse_uint_token(buf, len, getmview(pos),
-                             getmview($(txn).account_id)) == 0) {
+        if (parse_uint_token(buf, len, mview(pos),
+                             mview($(txn).account_id)) == 0) {
             return LedgerError::invalid_command
         }
-        if (parse_money_token(buf, len, getmview(pos),
-                              getmview($(txn).amount)) == 0) {
+        if (parse_money_token(buf, len, mview(pos),
+                              mview($(txn).amount)) == 0) {
             return LedgerError::invalid_amount
         }
-        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+        if (no_more_tokens(buf, len, mview(pos)) == 0) {
             return LedgerError::invalid_command
         }
         return LedgerError::ok
@@ -421,19 +421,19 @@ func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> Le
 
     if (text::match_word(buf, start, count, "transfer") != 0) {
         $(txn).kind = TxnKind::transfer
-        if (parse_uint_token(buf, len, getmview(pos),
-                             getmview($(txn).account_id)) == 0) {
+        if (parse_uint_token(buf, len, mview(pos),
+                             mview($(txn).account_id)) == 0) {
             return LedgerError::invalid_command
         }
-        if (parse_uint_token(buf, len, getmview(pos),
-                             getmview($(txn).target_id)) == 0) {
+        if (parse_uint_token(buf, len, mview(pos),
+                             mview($(txn).target_id)) == 0) {
             return LedgerError::invalid_command
         }
-        if (parse_money_token(buf, len, getmview(pos),
-                              getmview($(txn).amount)) == 0) {
+        if (parse_money_token(buf, len, mview(pos),
+                              mview($(txn).amount)) == 0) {
             return LedgerError::invalid_amount
         }
-        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+        if (no_more_tokens(buf, len, mview(pos)) == 0) {
             return LedgerError::invalid_command
         }
         return LedgerError::ok
@@ -441,11 +441,11 @@ func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> Le
 
     if (text::match_word(buf, start, count, "balance") != 0) {
         $(txn).kind = TxnKind::balance
-        if (parse_uint_token(buf, len, getmview(pos),
-                             getmview($(txn).account_id)) == 0) {
+        if (parse_uint_token(buf, len, mview(pos),
+                             mview($(txn).account_id)) == 0) {
             return LedgerError::invalid_command
         }
-        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+        if (no_more_tokens(buf, len, mview(pos)) == 0) {
             return LedgerError::invalid_command
         }
         return LedgerError::ok
@@ -453,7 +453,7 @@ func parse_transaction(view<[byte]> buf, const uint32 len, mview<Txn> txn) -> Le
 
     if (text::match_word(buf, start, count, "total") != 0) {
         $(txn).kind = TxnKind::total
-        if (no_more_tokens(buf, len, getmview(pos)) == 0) {
+        if (no_more_tokens(buf, len, mview(pos)) == 0) {
             return LedgerError::invalid_command
         }
         return LedgerError::ok
@@ -522,7 +522,7 @@ func run_transaction(ptr<[Account, 3]> accounts, const view<Txn> txn, ptr<Money>
             stdout("unknown account")
             return
         }
-        ptr<Money> balance = getptr($(accounts)[idx].balance)
+        ptr<Money> balance = ptr($(accounts)[idx].balance)
         $(balance) += $(txn).amount
         $(total) += $(txn).amount
         stdout("ok")
@@ -535,7 +535,7 @@ func run_transaction(ptr<[Account, 3]> accounts, const view<Txn> txn, ptr<Money>
             stdout("unknown account")
             return
         }
-        ptr<Money> balance = getptr($(accounts)[idx].balance)
+        ptr<Money> balance = ptr($(accounts)[idx].balance)
         if ($(balance) < $(txn).amount) {
             stdout("insufficient funds")
             return
@@ -557,8 +557,8 @@ func run_transaction(ptr<[Account, 3]> accounts, const view<Txn> txn, ptr<Money>
             stdout("same account")
             return
         }
-        ptr<Money> from_balance = getptr($(accounts)[from_idx].balance)
-        ptr<Money> to_balance = getptr($(accounts)[to_idx].balance)
+        ptr<Money> from_balance = ptr($(accounts)[from_idx].balance)
+        ptr<Money> to_balance = ptr($(accounts)[to_idx].balance)
         if ($(from_balance) < $(txn).amount) {
             stdout("insufficient funds")
             return
@@ -589,17 +589,17 @@ func run_transaction(ptr<[Account, 3]> accounts, const view<Txn> txn, ptr<Money>
 
 func main() -> int32 {
     [Account, 3] accounts
-    setup_accounts(getmview(accounts))
+    setup_accounts(mview(accounts))
 
     [byte, 256] line
     uint32 len = 0
 
-    if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+    if (text::read_line_len(mview(line), 256, mview(len)) != 0) {
         return 1
     }
 
     uint32 txn_count = 0
-    if (parse_count(getview(line), len, getmview(txn_count)) == 0) {
+    if (parse_count(view(line), len, mview(txn_count)) == 0) {
         stdout("error: invalid transaction count")
         return 1
     }
@@ -610,10 +610,10 @@ func main() -> int32 {
 
     [Txn, 16] txns
     for (uint32 i = 0; i < txn_count; i++) {
-        if (text::read_line_len(getmview(line), 256, getmview(len)) != 0) {
+        if (text::read_line_len(mview(line), 256, mview(len)) != 0) {
             return 1
         }
-        LedgerError parsed = parse_transaction(getview(line), len, getmview(txns[i]))
+        LedgerError parsed = parse_transaction(view(line), len, mview(txns[i]))
         if (parsed != LedgerError::ok) {
             txns[i].kind = TxnKind::invalid
         }
@@ -621,7 +621,7 @@ func main() -> int32 {
 
     Money total = Money { amount = 0 }
     for (uint32 i = 0; i < txn_count; i++) {
-        run_transaction(getptr(accounts), getview(txns[i]), getptr(total))
+        run_transaction(ptr(accounts), view(txns[i]), ptr(total))
     }
 
     stdout("final balances:")

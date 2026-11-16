@@ -1,7 +1,7 @@
 func main() -> int32 {
     int32 a = 1
     int32 b = 2
-    const ptr<int32> p = getptr(a)
-    p = getptr(b)
+    const ptr<int32> p = ptr(a)
+    p = ptr(b)
     return 0
 }

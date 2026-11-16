@@ -19,8 +19,8 @@ func k(view<[byte, 3]> x) -> void {
 func main() -> int32 {
     [byte, 3] buf
     buf.memset(0)
-    mview<[byte, 3]> m = getmview(buf)
-    ptr<[byte, 3]> p = getptr(buf)
+    mview<[byte, 3]> m = mview(buf)
+    ptr<[byte, 3]> p = ptr(buf)
 
     h(m)
     k(p)

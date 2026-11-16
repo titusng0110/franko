@@ -50,7 +50,7 @@ func main() -> int32 {
     result = result + factorial(3);
 
     int32 val = 100;
-    result = result + process_ref(getptr(val));
+    result = result + process_ref(ptr(val));
 
     void_func();
 

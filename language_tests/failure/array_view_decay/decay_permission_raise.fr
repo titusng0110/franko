@@ -2,7 +2,7 @@
 // cannot become an mview target.
 func main() -> int32 {
     [int32, 3] xs;
-    view<[int32, 3]> v = getview(xs);
+    view<[int32, 3]> v = view(xs);
     mview<[int32]> m = v;
     return 0;
 }

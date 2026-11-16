@@ -305,7 +305,7 @@ enumVariant
 //   ptr<X> p = null
 //   view<[byte, 5]> s = "hello"
 //   view<[int32, 4]> v = [1, 2, 3, 4]
-//   ptr<[byte, 5]> q = getptr(otherGlobal)
+//   ptr<[byte, 5]> q = ptr(otherGlobal)
 //
 // Invalid:
 //   int32 g = f()
@@ -313,9 +313,9 @@ enumVariant
 //   int32 g = arr[0]
 //
 // A pointer-typed global may also be initialized with a statically
-// representable address: getptr/getmview/getview over a global variable
-// (string literals desugar to getview over a hoisted global), or an
-// array literal with only constant elements (lowered to getview over a
+// representable address: ptr/mview/view over a global variable
+// (string literals desugar to view over a hoisted global), or an
+// array literal with only constant elements (lowered to view over a
 // hoisted global).
 // `const` is a storage modifier on globals. It is legal only for
 // value-assignable types; it is erased before code generation.
@@ -808,9 +808,9 @@ primary
     | IDENTIFIER
     | SELF
     | qualifiedName
-    | getPtrExpr
-    | getViewExpr
-    | getMViewExpr
+    | ptrExpr
+    | viewExpr
+    | mViewExpr
     | derefExpr
     | castExpr
     | unsafeCastExpr
@@ -877,9 +877,6 @@ memberName
     | PTR
     | MVIEW
     | VIEW
-    | GETPTR
-    | GETMVIEW
-    | GETVIEW
     | UNSAFE_CAST
     | INT8
     | INT16
@@ -923,7 +920,7 @@ memberName
 //   - function calls
 //   - array indexing
 //   - member access
-//   - getptr(...)
+//   - ptr(...)
 //   - $(...)
 //   - array initializer lists
 //   - string literals
@@ -1097,16 +1094,16 @@ fieldInit
     : IDENTIFIER ASSIGN expr
     ;
 
-getPtrExpr
-    : GETPTR LPAREN lvalue RPAREN
+ptrExpr
+    : PTR LPAREN lvalue RPAREN
     ;
 
-getViewExpr
-    : GETVIEW LPAREN lvalue RPAREN
+viewExpr
+    : VIEW LPAREN lvalue RPAREN
     ;
 
-getMViewExpr
-    : GETMVIEW LPAREN lvalue RPAREN
+mViewExpr
+    : MVIEW LPAREN lvalue RPAREN
     ;
 
 // Dereference: `$(X)`. The operand is a full expr; the result is an
@@ -1271,9 +1268,6 @@ CONTINUE : 'continue' ;
 PTR    : 'ptr' ;
 MVIEW  : 'mview' ;
 VIEW   : 'view' ;
-GETPTR : 'getptr' ;
-GETMVIEW : 'getmview' ;
-GETVIEW  : 'getview' ;
 // Dereference prefix operator. Syntax is `$(X)`, always parenthesized.
 DEREF   : '$' ;
 CAST    : 'cast' ;

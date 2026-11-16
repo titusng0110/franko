@@ -12,6 +12,6 @@ func main() -> int32 {
     if (C != 0) {
         buf.init(1)
     }
-    invert(getptr(buf))
+    invert(ptr(buf))
     return 0
 }

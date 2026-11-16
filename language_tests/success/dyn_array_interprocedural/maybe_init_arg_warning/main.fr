@@ -9,7 +9,7 @@ func main() -> int32 {
     if (C != 0) {
         d.init(2)
     }
-    fill(getptr(d))
+    fill(ptr(d))
     d.uninit()
     return 0
 }

@@ -45,12 +45,12 @@ namespace text {
             return
         }
         std::String token
-        if (string_from_slice(buf, start, count, getptr(token)) != 0) {
+        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
             token.uninit()
             return
         }
         view<[byte]> no_end = null
-        stdout(getview(token), end = no_end)
+        stdout(view(token), end = no_end)
         token.uninit()
         return
     }
@@ -66,7 +66,7 @@ namespace text {
         [byte, 2] out
         out[0] = hex_digit(value / 16)
         out[1] = hex_digit(value % 16)
-        stdout(getview(out), end = null)
+        stdout(view(out), end = null)
         return
     }
 
@@ -338,7 +338,7 @@ func main(view<[[byte]]> args) -> int32 {
         return 1
     }
 
-    view<[byte]> payload = getview($(args)[1])
+    view<[byte]> payload = view($(args)[1])
     if (payload == null) {
         stdout("error: null payload argument")
         return 1
@@ -363,9 +363,9 @@ func main(view<[[byte]]> args) -> int32 {
     stdout()
 
     [byte, 64] packet
-    uint32 encoded_checksum = build_packet(getmview(packet), payload, payload_len, PacketKind::data, CODEC_SEQUENCE, CODEC_STREAM_ID, CODEC_HOP_COUNT)
+    uint32 encoded_checksum = build_packet(mview(packet), payload, payload_len, PacketKind::data, CODEC_SEQUENCE, CODEC_STREAM_ID, CODEC_HOP_COUNT)
 
-    PacketHeader header = decode_header(getview(packet))
+    PacketHeader header = decode_header(view(packet))
 
     stdout("packet fields:")
     print_header(header)
@@ -375,7 +375,7 @@ func main(view<[[byte]]> args) -> int32 {
     for (uint32 start = 0; start < 64; start += 16) {
         stdout("  ", end = null)
         stdout(start, end = ": ")
-        text::print_hex(getview(packet), start, 16)
+        text::print_hex(view(packet), start, 16)
         stdout()
     }
     stdout()
@@ -417,7 +417,7 @@ func main(view<[[byte]]> args) -> int32 {
         stdout("field validation: failed")
     }
 
-    uint32 recomputed_checksum = packet_checksum(getview(packet), header.payload_length)
+    uint32 recomputed_checksum = packet_checksum(view(packet), header.payload_length)
     if (recomputed_checksum == header.checksum && encoded_checksum == header.checksum) {
         stdout("checksum status: valid")
     } else {
@@ -437,7 +437,7 @@ func main(view<[[byte]]> args) -> int32 {
 
     [byte, 32] decoded_payload
     decoded_payload.memset(0)
-    decoded_payload.memcpy(getview(packet), 0, CODEC_PAYLOAD_OFFSET, header.payload_length)
+    decoded_payload.memcpy(view(packet), 0, CODEC_PAYLOAD_OFFSET, header.payload_length)
 
     if (header.payload_length == payload_len && decoded_payload.memcmp(payload, 0, 0, payload_len) == 0) {
         stdout("payload compare: equal")
@@ -447,8 +447,8 @@ func main(view<[[byte]]> args) -> int32 {
     }
 
     [byte, 64] rebuilt
-    uint32 rebuilt_checksum = build_packet(getmview(rebuilt), getview(decoded_payload), header.payload_length, header.kind, header.sequence, header.stream_id, header.hop_count)
-    if (packet.memcmp(getview(rebuilt)) == 0 && rebuilt_checksum == header.checksum) {
+    uint32 rebuilt_checksum = build_packet(mview(rebuilt), view(decoded_payload), header.payload_length, header.kind, header.sequence, header.stream_id, header.hop_count)
+    if (packet.memcmp(view(rebuilt)) == 0 && rebuilt_checksum == header.checksum) {
         stdout("roundtrip: identical")
     } else {
         stdout("roundtrip: mismatch")
@@ -456,10 +456,10 @@ func main(view<[[byte]]> args) -> int32 {
     }
 
     [byte, 64] damaged
-    damaged.memcpy(getview(packet))
+    damaged.memcpy(view(packet))
     damaged.flip_bit(0)
-    PacketHeader damaged_header = decode_header(getview(damaged))
-    uint32 damaged_checksum = packet_checksum(getview(damaged), damaged_header.payload_length)
+    PacketHeader damaged_header = decode_header(view(damaged))
+    uint32 damaged_checksum = packet_checksum(view(damaged), damaged_header.payload_length)
     if (damaged_checksum == damaged_header.checksum) {
         stdout("tamper check: not detected")
         ok = 0

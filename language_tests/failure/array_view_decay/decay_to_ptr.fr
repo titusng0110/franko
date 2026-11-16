@@ -2,7 +2,7 @@
 // over storage the static array owns, so the conversion is rejected.
 func main() -> int32 {
     [int32, 3] xs;
-    mview<[int32, 3]> m = getmview(xs);
+    mview<[int32, 3]> m = mview(xs);
     ptr<[int32]> p = m;
     return 0;
 }

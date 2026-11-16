@@ -20,7 +20,7 @@ func main() -> int32 {
     grid[0].init(3);
     grid[1].init(3);
 
-    mview<[[byte]]> m = getmview(grid);
+    mview<[[byte]]> m = mview(grid);
     $(m)[0][0] = 9;
     $(m)[1].memset(7);
     stdout($(m).length());
@@ -34,27 +34,17 @@ func main() -> int32 {
     three[0] = 1;
     three[1] = 2;
     three[2] = 3;
-    $(m)[0].memcpy(getptr(three));
+    $(m)[0].memcpy(ptr(three));
     stdout(grid[0][0]);
     stdout(grid[0][1]);
     stdout(grid[0][2]);
 
     // --- ptr propagates ownership to the end ---
-    ptr<[[byte]]> p = getptr(grid);
+    ptr<[[byte]]> p = ptr(grid);
     $(p)[0].uninit();
     $(p)[0].init(3);
     $(p)[0][0] = 4;
     stdout(grid[0][0]);
-
-    // --- a pointer boundary resets the region: an inner ptr
-    // restores full allocation rights on its pointee ---
-    [byte] owned;
-    owned.init(2);
-    ptr<[byte]> q = getptr(owned);
-    mview<ptr<[byte]>> mp = getmview(q);
-    $($(mp)).uninit();
-    $($(mp)).init(5);
-    stdout($($(mp)).length());
 
     return 0;
 }

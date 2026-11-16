@@ -2,7 +2,7 @@
 // become [[int32, 2]] but never [[int32]].
 func main() -> int32 {
     [[int32, 2], 3] g;
-    view<[[int32, 2], 3]> v = getview(g);
+    view<[[int32, 2], 3]> v = view(g);
     view<[[int32]]> w = v;
     return 0;
 }

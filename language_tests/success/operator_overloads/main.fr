@@ -102,7 +102,7 @@ struct Blob {
     [int32, 4] xs
 
     func OPERATOR_MOV(ptr<Blob> self, view<Blob> other) -> void {
-        $(self).xs.memcpy(getview($(other).xs))
+        $(self).xs.memcpy(view($(other).xs))
         return
     }
 }
@@ -230,7 +230,7 @@ func main() -> int32 {
     h = 5
     stdout(h.n)
 
-    stdout(a.OPERATOR_EQ(getview(a)))
+    stdout(a.OPERATOR_EQ(view(a)))
 
     ops::Wrapped w1
     ops::Wrapped w2

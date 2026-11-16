@@ -20,11 +20,9 @@ The null-state check covers:
 - that `null` is only used for pointer types (see [Types](09-types.md)).
 
 The null-state check also covers values crossing function boundaries: a
-callee's parameter use becomes a requirement on the caller's argument, a
-callee's return carries the null state of the value it returns, and a
-callee that writes through a `ptr<ptr<T>>` parameter can update the caller's
-pointer variable. A function still reports its own local maybe-null warnings
-as well.
+callee's parameter use becomes a requirement on the caller's argument, and a
+callee's return carries the null state of the value it returns. A function
+still reports its own local maybe-null warnings as well.
 
 ## 32.1 Pointer States
 
@@ -40,10 +38,10 @@ For each pointer variable the compiler tracks one of:
 
 - an ordinary pointer declaration is **null-initialized**, so it starts in the null state;
 - assigning the `null` literal makes the target null;
-- assigning `getptr(...)`, `getmview(...)`, or `getview(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
+- assigning `ptr(...)`, `mview(...)`, or `view(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
 - assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global pointer's state is known from its declaration: a global without a static initializer is null, and a global initialized from `getview`/a literal view is pointing. Calls do not change a global pointer's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
+- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global pointer's state is known from its declaration: a global without a static initializer is null, and a global initialized from `view`/a literal view is pointing. Calls do not change a global pointer's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
 ## 32.3 Dereference Checking
 
@@ -112,7 +110,7 @@ When a guard's assertion contradicts a definite current state, that path is stat
 
 ```franko
 ptr<int32> p;
-p = getptr(x);
+p = ptr(x);
 if (p != null) {
     $(p);      // valid
 }
@@ -127,12 +125,11 @@ Current limitations of the pointer null-state check:
 
 - values of unknown provenance (parameters, field and element reads, and unresolved call results) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
 - only plain pointer **variables** are tracked. Owning `ptr<T>` values cannot
-  be stored in struct fields, arrays, or tuples, but `view<T>`/`mview<T>`
-  values can, and a pointer held in a struct field, an array element, or
-  behind a `$(...)` chain is not tracked;
+  be stored in struct fields, arrays, tuples, or pointer referents, but
+  `view<T>`/`mview<T>` values can, and a pointer held in a struct field, an
+  array element, or behind a `$(...)` chain is not tracked;
 - view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
 - global pointer slots are immutable, so there is no global null-state write to track;
-- only one level of pointer-to-pointer writes is followed;
 - deeply nested conditions may reduce precision;
 - recursive or very deep call chains are handled conservatively, so some
   nullness problems may be missed;
@@ -162,7 +159,7 @@ Taking a pointer to a local or parameter and returning it is rejected:
 
 ```franko
 int32 x
-ptr<int32> p = getptr(x)
+ptr<int32> p = ptr(x)
 ptr<int32> q = p
 return q                        // error: x dies with the frame
 ```
@@ -172,12 +169,12 @@ caller-owned and safe to return:
 
 ```franko
 func ok(ptr<int32> p) -> ptr<int32> {
-    return getptr($(p));       // points at the caller's storage
+    return ptr($(p));       // points at the caller's storage
 }
 ```
 
 The check follows assignments, pointer copies, `$(...)` aliases, and
-`getptr`/`getmview`/`getview` of lvalues. Pointer parameters and globals
+`ptr`/`mview`/`view` of lvalues. Pointer parameters and globals
 are never assumed to point into the current function's frame.
 
 ### 32.9.2 Path and Loop Handling
@@ -197,7 +194,7 @@ Null guards refine what is known about the storage too:
   rather than only possibly dangling;
 - `if (p != null)` over a pointer that is definitely null is infeasible;
 - `if (p == null)` over a pointer that is definitely non-null is
-  infeasible; every `getptr`/`getmview`/`getview` result is definitely
+  infeasible; every `ptr`/`mview`/`view` result is definitely
   non-null, even when the storage it points at is caller-owned;
 - a return inside an infeasible path is not diagnosed, because that path
   never executes.
@@ -245,9 +242,9 @@ A pointer store is rejected when the stored value refers to current-frame
 storage and the target storage is caller-owned:
 
 ```franko
-func bad(ptr<ptr<int32>> out) -> void {
+func bad(ptr<view<int32>> out) -> void {
     int32 x
-    $(out) = getptr(x)        // error: caller storage outlives x
+    $(out) = ptr(x)        // error: caller storage outlives x
     return
 }
 ```
@@ -311,8 +308,8 @@ a fourth lifecycle state.
 ### 32.10.2 What Is Tracked
 
 The check covers function-local dynamic array variables and owner
-`ptr<[T]>` values obtained from `getptr(localArray)`, including pointer
-copies, casts, and `getptr($(p))` aliases.
+`ptr<[T]>` values obtained from `ptr(localArray)`, including pointer
+copies, casts, and `ptr($(p))` aliases.
 
 Owner-array parameters are checked twice inside the callee: once assuming the
 parameter was already initialized by the caller, and once assuming it was
@@ -340,7 +337,7 @@ It does not yet track:
 Global variables cannot be dynamic arrays (they must be value-assignable), so
 there is no global dynamic-array lifecycle to track.
 
-Element pointers/views (`getptr`/`getmview`/`getview(d[i])`) refer to the
+Element pointers/views (`ptr`/`mview`/`view(d[i])`) refer to the
 element buffer. Whole-array `view<[T]>`/`mview<[T]>` values refer to the array
 object and are not invalidated when the buffer changes.
 

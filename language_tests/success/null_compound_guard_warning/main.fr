@@ -9,6 +9,6 @@ func check(ptr<int32> p, ptr<int32> q) -> int32 {
 
 func main() -> int32 {
     int32 a = 1
-    stdout(check(getptr(a), getptr(a)))
+    stdout(check(ptr(a), ptr(a)))
     return 0
 }

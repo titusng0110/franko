@@ -37,9 +37,9 @@ func main() -> int32 {
 
     Holder h
     h.id = 5
-    h.single = getmview(x)
-    h.dyn = getmview(d)
-    h.fixed = getview(s)
+    h.single = mview(x)
+    h.dyn = mview(d)
+    h.fixed = view(s)
 
     Holder h2 = h
     stdout(h2.id)

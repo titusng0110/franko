@@ -6,7 +6,7 @@ func main() -> int32 {
     int32 x2 = 0
     ptr<int32> p2
 
-    p2 = getptr(x2)
+    p2 = ptr(x2)
     p2 = null
 
     stdout($(p2))

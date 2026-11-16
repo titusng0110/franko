@@ -63,7 +63,7 @@ arrs[i]
 Examples that are not storage-backed array targets:
 
 ```franko
-getptr(arr)
+ptr(arr)
 x + y
 1
 ```
@@ -84,7 +84,7 @@ The `memcpy`/`memcmp`/`memmem` sources are only read, so they may be any
 pointer to an array.
 
 ```franko
-view<[byte]> v = getview(buf);
+view<[byte]> v = view(buf);
 $(v)[0] = 1;         // blocked: view is read-only
 $(v).memset(0);      // blocked: mutating intrinsic
 $(v).memchr(65);     // allowed: read-only intrinsic
@@ -92,7 +92,7 @@ $(v).read_bit(3);    // allowed: read-only intrinsic
 $(v).write_bit(3, 1); // blocked: mutating intrinsic
 $(v).length();       // allowed
 
-mview<[byte]> m = getmview(dyn);
+mview<[byte]> m = mview(dyn);
 $(m)[0] = 1;         // allowed
 $(m).write_bit(3, 1); // allowed
 $(m).init(10);       // blocked: init needs allocation rights (ptr)
@@ -197,7 +197,7 @@ target.memcpy(source, dst_start, src_start, count)  // element ranges
 Rules:
 
 - target must be a storage-backed lvalue array;
-- source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the corresponding `[T, N]` forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array/string literal (its element type is inferred from the target); passing an array value directly is invalid;
+- source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the corresponding `[T, N]` forms), typically produced with `ptr(...)`, `mview(...)`, or `view(...)`, or an array/string literal (its element type is inferred from the target); passing an array value directly is invalid;
 - both target and source may be dynamic or static arrays;
 - target and source element types must match exactly;
 - static/dynamic shape does not need to match;
@@ -301,7 +301,7 @@ target.memcmp(source, dst_start, src_start, count)  // element ranges
 Rules:
 
 - receiver may be a dynamic or static array; it does not need to be a storage-backed lvalue;
-- source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `getptr(...)`, `getmview(...)`, or `getview(...)`, or an array literal whose element type is inferred from the receiver;
+- source must be a **pointer to an array** (`ptr<[T]>`, `mview<[T]>`, `view<[T]>`, or the static-array forms), typically produced with `ptr(...)`, `mview(...)`, or `view(...)`, or an array literal whose element type is inferred from the receiver;
 - both receiver and source element types must be memcpy-safe;
 - `dst_start`, `src_start`, and `count` must be:
   - nonnegative constants fitting `uint32`; or
@@ -321,7 +321,7 @@ exactly `count` elements.
 [int32, 3] b
 a.memset(0);
 b.memset(0);
-if (a.memcmp(getptr(b)) == 0) {
+if (a.memcmp(ptr(b)) == 0) {
     stdout("equal");
 }
 ```

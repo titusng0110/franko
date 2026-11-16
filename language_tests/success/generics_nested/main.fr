@@ -18,7 +18,7 @@ func main() -> int32 {
     [Inner<int32>, 2] arr
     arr[0].value = 6
     arr[1].value = 7
-    view<[Inner<int32>, 2]> v = getview(arr)
+    view<[Inner<int32>, 2]> v = view(arr)
     stdout($(v)[0].value)
     stdout($(v)[1].value)
     return 0

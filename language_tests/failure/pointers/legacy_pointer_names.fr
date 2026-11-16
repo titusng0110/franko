@@ -1,0 +1,7 @@
+func main() -> int32 {
+    int32 x = 0
+    getptr(x)
+    getmview(x)
+    getview(x)
+    return 0
+}

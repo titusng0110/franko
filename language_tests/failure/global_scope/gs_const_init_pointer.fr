@@ -1,6 +1,6 @@
 // Failure fixture: global_scope/gs_const_init_pointer
 // Only primitive globals accept a constant integer initializer;
-// pointer globals take null, getptr/getmview/getview over a global, or a
+// pointer globals take null, ptr/mview/view over a global, or a
 // string literal instead.
 ptr<int32> global_value = 5;
 

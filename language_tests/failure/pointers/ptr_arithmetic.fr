@@ -4,7 +4,7 @@ import "franko/stdio"
 // Pointers are not arithmetic values: p + 1 is invalid.
 func main() -> int32 {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     stdout(p + 1)
     return 0
 }

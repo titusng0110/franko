@@ -378,7 +378,7 @@ is erased before codegen. `declSuffix` has the labeled alternatives
 desugaring and semantic analysis; a newline before `{` leaves an ordinary
 following block untouched. Pointer
 permissions are created by the intrinsic
-forms `getptr(lvalue)` / `getmview(lvalue)` / `getview(lvalue)` and consumed
+forms `ptr(lvalue)` / `mview(lvalue)` / `view(lvalue)` and consumed
 by `$(expr)` dereferences; conversions are `cast<T>(expr)` (integer widening,
 enum-to-integer value-preserving conversions, or pointer permission
 downgrade; the target is a full `type`) and
@@ -390,7 +390,7 @@ literals are ordinary expressions but are constrained to specific
 value-consuming contexts during semantic analysis (§4.26).
 Global initializers parse a full expression; semantic analysis accepts a
 `constExpr`, an enum variant, a string expression, an array literal,
-`getview` over a global, `null`, or a static struct/tuple aggregate literal,
+`view` over a global, `null`, or a static struct/tuple aggregate literal,
 and rejects runtime expressions. `varDecl` carries a parse-time guard that reports
 `unexpected '(' after variable declaration` when the declarator is followed
 by `(`; without it, the parser would split the suffix into a separate
@@ -450,7 +450,7 @@ nullable/empty slots. `AstKind` has one constant per node/type kind:
 - types: primitive, void, dynamic array, static array, ptr, struct, tuple,
   tuple element;
 - expressions: var, int, inferred size, array literal, string literal,
-  unary, binary, array access, member access, call, getptr/getmview/getview,
+  unary, binary, array access, member access, call, ptr/mview/view,
   deref, cast/unsafe_cast, null, aggregate literal, field init.
 
 Slots are shared by kind: `name`, `text`, `rawContent`, `primitive`, `type`,
@@ -731,7 +731,7 @@ String-literal arguments of any `#` call are deliberately **not**
 hoisted, so `CompileTimeIntrinsics` can inspect the literal text; nested
 compile-time producers such as `#what_type` stay evaluable as
 compile-time values while analyzing the call. Global initializers pass
-through the static forms (`null`, `getview` over a global, enum variants,
+through the static forms (`null`, `view` over a global, enum variants,
 string expressions, array literals, and struct/tuple aggregate literals)
 and reject everything else. Error-recovery style: it accumulates diagnostics in
 a `DiagnosticBag` (placeholder values on failure); `Frontend`/`Main` check
@@ -905,7 +905,7 @@ declaration-site error; recovery stores a type-correct fallback default so
 later call lowering can continue.
 
 Global initializers use `canonicalizeGlobalInitializer`, the same static-value
-machinery with global-only extensions: `getview` over global storage is a
+machinery with global-only extensions: `view` over global storage is a
 valid read-only address, tuple aggregate literals are accepted, and omitted
 aggregate fields are recursively synthesized from field defaults and type
 defaults (`0`, `null`, first enum variant). The full aggregate is then emitted
@@ -936,7 +936,7 @@ the `ExpressionLowering` coordinator (constructed with the shared `SymbolTable`
 `ArrayLowerer`, `ArrayLiteralLowerer`, and `SemanticTypeResolver` and wires
 them together).
 Globals are registered with `isConst = true`. They additionally accept the
-static initializers (`null`, `getview` over a global, enum variants, constant
+static initializers (`null`, `view` over a global, enum variants, constant
 array literals, string expressions, and static struct/tuple aggregate
 literals), canonicalize them through the global initializer path, and carry
 the UTF-8 payload of hoisted string-literal globals on `Symbol`. It
@@ -1022,7 +1022,7 @@ function/struct/enum declarations, local/global variables, declaration
 initialization, assignments, if/while/break/continue/return/expression-
 statement, integer/null/variable/enum-variant expressions,
 unary/binary/array-access/member-access/function-call/array-intrinsic-call/
-getptr/deref/cast, and aggregate literals. An internal
+ptr/deref/cast, and aggregate literals. An internal
 `AGGREGATE_FIELD_INIT` kind carries each aggregate field/value pair.
 `VAR_DECL_INIT` carries `symbol` plus an ordered `initializers` list of
 ordinary semantic statements (`ASSIGN` or an operator-assignment `EXPR_STMT`).
@@ -1056,7 +1056,7 @@ and provides the same full/ranged form queries.
 target is evaluated into a C++ temporary borrowed with `franko_borrow`, and
 the node may carry a selected operator parameter type that differs from
 `view<target.type>` (constant fitting or an inner array-view decay).
-User-written `getptr`/`getmview`/`getview` never set the flag. `CAST` has a
+User-written `ptr`/`mview`/`view` never set the flag. `CAST` has a
 `checked` flag: `false` → plain `static_cast` (`cast`), `true` → runtime-checked
 `franko_integer_unsafe_cast` (`unsafe_cast`). `VAR_DECL` carries either a
 folded `BigInteger` `foldedConstInitializer` (primitive globals) or a
@@ -1210,7 +1210,7 @@ optional parameters may be omitted; named and positional arguments are mapped
 to parameters before type applicability is checked. Method overload
 identity excludes `self`'s type: `resolveMethod` matches name + user
 arguments only, and the caller synthesizes the hidden `self` argument with
-`getptr`/`getmview`/`getview` matching the resolved method's declared self
+`ptr`/`mview`/`view` matching the resolved method's declared self
 type (an under-privileged receiver then fails the ordinary creation-intrinsic
 permission rule). Method groups mirror function groups: `declareMethod`
 includes `genericGroup` in duplicate identity, and
@@ -1288,12 +1288,12 @@ Explicitly does **not** validate assignment compatibility, operator legality,
 or argument correctness. Notable behavior: array intrinsic calls are tried
 first via `ArrayLowerer.tryLowerIntrinsicCall`; method calls lower to plain
 calls whose hidden self argument is synthesized as
-`getptr`/`getmview`/`getview(receiver)` **matching the method's declared self
+`ptr`/`mview`/`view(receiver)` **matching the method's declared self
 type** (pointer receivers need explicit `$(p).method(...)`; the creation
 intrinsic's permission rule is what rejects an under-qualified receiver);
 method resolution passes `AstNode.genericGroup` and uses the same filtered
 overload list for the no-match diagnostic;
-`getptr`/`getmview`/`getview` lower to `SastNode.GET_PTR` with the
+`ptr`/`mview`/`view` lower to `SastNode.GET_PTR` with the
 corresponding pointer permission; qualified `ns::name` references first try
 enum variant resolution (`Enum::Variant`, returning
 `SastNode.ENUM_VARIANT` with `constantValue` `null` so variants never
@@ -1389,7 +1389,7 @@ descriptor and then lowered with the selected parameter's inner referenced
 type before being borrowed. The explicit operator argument is always a
 `SastNode.GET_PTR`, with `temporary` set for rvalues and its node type set
 to the selected `view<...>` parameter type. The hidden `self` argument is
-`getptr(target)` using the method's declared first parameter type.
+`ptr(target)` using the method's declared first parameter type.
 
 #### `CompileTimeIntrinsics`
 Compile-time reflection analyzer for `#name` and `#name(...)` expressions.
@@ -1504,7 +1504,7 @@ element type is an enum (`lowerEnumLevel`: variants must be
 expressions are rejected; underlying `BigInteger` values are stored in
 `literalValues` as usual): every literal is hoisted to a literal-backed global
 (`Symbol.literalValues`, deduplicated by element type +
-values, named `ARRLIT_<hash>`) and lowered to `getview(<global>)` — exactly
+values, named `ARRLIT_<hash>`) and lowered to `view(<global>)` — exactly
 like string literals. A top-level empty literal is the null view:
 `lower` returns `SastNode.NULL_LITERAL`, and the Desugarer normally performs
 the same rewrite before semantic analysis. Non-constant elements, jagged
@@ -1607,11 +1607,12 @@ for these names so the dedicated message is the only one.
 Declaration-level legality: declared types must be legal Franko types
 (primitive, enum, array, ptr/mview/view, struct, tuple; void and arrays-as-values
 rejected). Every declared variable, parameter, return type, struct field, and
-tuple element also passes the aggregate-ownership ban in `TypeChecker`:
-owning `ptr<T>` is rejected recursively inside arrays, structs, and tuples,
-including behind `view<T>`/`mview<T>` referents. `checkDeclaredType` calls
-`ensureNoOwnedPointerInAggregate` at the declaration boundary, and
-`validateStructType` calls `ensureNoOwnedPointerAggregateMember` per field.
+tuple element also passes the embedded-ownership ban in `TypeChecker`:
+owning `ptr<T>` is rejected recursively inside arrays, structs, tuples, and
+pointer referents, including behind `view<T>`/`mview<T>` referents.
+`checkDeclaredType` calls `ensureNoEmbeddedOwnedPointer` at the declaration
+boundary, and `validateStructType` calls
+`ensureNoOwnedPointerAggregateMember` per field.
 Const declarations require `TypeChecker.isValueAssignableType`
 (`Const variable/global/parameter '…' has type '…'; const is only allowed for
 value-assignable types`), and an uninitialized local const whose type is not
@@ -1685,15 +1686,15 @@ error; `unsafe_cast` = checked integer
 conversion with compile-time constant range checks, integer-to-enum and
 enum-to-narrower conversions that are always runtime-checked with no
 constant rejection), creation-intrinsic
-legality (`getptr`/`getmview`/`getview` need an equally strong storage
+legality (`ptr`/`mview`/`view` need an equally strong storage
 region, §4.9), deref legality, and void-in-value-context rules. A non-read-only
 creation intrinsic over const storage is rejected via
 `node.target.storageSymbol()` (`Cannot create a mutable pointer to const
-variable 'x'; const storage only allows getview(...)` for locals, and the
-global-specific read-only message for globals); `getview` is allowed.
+variable 'x'; const storage only allows view(...)` for locals, and the
+global-specific read-only message for globals); `view` is allowed.
 This also enforces the const-receiver rule: a `ptr<X> self`/`mview<X> self`
-method call synthesizes `getptr`/`getmview(receiver)` and is rejected, while a
-`view<X> self` method synthesizes `getview(receiver)` and is allowed. A
+method call synthesizes `ptr`/`mview(receiver)` and is rejected, while a
+`view<X> self` method synthesizes `view(receiver)` and is allowed. A
 `SastNode.GET_PTR` with `temporary` set is accepted without the usual
 storage-backed-lvalue requirement: it can only be created by operator
 lowering, and its type is required to be a read-only view. Aggregate
@@ -1745,15 +1746,18 @@ by-value cycles terminate. Enum helpers: `isEnumType`, `enumBackingKind`,
 `isValuePreservingEnumToIntegerCast` (exact backing kind or
 `isValuePreservingIntegerWidening`), and `wrapBigIntegerToPrimitive`
 (unsigned modulo `2^bits`, signed modulo `2^bits` then subtract `2^bits`
-in the upper half) for implicit wrapping. `TypeChecker` also owns the aggregate-ownership ban:
-`containsOwnedPointer` recursively walks arrays, structs, tuples, and pointer
-referents looking for an owning `ptr<T>`; `isForbiddenOwnedPointerAggregate`
-implements the declaration rule; and
-`ensureNoOwnedPointerInAggregate` / `ensureNoOwnedPointerAggregateMember`
-report the clear lifetime/pool/nested-array diagnostic. The ban rejects
-`[ptr<T>]`, `[ptr<T>, N]`, struct fields of `ptr<T>`, tuple elements of
-`ptr<T>`, and `view<T>`/`mview<T>` referents that recursively contain an
-owning pointer. Standalone `ptr<ptr<T>>` remains legal.
+in the upper half) for implicit wrapping. `TypeChecker` also owns the
+embedded-ownership ban: `containsOwnedPointer` recursively walks arrays,
+structs, tuples, and pointer referents looking for an owning `ptr<T>`;
+`isForbiddenOwnedPointerNesting` implements the declaration rule (for a
+`PTR`, it checks the referent rather than recursing on the pointer itself);
+and `ensureNoEmbeddedOwnedPointer` /
+`ensureNoOwnedPointerAggregateMember` report the clear
+lifetime/pool/nested-array diagnostic. The ban rejects `[ptr<T>]`,
+`[ptr<T>, N]`, struct fields of `ptr<T>`, tuple elements of `ptr<T>`, any
+pointer whose referent recursively contains an owning pointer (`ptr<ptr<T>>`,
+`view<ptr<T>>`, `ptr<view<ptr<T>>>`), and `view<T>`/`mview<T>` referents that
+recursively contain an owning pointer.
 
 `isIntegral` is `false` for
 enums, which rejects arithmetic, bitwise, shifts, logical operators,
@@ -1767,7 +1771,7 @@ as through struct fields; and `ensureAssignable` reports the dedicated
 accepts the pointer conversions alongside exact matches and
 also special-cases array targets fed a pointer-to-array source: the error
 suggests `memcpy`, and names string literals or array literals explicitly
-when the source is a hoisted literal view (`getview(<global>)` over a
+when the source is a hoisted literal view (`view(<global>)` over a
 `literalBytes`/`literalValues` global).
 Enum targets require the exact same `SastType.ENUM` (integer literals
 and other enums are rejected); enum sources only assign to the same enum
@@ -1859,9 +1863,9 @@ is a static or dynamic array also sets `containsOwnerArrayPointer`. A
 recurses into its element type; a struct recurses through its fields under a
 per-struct `visiting` set (re-entering a struct already on the stack contributes
 no flags, terminating recursive field cycles); a tuple recurses through its
-fields. Because owning `ptr<T>` cannot appear inside an array, struct, or
-tuple, `containsOwnerArrayPointer` is always false for struct and tuple
-shapes; the recursive walk still tracks `containsPointer` and
+fields. Because owning `ptr<T>` cannot appear inside an array, struct, tuple,
+or pointer referent, `containsOwnerArrayPointer` is always false for struct
+and tuple shapes; the recursive walk still tracks `containsPointer` and
 `containsDynamicArray` for view/mview fields and dynamic-array fields.
 Results are cached by `SastType`. The cache is coarse: it classifies
 values that can carry hidden memory but creates no field-sensitive state.
@@ -2201,7 +2205,7 @@ deduplicated per dereference site. Passing a pointer argument to a function
 performs the same check with the `Cannot use pointer ...` wording, deduplicated
 per call site; parameters stay alive for the whole function.
 
-**Address-taken state.** In the check pass, a `getptr`/`getmview`/`getview`
+**Address-taken state.** In the check pass, a `ptr`/`mview`/`view`
 whose result permission is not `READ_ONLY` marks every pointer variable found in
 the target storage's frame origins as address-taken for the current function.
 Any call havocs those variables to `UNKNOWN`.
@@ -2254,19 +2258,19 @@ other template is unknown. `originToTemplateSet` maps frame variables to
 
 **Origin helpers.** `storageOrigins` maps a variable to `FRAME` or `GLOBAL`,
 `$(p)` to `valueOrigins(p)`, member/index access to the base storage, and a
-cast to its operand. `valueOrigins` maps `null` to empty, `getptr` to the
+cast to its operand. `valueOrigins` maps `null` to empty, `ptr` to the
 target storage plus non-null, variables to their origin state, `$(p)` to the
 union of tracked pointer-cell states, casts to the operand, and calls to the
 cached call result. `concretePointeeOrigins` reads the pointer cells of a
-variable origin, returns `valueOrigins(target)` for `getptr(target)`, and
+variable origin, returns `valueOrigins(target)` for `ptr(target)`, and
 recurses through casts. `readPointerCells` includes `UNKNOWN` when the cell
 origin is unknown and otherwise unions the origins of all tracked pointer
 variables named by the cell bitset. `symbolicStorageOrigins` maps a global
 variable to `GLOBAL(globalIndex)`, a local to `LOCAL(variableId)`, `$(p)` to
 `symbolicValueOf(p)`, member/index access to the base, a cast to the operand,
 and anything else to `UNKNOWN`. `symbolicCellOf` maps a pointer variable to its
-`symCell`, `getptr(variable)` to `GLOBAL(index)` or `LOCAL(variableId)`,
-`getptr($p)` to `symbolicCellOf(p)`, and a cast to the operand.
+`symCell`, `ptr(variable)` to `GLOBAL(index)` or `LOCAL(variableId)`,
+`ptr($p)` to `symbolicCellOf(p)`, and a cast to the operand.
 
 `checkExprInner` recurses into every `SastNode.AGGREGATE_LITERAL` field
 value, so dereferences, calls, address-taking, and pointer uses inside literal
@@ -2342,7 +2346,7 @@ cleared and replaced by the RHS array origin (marking that array escaped) or
 marked unknown. Other member/global/deref targets mark a known RHS array
 escaped.
 
-**Uses.** Indexing, `getptr`/`getmview`/`getview`, dereference, and intrinsic
+**Uses.** Indexing, `ptr`/`mview`/`view`, dereference, and intrinsic
 receivers check element-alias staleness. Indexing additionally requires the
 base storage's tracked arrays to be initialized. `storageArrayOrigins` maps an
 array variable to its array index, an owner pointer to its owner bit set plus
@@ -2428,11 +2432,11 @@ the recursively resolved return alias; anything else to `UNKNOWN`.
 **Concrete alias value.** `concreteAliasOf` maps `null` to `NONE`, a variable
 with an element alias to that root/lifecycle/epoch, an owner variable to its
 single owner array (else unknown owner), a direct array variable to itself, a
-`getptr` of an indexed/member element to an element alias at the root array's
-current minimum epoch, a `getptr` of another lvalue to that lvalue's alias,
+`ptr` of an indexed/member element to an element alias at the root array's
+current minimum epoch, a `ptr` of another lvalue to that lvalue's alias,
 `$(p)`/casts to the operand, and calls to the cached return alias.
 `symbolicAliasOf` maps array variables to `LOCAL(variableId)`, pointer
-variables to their `symAlias`, `getptr(element)` to `ELEMENT_OF(i)` or
+variables to their `symAlias`, `ptr(element)` to `ELEMENT_OF(i)` or
 `LOCAL_ELEMENT(variableId)`, calls to `CALL_RESULT(site)`, and unknown values to
 `UNKNOWN`. `symbolicArrayOf` is the same idea without converting an element
 reference into an element template; it is used for requirement/use/escape
@@ -2500,7 +2504,7 @@ surviving code counts) and before codegen, warnings-only. Per function it
 tracks the **high-water mark** of permissions exercised by each local/parameter
 of type `ptr<T>`/`mview<T>` and warns when the declared permission is never
 used:
-- *Allocation (ptr)*: lifecycle intrinsics, `getptr` over the variable's
+- *Allocation (ptr)*: lifecycle intrinsics, `ptr` over the variable's
   region, or any use where a `ptr<T>` is expected (argument, return value,
   assignment into a `ptr`-typed slot, method `self`).
 - *Mutation (mview)*: assignment through the variable's region,
@@ -2791,7 +2795,7 @@ pointer emits `Franko_Thin_Pointer<T>`. The fat pointer records the array
 mode: 2 static array with count `N`, or 3 dynamic array with the
 `Franko_Dynamic_Array<T>` descriptor pointer. The thin pointer is a
 one-field wrapper whose default constructor sets `data` to `nullptr`.
-`getptr`/`getmview`/`getview(x)` emit
+`ptr`/`mview`/`view(x)` emit
 `franko_make_thin_pointer(&x)` for a scalar/struct/tuple/pointer lvalue,
 `franko_make_fat_pointer(x, N, 2)` for a static array, and
 `franko_make_dynamic_fat_pointer(&x)` for a dynamic array (a distinct
@@ -2866,7 +2870,7 @@ block per used function) and suppresses the Franko stub bodies.
 The expression/lvalue emitter split from `Cpp14Codegen`. It owns
 `emitExpr`/`emitLValue` and the concrete forms for literals, unary/binary
 operators, array access, function calls, array intrinsics, aggregate
-literals, `getptr`, deref, casts, and member access. An aggregate literal
+literals, `ptr`, deref, casts, and member access. An aggregate literal
 emits an immediately invoked C++14 lambda:
 `([&]() -> T { T _franko_literal; _franko_literal.field = ...; return
 _franko_literal; }())` for ordinary expressions. Global initializers use a
@@ -3273,7 +3277,7 @@ java -cp build/classes CompilerJsonSelfTest <artifact.json>
   desugaring. Literal-only `+`/comparison folding happens in
   `StringLiteralFolder`; remaining folds happen in `ExpressionAnalyzer`; the
   final non-empty bytes are hoisted to a literal-backed global and replaced
-  with `getview(<global>)` only when they materialize (§4.10). Array literals
+  with `view(<global>)` only when they materialize (§4.10). Array literals
   get the same hoisting treatment during semantic analysis (§4.13).
 - Empty string literals are not rewritten to `AstKind.NULL` during
   desugaring: emptiness is decided after string folding. An empty final
@@ -3432,13 +3436,14 @@ type. A bare variable's region is OWNER. The checkers implement the rule as:
 mutation requires MUTABLE, lifecycle intrinsics require OWNER, reads and
 search/intrinsic sources require no permission, and creation intrinsics
 require the level they create. This is what prevents laundering a `view`
-through `getptr($(v))` while still allowing an extracted inner `ptr` to carry
+through `ptr($(v))` while still allowing an extracted inner `ptr` to carry
 its own rights.
 
 **Nested propagation.** Permissions propagate through value types and stop at
 pointer boundaries: `view<[[T]]>` locks every array level, while
 `view<[mview<[T]>]>` locks only the stored mview slots. Owning `ptr<T>` cannot
-be stored in an array, struct, or tuple at all (§4.29). Lifecycle intrinsics
+be stored in an array, struct, tuple, or pointer referent at all (§4.29).
+Lifecycle intrinsics
 need an OWNER region at every level, so `mview` never grants `init`/`resize`/
 `uninit`, even on an inner array.
 
@@ -3452,7 +3457,7 @@ returning a decayed parameter/global view is safe, while a local array decay
 is the ordinary frame escape.
 
 **Method `self`.** The hidden self argument is synthesized as
-`getptr`/`getmview`/`getview(receiver)` matching the method's declared self
+`ptr`/`mview`/`view(receiver)` matching the method's declared self
 type; an under-qualified receiver then fails the creation-intrinsic rule.
 Method overload identity excludes `self`'s type. The self parameter symbol is
 always const (§4.28).
@@ -3636,7 +3641,7 @@ still compiles):
 Struct definitions are emitted after a forward-declaration block
 (`struct STRUCT_X;` for every declared struct), so `view<X>`/`mview<X>`
 fields and pointer references may name structs declared later in source order.
-Owning `ptr<X>` cannot be stored in a field (§4.29).
+Owning `ptr<X>` cannot be stored in a field or pointer referent (§4.29).
 
 **Entry-point wrapper and argv.** The generated C++ entry point is not the
 Franko `main` itself: the Franko `main` emits its mangled name like every
@@ -3818,13 +3823,13 @@ assignment when no `OPERATOR_MOV` overload applies, while compound forms
 have no fallback. Both paths reuse ordinary call checking, codegen,
 symbol registration, and pruning.
 
-**Operand borrowing.** Lvalue operands become `getview(lvalue)`. Rvalue
+**Operand borrowing.** Lvalue operands become `view(lvalue)`. Rvalue
 operands (including comparison operands on either side) become a
 `SastNode.GET_PTR` with `temporary = true`, emitted as
 `franko_borrow(expr)` and, for a thin-pointer result, wrapped in
 `franko_make_thin_pointer(...)`. The C++ temporary lives to the end of the
-full expression. User-written `getview` still requires a storage-backed
-lvalue, so `getview(5)` remains invalid. Comparison operands are always
+full expression. User-written `view` still requires a storage-backed
+lvalue, so `view(5)` remains invalid. Comparison operands are always
 borrowed as `view<their static type>`,
 so a comparison view RHS needs `view<view<...>>`; assignment lowering
 handles raw array literals separately through its operator-specific
@@ -3846,7 +3851,7 @@ borrowed.
 **Constant fitting and codegen.** A primitive constant selected for
 `view<P>` is materialized with `static_cast<P>(value)` before
 `franko_borrow`. Inner array-view decays are representation-preserving and
-need no cast. Assignment's hidden `self` is `getptr(target)`, using the
+need no cast. Assignment's hidden `self` is `ptr(target)`, using the
 method's declared first parameter type.
 
 **Lifetime mitigation.** All operator methods return `uint8`/`void`, so
@@ -4075,7 +4080,7 @@ Deliberately out of scope:
 - scalar definite assignment / uninitialized primitive reads;
 - nullness of struct fields and array elements;
 - view/mview pointers hidden inside returned structs or tuples (owning ptrs
-  cannot be stored in aggregates);
+  cannot be stored in aggregates or pointer referents);
 - full field-sensitive tracking of struct fields;
 - nested dynamic-array path tracking below the outermost tracked array;
 - global null-state writes (calls instead havoc pointer globals); globals
@@ -4148,7 +4153,7 @@ runtime header support is required. The language-facing rules are in
 
 **Global aggregate initializers.** A struct/tuple aggregate literal may
 initialize a global. `SemanticAnalyzer.canonicalizeGlobalInitializer` accepts
-only static entries (`getview` of a global, enum variants, `null`, compile-time
+only static entries (`view` of a global, enum variants, `null`, compile-time
 strings, array literals, and nested aggregate literals), and recursively
 fills omitted fields from `FieldSymbol.foldedDefault` / type defaults.
 `Cpp14Codegen.emitVarDecl` emits the initializer through
@@ -4268,33 +4273,37 @@ same declaration plus initializer statements as a non-const twin, so `const`
 has no C++ or runtime effect. `include/FrankoRuntime.hpp` and both program
 templates are unchanged.
 
-## 4.29 Owned pointers in aggregates (legality ban)
+## 4.29 Owned pointer embedding (legality ban)
 
-Franko forbids an owning `ptr<T>` anywhere inside an array, struct, or tuple,
-recursively. The check is implemented in `TypeChecker.containsOwnedPointer`
-and `TypeChecker.isForbiddenOwnedPointerAggregate`; reporting is centralized in
-`TypeChecker.reportOwnedPointerInAggregate`.
+Franko forbids an owning `ptr<T>` anywhere except as the outermost pointer
+type of a variable, parameter, return, or global. The check is implemented in
+`TypeChecker.containsOwnedPointer` and
+`TypeChecker.isForbiddenOwnedPointerNesting`; reporting is centralized in
+`TypeChecker.reportEmbeddedOwnedPointer`.
 
 The recursion follows array element types, struct fields, tuple elements, and
-the referents of `view<T>`/`mview<T>`/`ptr<T>`. It therefore rejects:
+all pointer referents. It therefore rejects:
 
 - `[ptr<T>]`, `[ptr<T>, N]`, and any nested array whose elements reach a ptr;
 - `struct S { ptr<T> field }`, and fields or tuple elements whose type is a
   `view<T>`/`mview<T>` over a type that recursively contains a ptr;
 - tuple elements of owning pointer type;
-- `ptr<[...]>` and `ptr<Struct>` when the referent aggregate contains a ptr.
+- `ptr<[...]>` and `ptr<Struct>` when the referent aggregate contains a ptr;
+- any pointer whose referent contains an owning ptr: `ptr<ptr<T>>`,
+  `view<ptr<T>>`, `mview<ptr<T>>`, `ptr<view<ptr<T>>>`, and so on.
 
-It deliberately still allows standalone `ptr<ptr<T>>`, `ptr<view<ptr<T>>>`,
-and direct `view<T>`/`mview<T>` variables, parameters, and returns. A direct
-`ptr<T>` field of an aggregate is rejected because the field is inside the
-aggregate; a standalone `ptr<T>` is not.
+It still allows a standalone `ptr<T>` and non-owning pointer nesting such as
+`view<view<T>>`, `ptr<view<T>>`, and `ptr<mview<T>>`. A direct `ptr<T>` field
+of an aggregate is rejected because the field is inside the aggregate; a
+standalone `ptr<T>` is not.
 
 `DeclarationChecker.checkDeclaredType` invokes
-`ensureNoOwnedPointerInAggregate` for every declared variable, parameter, and
+`ensureNoEmbeddedOwnedPointer` for every declared variable, parameter, and
 return type; `DeclarationChecker.validateStructType` invokes
 `ensureNoOwnedPointerAggregateMember` per field. Tuple types are validated at
 their real declaration/use sites because synthetic tuple struct declarations
-are skipped. The diagnostic explains the lifetime/allocation philosophy,
+are skipped. `ExpressionChecker.visitCast` also runs the same check on cast
+target types. The diagnostic explains the lifetime/allocation philosophy,
 suggests `view<T>`/`mview<T>` or `franko/pool`, and points out that an array of
 arrays should use `[[T]]` rather than `[ptr<[T]>]` because a nested dynamic
 array owns and manages its inner arrays.
@@ -4584,7 +4593,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change generic template identity or overload groups | `GenericsResolver` signature canonicalizers/candidate filtering + `AstNode.genericGroup` + `Symbol.genericGroup`/`SymbolTable` + §4.31 |
 | Change `GEN_` generic mangling | `GenericsResolver.genericArgsKey`/`instantiate` + `Symbol.mangledName` + `StructSymbol.genericHash`/`Cpp14Codegen.emittedStructTypeName` + §4.3 |
 | Add a type rule shared by checks | `TypeChecker` |
-| Change the owned-pointer-in-aggregate ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerAggregate` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
+| Change the owned-pointer-embedding ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerNesting` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
 | Add or change a guard fact | `MemoryGuardFacts` + the domain `guardCaseFeasible`/`applyGuardCase` hooks + `MemoryDataflowDriver` case analysis |

@@ -80,7 +80,7 @@ require and change. It rejects definite use before init, use after `uninit`,
 invalid free, and double free; possible cases and missing explicit `uninit()`
 calls are warnings. Repeated `init` is not diagnosed because an earlier call
 may have failed with `-1` and a retry is valid. Element pointers/views created
-from `getptr`/`getmview`/`getview(d[i])` are diagnosed when a
+from `ptr`/`mview`/`view(d[i])` are diagnosed when a
 `resize`/`uninit` invalidates them; owner pointers and whole-array views point
 at the stable array object and remain valid. The check
 does not track dynamic arrays in struct fields or nested elements below the
@@ -141,7 +141,7 @@ Invalid:
 s = "hello";                   // invalid
 [byte, ?] s = "hello";    // invalid: '?' requires a view declaration
 $("hello");                    // invalid: no type to dereference
-"hello" == getview(s);         // invalid: runtime view comparison
+"hello" == view(s);         // invalid: runtime view comparison
 cast<view<[byte, 5]>>("hello"); // invalid: no string-literal casts
 ```
 
@@ -206,21 +206,23 @@ Tuple restrictions are documented in
 
 The complete enum reference is in [Enums](31-enums.md).
 
-## 36.20 Owning Pointers in Aggregates Are Rejected
+## 36.20 Owning Pointers Cannot Be Embedded
 
-An owning `ptr<T>` cannot be stored inside an array, struct, or tuple,
-recursively. This includes `[ptr<T>]`, `[ptr<T>, N]`, struct fields of type
-`ptr<T>`, tuple elements of type `ptr<T>`, and `view<T>`/`mview<T>` types
-whose referents recursively contain an owning pointer. The declaration is
-rejected by type checking.
+An owning `ptr<T>` cannot be stored inside an array, struct, or tuple, and it
+cannot appear anywhere inside another pointer's referent. This includes
+`[ptr<T>]`, `[ptr<T>, N]`, struct fields of type `ptr<T>`, tuple elements of
+type `ptr<T>`, `ptr<ptr<T>>`, `view<ptr<T>>`, `mview<ptr<T>>`, and
+`view<T>`/`mview<T>` types whose referents recursively contain an owning
+pointer. The declaration is rejected by type checking.
 
 The restriction keeps allocation and free responsibility from escaping into
-unrelated code. Use `view<T>`/`mview<T>` inside aggregates, keep owning
-pointers in direct variables, parameters, and globals, or use the pool
-allocator in `franko/pool` for linked or node-like data. For an array of
-arrays, use a nested array such as `[[T]]`; the outer array owns the inner
-arrays and manages their lifetime. See
-[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+unrelated code. Use `view<T>`/`mview<T>` inside aggregates and pointer
+referents, keep owning pointers at the outermost level of variables,
+parameters, returns, and globals, or use the pool allocator in `franko/pool`
+for linked or node-like data. For an array of arrays, use a nested array such
+as `[[T]]`; the outer array owns the inner arrays and manages their lifetime.
+See
+[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
 
 ## 36.21 Generic Restrictions
 

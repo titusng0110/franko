@@ -21,6 +21,6 @@ func main() -> int32 {
     b.data[1] = 3
     b.data[2] = 4
     stdout(b.count)
-    stdout(sum<int32, 3>(getview(b.data)))
+    stdout(sum<int32, 3>(view(b.data)))
     return 0
 }

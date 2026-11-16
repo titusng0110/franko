@@ -42,8 +42,8 @@ func main() -> int32 {
     xs[3] = 40;
 
     // implicit decay, same permission
-    mview<[int32]> m = getmview(xs);
-    view<[int32]> v = getview(xs);
+    mview<[int32]> m = mview(xs);
+    view<[int32]> v = view(xs);
     stdout($(m).length());
     stdout($(v)[2]);
 
@@ -52,7 +52,7 @@ func main() -> int32 {
     stdout(xs[1]);
 
     // downgrade combos from a ptr source
-    ptr<[int32, 4]> p = getptr(xs);
+    ptr<[int32, 4]> p = ptr(xs);
     mview<[int32]> m2 = p;
     view<[int32]> v2 = p;
     stdout($(m2)[0]);
@@ -70,7 +70,7 @@ func main() -> int32 {
     // argument and assignment conversions that remain safe here.
 
     // explicit casts, including combos
-    view<[int32]> c = cast<view<[int32]>>(getview(xs));
+    view<[int32]> c = cast<view<[int32]>>(view(xs));
     mview<[int32]> c2 = cast<mview<[int32]>>(p);
     view<[int32]> c3 = cast<view<[int32]>>(p);
     stdout($(c)[0]);
@@ -81,7 +81,7 @@ func main() -> int32 {
     [[int32, 2], 3] g;
     g[0][0] = 1;
     g[2][1] = 6;
-    view<[[int32, 2]]> gv = getview(g);
+    view<[[int32, 2]]> gv = view(g);
     stdout($(gv).length());
     stdout($(gv)[2][1]);
     stdout($(gv)[0].length());
@@ -90,19 +90,19 @@ func main() -> int32 {
     [[int32], 2] dg;
     dg[0].init(2);
     dg[1].init(2);
-    mview<[[int32]]> dgv = cast<mview<[[int32]]>>(getmview(dg));
+    mview<[[int32]]> dgv = cast<mview<[[int32]]>>(mview(dg));
     $(dgv)[0][0] = 5;
     stdout(dg[0][0]);
     stdout($(dgv)[1].length());
 
     // overload preference: exact wins, downgrade beats decay
-    stdout(f(getview(xs)));
-    stdout(f(getmview(xs)));
-    stdout(take_view(getmview(xs)));
+    stdout(f(view(xs)));
+    stdout(f(mview(xs)));
+    stdout(take_view(mview(xs)));
 
     // decay inside a while condition: no temporary descriptor is built
     uint32 i = 0;
-    while (take_view(getview(xs)) == 4 && i < 2) {
+    while (take_view(view(xs)) == 4 && i < 2) {
         i += 1;
     }
     stdout(i);

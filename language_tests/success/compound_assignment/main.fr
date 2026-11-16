@@ -37,7 +37,7 @@ func main() -> int32 {
     stdout(c.n); // 42
 
     int32 v = 5;
-    ptr<int32> p = getptr(v);
+    ptr<int32> p = ptr(v);
     $(p) += 100;
     $(p) /= 3;
     stdout(v); // (5 + 100) / 3 = 35

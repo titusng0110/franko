@@ -15,8 +15,8 @@ func main() -> int32 {
     int64 nanosec = 0;
     int32 clock_status = os::posix::clock_gettime(
             os::posix::CLOCK_REALTIME,
-            getmview(sec),
-            getmview(nanosec)
+            mview(sec),
+            mview(nanosec)
     );
     stdout(clock_status);
     if (sec > 1700000000) {
@@ -30,8 +30,8 @@ func main() -> int32 {
     int64 mono_nanosec = 0;
     int32 mono_status = os::posix::clock_gettime(
             os::posix::CLOCK_MONOTONIC,
-            getmview(mono_sec),
-            getmview(mono_nanosec)
+            mview(mono_sec),
+            mview(mono_nanosec)
     );
     stdout(mono_status);
     if (mono_sec >= 0 && mono_nanosec >= 0 && mono_nanosec < 1000000000) {

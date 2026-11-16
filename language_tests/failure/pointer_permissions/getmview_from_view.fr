@@ -1,7 +1,0 @@
-// getmview() of view-protected storage would raise permissions.
-func main() -> int32 {
-    [byte, 3] buf;
-    view<[byte, 3]> v = getview(buf);
-    mview<[byte, 3]> m = getmview($(v));
-    return 0;
-}

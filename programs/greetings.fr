@@ -14,7 +14,7 @@ func main() -> int32 {
     stdout("What's your name? ", end = null)
 
     std::String name
-    if (stdin_line(getptr(name)) != 0) {
+    if (stdin_line(ptr(name)) != 0) {
         name.uninit()
         return 1
     }
@@ -23,7 +23,7 @@ func main() -> int32 {
     greeting.from("Hello, ")
     greeting += name
     greeting += "!"
-    stdout(getview(greeting))
+    stdout(view(greeting))
 
     greeting.uninit()
     name.uninit()

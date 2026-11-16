@@ -3,7 +3,7 @@ func main() -> int32 {
     int32 i = 0
     while (i < 1) {
         int32 y = 2
-        p = getptr(y)
+        p = ptr(y)
         i = i + 1
     }
     return $(p)

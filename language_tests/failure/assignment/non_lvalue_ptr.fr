@@ -1,0 +1,11 @@
+// Failure fixture: assignment/non_lvalue_ptr
+// The left-hand side of an assignment must be a storage-backed lvalue
+// (docs 14, 15): a ptr(...) result is not storage-backed, so
+// `ptr(a) = 5` is rejected.
+func main() -> int32 {
+    int32 a = 1
+
+    ptr(a) = 5
+
+    return 0
+}

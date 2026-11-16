@@ -11,7 +11,7 @@ func double_uninit(ptr<[int32]> p) -> void {
 func main() -> int32 {
     [int32] d
     d.init(2)
-    int32 v = use_after_uninit(getptr(d))
-    double_uninit(getptr(d))
+    int32 v = use_after_uninit(ptr(d))
+    double_uninit(ptr(d))
     return v
 }

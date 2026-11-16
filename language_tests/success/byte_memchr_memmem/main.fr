@@ -31,12 +31,12 @@ func main() -> int32 {
     [byte, 2] needle
     needle[0] = 67
     needle[1] = 66
-    stdout(hay.memmem(getptr(needle)))
-    stdout(hay.memmem(getptr(needle), 2, 6))
-    stdout(hay.memmem(getptr(needle), 0, 2))
+    stdout(hay.memmem(ptr(needle)))
+    stdout(hay.memmem(ptr(needle), 2, 6))
+    stdout(hay.memmem(ptr(needle), 0, 2))
 
     // Read-only receiver through a view.
-    view<[byte, 8]> ro = getview(hay)
+    view<[byte, 8]> ro = view(hay)
     stdout($(ro).memchr(67))
     stdout($(ro).memmem("CB"))
 

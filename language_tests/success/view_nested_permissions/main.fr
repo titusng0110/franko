@@ -18,9 +18,9 @@ func main() -> int32 {
     a.init(2);
     [mview<[byte]>] store;
     store.init(1);
-    store[0] = getmview(a);
+    store[0] = mview(a);
 
-    view<[mview<[byte]>]> v = getview(store);
+    view<[mview<[byte]>]> v = view(store);
     $($(v)[0])[0] = 5;
     stdout($(store[0]).length());
 
@@ -30,22 +30,22 @@ func main() -> int32 {
     t.init(3);
     [view<[byte]>] slots;
     slots.init(1);
-    mview<[view<[byte]>]> m = getmview(slots);
-    $(m)[0] = getview(t);
+    mview<[view<[byte]>]> m = mview(slots);
+    $(m)[0] = view(t);
     stdout($(slots[0]).length());
 
     // Rule 1: transitive locking of value-typed nesting.
     [[byte, 2], 2] grid;
     grid[0].memset(1);
     grid[1].memset(2);
-    view<[[byte, 2], 2]> g = getview(grid);
+    view<[[byte, 2], 2]> g = view(grid);
     stdout($(g)[0][0]);
     stdout($(g)[1][1]);
     stdout($(g).length());
     stdout($(g)[0].length());
 
     // mview of nested arrays: both levels mutable.
-    mview<[[byte, 2], 2]> gm = getmview(grid);
+    mview<[[byte, 2], 2]> gm = mview(grid);
     $(gm)[0][0] = 9;
     $(gm)[1][1] = 8;
     stdout(grid[0][0]);

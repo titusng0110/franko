@@ -44,7 +44,7 @@ func main() -> int32 {
     stdout(dps[3] == null)
     dps.uninit()
 
-    ptr<ptr<int32>> pp
+    ptr<view<int32>> pp
     stdout(pp == null)
 
     return 0

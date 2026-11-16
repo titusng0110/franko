@@ -3,7 +3,7 @@
 **Plain `int64` keys · 5 sizes × 6 distributions · nine-input small-sort network · 2026-11-14**
 
 This report compares in-place sorting only: Franko `-Omax` calling
-`std::quicksort<int64>(getmview(values), 0, count)` from
+`std::quicksort<int64>(mview(values), 0, count)` from
 `franko/algorithm`, a hand-written C++ `-O3` port of the same
 preprocessing and partition design, and C++ `std::sort` as the
 reference. Every binary uses the same host compiler and the

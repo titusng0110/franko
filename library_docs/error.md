@@ -83,7 +83,7 @@ func main() -> int32 {
         return 1
     }
     reason.memcpy("out of memory")
-    std::panic(getview(reason))
+    std::panic(view(reason))
     reason.uninit()
     return 0
 }

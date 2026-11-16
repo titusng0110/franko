@@ -2,7 +2,7 @@ func null_branch_is_safe(uint32 pick, ptr<int32> q) -> ptr<int32> {
     int32 x = 0
     ptr<int32> p
     if (pick != 0) {
-        p = getptr(x)
+        p = ptr(x)
     } else {
         p = null
     }
@@ -15,7 +15,7 @@ func null_branch_is_safe(uint32 pick, ptr<int32> q) -> ptr<int32> {
 
 func infeasible_branch_is_ignored() -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     if (p == null) {
         return p
     }
@@ -31,14 +31,14 @@ func null_guard_is_infeasible() -> ptr<int32> {
         if (x != 0) {
             x = 1
         }
-        return getptr(x)
+        return ptr(x)
     }
     return q
 }
 
 func loop_exit_is_null() -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     while (p != null) {
         p = null
     }
@@ -52,23 +52,23 @@ func null_loop_is_infeasible() -> ptr<int32> {
         if (x != 0) {
             x = 1
         }
-        return getptr(x)
+        return ptr(x)
     }
     return p
 }
 
-func caller_owned_getptr_is_nonnull(ptr<int32> q) -> ptr<int32> {
+func caller_owned_pointer_is_nonnull(ptr<int32> q) -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr($(q))
+    ptr<int32> p = ptr($(q))
     if (p == null) {
-        return getptr(x)
+        return ptr(x)
     }
     return null
 }
 
 func infeasible_else_drops_frame() -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     if (p != null) {
         p = null
     } else {
@@ -86,7 +86,7 @@ func caller_owned_guard(ptr<int32> q) -> ptr<int32> {
 
 func infeasible_break_is_ignored() -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     while (p != null) {
         if (p == null) {
             break
@@ -98,7 +98,7 @@ func infeasible_break_is_ignored() -> ptr<int32> {
 
 func loop_tail_is_ignored() -> ptr<int32> {
     int32 x = 0
-    ptr<int32> p = getptr(x)
+    ptr<int32> p = ptr(x)
     while (p != null) {
         return null
     }
@@ -107,14 +107,14 @@ func loop_tail_is_ignored() -> ptr<int32> {
 
 func main() -> int32 {
     int32 z = 0
-    ptr<int32> a = null_branch_is_safe(0, getptr(z))
+    ptr<int32> a = null_branch_is_safe(0, ptr(z))
     ptr<int32> b = infeasible_branch_is_ignored()
     ptr<int32> c = loop_exit_is_null()
     ptr<int32> d = null_guard_is_infeasible()
     ptr<int32> e = null_loop_is_infeasible()
-    ptr<int32> f = caller_owned_getptr_is_nonnull(getptr(z))
+    ptr<int32> f = caller_owned_pointer_is_nonnull(ptr(z))
     ptr<int32> g = infeasible_else_drops_frame()
-    ptr<int32> h = caller_owned_guard(getptr(z))
+    ptr<int32> h = caller_owned_guard(ptr(z))
     ptr<int32> i = infeasible_break_is_ignored()
     return 0
 }

@@ -230,7 +230,11 @@
     "intrinsics": {
       "patterns": [
         {
-          "match": "\\b(cast|unsafe_cast|getptr|getmview|getview)\\b",
+          "match": "\\b(cast|unsafe_cast)\\b",
+          "name": "support.function.builtin.franko"
+        },
+        {
+          "match": "\\b(ptr|mview|view)\\b(?=\\s*\\()",
           "name": "support.function.builtin.franko"
         },
         {

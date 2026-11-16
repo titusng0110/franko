@@ -23,16 +23,16 @@ func main() -> int32 {
     a[4] = 4
     a[5] = 3
     a[6] = 0
-    std::quicksort<int32>(getmview(a))
-    stdout(check_sorted(getview(a), 0, a.length()))
+    std::quicksort<int32>(mview(a))
+    stdout(check_sorted(view(a), 0, a.length()))
     a.uninit()
 
     [int32, 40] b
     for (uint32 i = 0; i < 40; i++) {
         b[i] = unsafe_cast<int32>(39 - i)
     }
-    std::quicksort<int32>(getmview(b), 5, 35)
-    stdout(check_sorted(getview(b), 5, 35))
+    std::quicksort<int32>(mview(b), 5, 35)
+    stdout(check_sorted(view(b), 5, 35))
     stdout(b[0])
     stdout(b[39])
 
@@ -41,8 +41,8 @@ func main() -> int32 {
     for (uint32 i = 0; i < c.length(); i++) {
         c[i] = unsafe_cast<int32>((i * 7919) % 5000)
     }
-    std::quicksort<int32>(getmview(c), 0, c.length())
-    stdout(check_sorted(getview(c), 0, c.length()))
+    std::quicksort<int32>(mview(c), 0, c.length())
+    stdout(check_sorted(view(c), 0, c.length()))
     c.uninit()
 
     [int32] d
@@ -50,15 +50,15 @@ func main() -> int32 {
     for (uint32 i = 0; i < d.length(); i++) {
         d[i] = unsafe_cast<int32>(i % 97)
     }
-    std::quicksort<int32>(getmview(d), 0, d.length())
-    stdout(check_sorted(getview(d), 0, d.length()))
+    std::quicksort<int32>(mview(d), 0, d.length())
+    stdout(check_sorted(view(d), 0, d.length()))
     d.uninit()
 
     [int64, 100] e
     for (uint32 i = 0; i < 100; i++) {
         e[i] = unsafe_cast<int64>((i * 37) % 100)
     }
-    std::heapsort<int64>(getmview(e))
+    std::heapsort<int64>(mview(e))
     uint32 i = 1
     int32 ok = 1
     while (i < 100) {
@@ -73,8 +73,8 @@ func main() -> int32 {
     for (uint32 j = 0; j < 100; j++) {
         f[j] = unsafe_cast<int32>((j * 13) % 100)
     }
-    std::heapsort<int32>(getmview(f), 10, 90)
-    stdout(check_sorted(getview(f), 10, 90))
+    std::heapsort<int32>(mview(f), 10, 90)
+    stdout(check_sorted(view(f), 10, 90))
 
     [std::String] strings
     strings.init(5)
@@ -84,9 +84,9 @@ func main() -> int32 {
     strings[3] = "bravo"
     strings[4] = "charlie"
 
-    std::quicksort<std::String>(getptr(strings))
+    std::quicksort<std::String>(ptr(strings))
     for (uint32 j = 0; j < 5; j++) {
-        stdout(getview(strings[j]))
+        stdout(view(strings[j]))
     }
 
     for (uint32 j = 0; j < 5; j++) {

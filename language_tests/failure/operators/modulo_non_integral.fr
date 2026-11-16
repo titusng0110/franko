@@ -6,7 +6,7 @@
 // `stdout` overload error first, since neither result is printable).
 func main() -> int32 {
     int32 v = 1;
-    ptr<int32> p = getptr(v);
+    ptr<int32> p = ptr(v);
     [int32, 2] xs;
     xs.memcpy([1, 2]);
 

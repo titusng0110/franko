@@ -8,8 +8,8 @@ func main() -> int32 {
     int32 x = 0
     uint8 b = 0
 
-    ptr<int32> p = getptr(x)
-    ptr<uint8> q = getptr(b)
+    ptr<int32> p = ptr(x)
+    ptr<uint8> q = ptr(b)
 
     stdout(p != q)
 

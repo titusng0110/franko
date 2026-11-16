@@ -3,9 +3,9 @@ func bad(uint32 pick) -> ptr<int32> {
     int32 y = 0
     ptr<int32> p
     if (pick != 0) {
-        p = getptr(x)
+        p = ptr(x)
     } else {
-        p = getptr(y)
+        p = ptr(y)
     }
     return p
 }

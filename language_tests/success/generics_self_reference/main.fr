@@ -13,7 +13,7 @@ import "franko/stdio"
 func main() -> int32 {
     Node<int32> n
     n.value = 5
-    n.next = getview(n)
+    n.next = view(n)
     stdout($(n.next).value)
 
     List<int32> l

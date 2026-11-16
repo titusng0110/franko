@@ -6,7 +6,7 @@ func main() -> int32 {
     [int32, 3] ys;
     ys.memcpy([1, 2, 3]);
     ptr<[int32, 3]> p;
-    p = getptr(ys);
+    p = ptr(ys);
     stdout(p.length());
     return 0;
 }

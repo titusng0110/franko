@@ -6,7 +6,7 @@ import "franko/stdio"
 // Covers:
 //   - inside if (p != null) the dereference is valid: the guard
 //     refines the variable's state to pointing on that path
-//   - a branch merge that assigns getptr on one path and null on
+//   - a branch merge that assigns ptr on one path and null on
 //     the other yields a possibly-null variable; guarding it with
 //     if (p != null) before dereferencing keeps the program clean
 // ============================================================
@@ -30,7 +30,7 @@ func main() -> int32 {
     uint32 pick = 1
     ptr<int32> m
     if (pick != 0) {
-        m = getptr(x)
+        m = ptr(x)
     } else {
         m = null
     }

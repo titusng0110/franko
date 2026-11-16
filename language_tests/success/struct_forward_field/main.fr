@@ -31,7 +31,7 @@ func main() -> int32 {
     o.inner.x = 5
 
     Later l
-    o.link = getmview(l)
+    o.link = mview(l)
     $(o.link).tag = 8
 
     stdout(o.inner.x)

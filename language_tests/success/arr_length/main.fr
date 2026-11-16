@@ -56,7 +56,7 @@ func main() -> int32 {
     h.items.uninit();
 
     ptr<[int32, 3]> p;
-    p = getptr(ys);
+    p = ptr(ys);
     stdout($(p).length());
 
     Meter meter;

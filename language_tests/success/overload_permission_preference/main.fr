@@ -38,9 +38,9 @@ func main() -> int32 {
     [byte, 3] buf;
     buf.memset(0);
 
-    ptr<[byte, 3]> p = getptr(buf);
-    mview<[byte, 3]> m = getmview(buf);
-    view<[byte, 3]> v = getview(buf);
+    ptr<[byte, 3]> p = ptr(buf);
+    mview<[byte, 3]> m = mview(buf);
+    view<[byte, 3]> v = view(buf);
 
     f(p);
     f(m);

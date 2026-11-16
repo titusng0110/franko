@@ -138,7 +138,7 @@ Array elements may be pointed to:
 
 ```franko
 ptr<int32> p;
-p = getptr(xs[0]);
+p = ptr(xs[0]);
 ```
 
 Nested array elements may also be lvalues when each target is storage-backed.
@@ -159,7 +159,7 @@ a = b;
 Use one of:
 
 ```franko
-a.memcpy(getptr(b));
+a.memcpy(ptr(b));
 a.memset(0);
 a.uninit();
 ```
@@ -170,4 +170,4 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 Array lifecycle and buffer-invalidation rules are covered in
 [Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
 Owning pointers are forbidden in arrays and other aggregates; see
-[Owning Pointers in Aggregates](26-pointers.md#2613-owning-pointers-in-aggregates-are-forbidden).
+[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).

@@ -1,7 +1,7 @@
 // Explicit cast cannot raise permissions through the decay.
 func main() -> int32 {
     [int32, 3] xs;
-    view<[int32, 3]> v = getview(xs);
+    view<[int32, 3]> v = view(xs);
     mview<[int32]> m = cast<mview<[int32]>>(v);
     return 0;
 }

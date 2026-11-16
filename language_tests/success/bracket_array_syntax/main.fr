@@ -22,12 +22,12 @@ func main() -> int32 {
     dyn[0] = 10;
     dyn[1] = 20;
     dyn[2] = 30;
-    stdout(sum(getview(dyn)));
+    stdout(sum(view(dyn)));
 
     // Explicit dynamic array init.
     [int] sized;
     sized.init(3);
-    sized.memcpy(getptr(dyn));
+    sized.memcpy(ptr(dyn));
     stdout(sized[2]);
 
     // Static declaration, nested static, nested dynamic.
@@ -50,12 +50,12 @@ func main() -> int32 {
     fixed[0] = 1;
     fixed[1] = 2;
     fixed[2] = 3;
-    view<[int32, 3]> fv = getview(fixed);
+    view<[int32, 3]> fv = view(fixed);
     stdout($(fv)[2]);
-    mview<[int32, 3]> mv = getmview(fixed);
+    mview<[int32, 3]> mv = mview(fixed);
     $(mv)[0] = 100;
     stdout(fixed[0]);
-    ptr<[int32, 3]> p = getptr(fixed);
+    ptr<[int32, 3]> p = ptr(fixed);
     stdout($(p)[1]);
 
     // Inferred size from an array literal.
