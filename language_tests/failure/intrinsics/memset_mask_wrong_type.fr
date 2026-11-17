@@ -1,0 +1,7 @@
+// Failure fixture: intrinsics/memset_mask_wrong_type
+// memset_* mask values must be byte values.
+func main() -> int32 {
+    [byte, 4] a;
+    a.memset_xor(256);
+    return 0;
+}

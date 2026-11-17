@@ -179,9 +179,7 @@ struct WordTrie {
             return result
         }
 
-        for (uint32 letter = 0; letter < 26; letter++) {
-            $(self).nodes[allocated.idx].child[letter] = NIL
-        }
+        $(self).nodes[allocated.idx].child.memset(0xFF)
         $(self).nodes[allocated.idx].count = 0
 
         result.idx = allocated.idx

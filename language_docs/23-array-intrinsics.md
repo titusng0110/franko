@@ -42,15 +42,23 @@ with `-1` and a retry is valid. See
 | `target.read_bit(bit_idx)` | `[byte]` / `[byte, N]` | `byte` | — |
 | `target.write_bit(bit_idx, value)` | `[byte]` / `[byte, N]` | `void` | — |
 | `target.flip_bit(bit_idx)` | `[byte]` / `[byte, N]` | `void` | — |
-| `target.bitwise_not_mask()` | `[byte]` / `[byte, N]` | `void` | — |
-| `target.bitwise_xor_mask(mask)` | `[byte]` / `[byte, N]` | `void` | — |
-| `target.bitwise_and_mask(mask)` | `[byte]` / `[byte, N]` | `void` | — |
-| `target.bitwise_or_mask(mask)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.swap_bits(bit_idx1, bit_idx2)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.reverse_bits(start_bit, bit_count)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_not()` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_not(start, count)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_xor(value)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_xor(value, start, count)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_and(value)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_and(value, start, count)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_or(value)` | `[byte]` / `[byte, N]` | `void` | — |
+| `target.memset_or(value, start, count)` | `[byte]` / `[byte, N]` | `void` | — |
 | `target.shift_bits_left(bit_count)` | `[byte]` / `[byte, N]` | `void` | — |
 | `target.shift_bits_right(bit_count)` | `[byte]` / `[byte, N]` | `void` | — |
-| `target.count_set_bits()` | `[byte]` / `[byte, N]` | `uint64` | — |
+| `target.popcount()` | `[byte]` / `[byte, N]` | `uint64` | — |
+| `target.count_trailing_zeros(bit_idx)` | `[byte]` / `[byte, N]` | `uint64` | — |
+| `target.count_leading_zeros(bit_idx)` | `[byte]` / `[byte, N]` | `uint64` | — |
 
-The receiver of a mutating array intrinsic must be a storage-backed array lvalue. The read-only intrinsics (`length`, `memcmp`, `memchr`, `memmem`, the `read_*` accessors, `read_bit`, `count_set_bits`) accept any array-typed expression.
+The receiver of a mutating array intrinsic must be a storage-backed array lvalue. The read-only intrinsics (`length`, `memcmp`, `memchr`, `memmem`, the `read_*` accessors, `read_bit`, `popcount`, `count_trailing_zeros`, `count_leading_zeros`) accept any array-typed expression.
 
 Examples of storage-backed array targets:
 
@@ -77,8 +85,8 @@ pointer dereference, the intrinsic needs that pointer's permission:
 | Intrinsic | Required receiver permission |
 |---|---|
 | `init`, `init_zero`, `resize`, `uninit` | allocation (`ptr`) |
-| `memset`, `memcpy`, `memmove` (as target), `write_*`, `write_bit`, `flip_bit`, `bitwise_*_mask`, `shift_bits_*` | mutation (`mview` or `ptr`) |
-| `length()`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, `count_set_bits`, and element reads | read (any permission) |
+| `memset`, `memcpy`, `memmove` (as target), `write_*`, `write_bit`, `flip_bit`, `swap_bits`, `reverse_bits`, `memset_*`, `shift_bits_*` | mutation (`mview` or `ptr`) |
+| `length()`, `memcmp`, `memchr`, `memmem`, `read_*`, `read_bit`, `popcount`, `count_trailing_zeros`, `count_leading_zeros`, and element reads | read (any permission) |
 
 The `memcpy`/`memcmp`/`memmem` sources are only read, so they may be any
 pointer to an array.
@@ -436,6 +444,34 @@ header.write_int16_BE(4, -2);
 stdout(header.read_int16_BE(4));    // -2
 ```
 
+### Byte fills
+
+`memset_*` applies a byte-wide operation to the whole array or to one byte
+range:
+
+```franko
+target.memset_not()                         // a[i] = ~a[i]
+target.memset_not(start, count)             // same, over a range
+target.memset_xor(value)                    // a[i] ^= value
+target.memset_xor(value, start, count)
+target.memset_and(value)                    // a[i] &= value
+target.memset_and(value, start, count)
+target.memset_or(value)                     // a[i] |= value
+target.memset_or(value, start, count)
+```
+
+Rules:
+
+- receiver element type must be `byte`;
+- `value` must be `byte`;
+- `start` and `count` must be nonnegative constants fitting `uint32`, or
+  nonconstant expressions of exactly type `uint32`;
+- the range must satisfy `start + count <= target.length()`; violations
+  abort, and constant static ranges are checked at compile time;
+- the whole-array form is equivalent to `start = 0` and
+  `count = target.length()`;
+- all forms require mutation rights on the receiver.
+
 ### Bit intrinsics
 
 Operate on the receiver as one long little-endian bit string: bit `i` lives
@@ -445,48 +481,70 @@ bit. A valid bit index satisfies `bit_idx < 8 * target.length()`.
 Forms:
 
 ```franko
-target.read_bit(bit_idx)               // -> byte (0 or 1)
-target.write_bit(bit_idx, value)       // value: byte
+target.read_bit(bit_idx)                    // -> byte (0 or 1)
+target.write_bit(bit_idx, value)            // value: byte
 target.flip_bit(bit_idx)
-target.bitwise_not_mask()
-target.bitwise_xor_mask(mask)          // mask: byte
-target.bitwise_and_mask(mask)          // mask: byte
-target.bitwise_or_mask(mask)           // mask: byte
-target.shift_bits_left(bit_count)      // bit_count: uint64
-target.shift_bits_right(bit_count)     // bit_count: uint64
-target.count_set_bits()                // -> uint64
+target.swap_bits(bit_idx1, bit_idx2)
+target.reverse_bits(start_bit, bit_count)
+target.shift_bits_left(bit_count)           // bit_count: uint64
+target.shift_bits_right(bit_count)          // bit_count: uint64
+target.popcount()                           // -> uint64
+target.count_trailing_zeros(bit_idx)        // -> uint64
+target.count_leading_zeros(bit_idx)         // -> uint64
 ```
 
 Rules:
 
 - receiver element type must be `byte`;
-- `bit_idx` and `bit_count` must be nonnegative constants fitting `uint64`,
-  or nonconstant expressions of exactly type `uint64`;
+- `bit_idx`, `start_bit`, and `bit_count` must be nonnegative constants
+  fitting `uint64`, or nonconstant expressions of exactly type `uint64`;
 - `read_bit` returns `0` or `1`; a nonzero `write_bit` value sets the bit,
   zero clears it;
 - `flip_bit` toggles one bit;
-- `bitwise_not_mask` toggles every bit and `bitwise_*_mask` applies the
-  given byte mask to every byte of the array;
+- `swap_bits` exchanges the two bits. The indices may be equal, in which
+  case the call is a no-op;
+- `reverse_bits` reverses the order of `bit_count` consecutive bits
+  beginning at `start_bit`. `bit_count == 0` is a no-op. The range must
+  satisfy `start_bit + bit_count <= 8 * target.length()`; otherwise the
+  call aborts. Constant static ranges are checked at compile time;
+- `count_trailing_zeros` scans from `bit_idx` toward higher bit indices and
+  returns the number of consecutive zero bits before the first set bit or
+  the array end. The bit at `bit_idx` is included, so a set bit returns
+  `0`;
+- `count_leading_zeros` scans from `bit_idx` toward lower bit indices and
+  returns the number of consecutive zero bits before the first set bit or
+  the array start. The bit at `bit_idx` is included, so a set bit returns
+  `0`;
 - `shift_bits_left`/`shift_bits_right` shift the whole bit string toward
   more/less significant bit positions, filling vacated bits with zero;
   shifting by at least `8 * target.length()` bits zeroes the whole array;
-- `count_set_bits` returns the total number of set bits as `uint64`;
-- `read_bit`, `write_bit`, and `flip_bit` abort when `bit_idx` is out of
-  range. For static arrays, a constant bit index is checked at compile
-  time;
+- `popcount` returns the total number of set bits as `uint64`;
+- `read_bit`, `write_bit`, `flip_bit`, `swap_bits`,
+  `count_trailing_zeros`, and `count_leading_zeros` abort when a bit index
+  is out of range. For static arrays, constant bit indices are checked at
+  compile time;
 - the mutating bit intrinsics need mutation rights on the receiver;
-  `read_bit` and `count_set_bits` are read-only and may be called through a
-  `view`.
+  `read_bit`, `popcount`, `count_trailing_zeros`, and
+  `count_leading_zeros` are read-only and may be called through a `view`.
 
 ```franko
 [byte, 2] flags
 flags.memset(0);
 flags.write_bit(0, 1);
 flags.write_bit(9, 1);
-stdout(flags.count_set_bits());   // 2
-stdout(flags.read_bit(1));        // 0
+stdout(flags.popcount());           // 2
+stdout(flags.read_bit(1));          // 0
 flags.flip_bit(1);
-stdout(flags.read_bit(1));        // 1
+stdout(flags.read_bit(1));          // 1
 flags.shift_bits_left(1);
-stdout(flags.read_bit(10));       // 1
+stdout(flags.read_bit(10));         // 1
+
+flags.memset(0);
+flags.write_bit(5, 1);
+stdout(flags.count_trailing_zeros(0));   // 5
+stdout(flags.count_leading_zeros(15));   // 10
+flags.swap_bits(5, 15);
+stdout(flags.read_bit(15));              // 1
+flags.reverse_bits(0, 16);
+stdout(flags.read_bit(0));               // 1
 ```

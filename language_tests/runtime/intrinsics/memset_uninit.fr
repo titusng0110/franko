@@ -1,10 +1,10 @@
-// Runtime fixture: intrinsics/bitwise_uninit
+// Runtime fixture: intrinsics/memset_uninit
 // The array is only possibly initialized, so the checker reports a warning
 // and the runtime still aborts on the uninitialized intrinsic.
 int32 C = 0
 
 func invert(ptr<[byte]> p) -> void {
-    $(p).bitwise_not_mask()
+    $(p).memset_not()
 }
 
 func main() -> int32 {

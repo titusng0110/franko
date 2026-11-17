@@ -17,7 +17,7 @@ func main() -> int32 {
     view<[byte, 4]> ro = view(buf)
     stdout($(ro).read_uint32_LE(0))
     stdout($(ro).read_bit(2))
-    stdout($(ro).count_set_bits())
+    stdout($(ro).popcount())
     stdout($(ro).memchr(4))
     stdout($(ro).memcmp(view(buf)) == 0)
     stdout($(ro).memmem("AB") == 0xFFFFFFFF)
@@ -25,7 +25,7 @@ func main() -> int32 {
     mview<[byte, 4]> rw = mview(buf)
     $(rw).write_bit(0, 0)
     $(rw).flip_bit(1)
-    $(rw).bitwise_xor_mask(0xFF)
+    $(rw).memset_xor(0xFF)
     $(rw).shift_bits_left(8)
     stdout($(rw).read_uint32_LE(0))
 

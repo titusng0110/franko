@@ -9,7 +9,7 @@ import "franko/stdio"
 // count N) and share the same checked implementation:
 //   - view([byte, N]) decayed to view<[byte]>: memchr, endian read;
 //   - grid[i] inner [byte, N] row: memset, write_bit/read_bit,
-//     endian write/read, flip_bit, memchr, count_set_bits.
+//     endian write/read, flip_bit, memchr, popcount.
 // No descriptor is built for the decay, and the inner row is bounds
 // checked by the enclosing static array access.
 // ============================================================
@@ -37,7 +37,7 @@ func main() -> int32 {
     stdout(grid[0].memchr(0))
     stdout(grid[0].read_bit(0))
     stdout(grid[1].read_uint16_BE(0))
-    stdout(grid[1].count_set_bits())
+    stdout(grid[1].popcount())
 
     return 0
 }

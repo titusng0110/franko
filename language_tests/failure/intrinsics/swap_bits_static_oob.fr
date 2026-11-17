@@ -1,0 +1,6 @@
+// Failure fixture: intrinsics/swap_bits_static_oob
+func main() -> int32 {
+    [byte, 2] a;
+    a.swap_bits(0, 16);
+    return 0;
+}

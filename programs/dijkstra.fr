@@ -282,9 +282,9 @@ func main() -> int32 {
 
     for (uint32 i = 0; i < n; i++) {
         dist[i] = std::INT64_MAX
-        prev[i] = 0xFFFFFFFF
         state[i] = NodeState::unseen
     }
+    prev.memset(0xFF)
 
     MinHeap heap
     dist[source] = 0

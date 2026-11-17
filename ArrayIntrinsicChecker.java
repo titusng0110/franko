@@ -39,9 +39,8 @@ final class ArrayIntrinsicChecker {
                  WRITE_INT16_LE, WRITE_INT16_BE,
                  WRITE_INT32_LE, WRITE_INT32_BE,
                  WRITE_INT64_LE, WRITE_INT64_BE,
-                 WRITE_BIT, FLIP_BIT,
-                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
-                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+                 WRITE_BIT, FLIP_BIT, SWAP_BITS, REVERSE_BITS,
+                 MEMSET_NOT, MEMSET_XOR, MEMSET_AND, MEMSET_OR,
                  SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT -> owner.ensureRegionPermission(
                     node.receiver,
                     PtrPermission.MUTABLE,
@@ -55,7 +54,8 @@ final class ArrayIntrinsicChecker {
                  READ_INT16_LE, READ_INT16_BE,
                  READ_INT32_LE, READ_INT32_BE,
                  READ_INT64_LE, READ_INT64_BE,
-                 READ_BIT, COUNT_SET_BITS -> { }
+                 READ_BIT, POPCOUNT, COUNT_TRAILING_ZEROS,
+                 COUNT_LEADING_ZEROS -> { }
         }
 
         switch (node.intrinsicKind) {
@@ -84,11 +84,11 @@ final class ArrayIntrinsicChecker {
                  WRITE_INT32_LE, WRITE_INT32_BE,
                  WRITE_INT64_LE, WRITE_INT64_BE -> visitArrayWriteIntrinsic(node);
 
-            case READ_BIT, WRITE_BIT, FLIP_BIT,
-                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
-                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+            case READ_BIT, WRITE_BIT, FLIP_BIT, SWAP_BITS, REVERSE_BITS,
+                 MEMSET_NOT, MEMSET_XOR, MEMSET_AND, MEMSET_OR,
                  SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT,
-                 COUNT_SET_BITS -> visitArrayBitIntrinsic(node);
+                 POPCOUNT, COUNT_TRAILING_ZEROS,
+                 COUNT_LEADING_ZEROS -> visitArrayBitIntrinsic(node);
         }
     }
 
@@ -378,14 +378,57 @@ final class ArrayIntrinsicChecker {
             );
         }
 
-        if (node.intrinsicKind == SemanticArrayIntrinsicKind.READ_BIT
-                || node.intrinsicKind == SemanticArrayIntrinsicKind.WRITE_BIT
-                || node.intrinsicKind == SemanticArrayIntrinsicKind.FLIP_BIT) {
-            owner.ensureStaticArrayBitIndexInBounds(
+        switch (node.intrinsicKind) {
+            case READ_BIT, WRITE_BIT, FLIP_BIT,
+                 COUNT_TRAILING_ZEROS, COUNT_LEADING_ZEROS -> owner.ensureStaticArrayBitIndexInBounds(
                     node.receiver.type,
                     node.args.get(0),
                     node.intrinsicKind.runtimeName + "() bit index"
             );
+
+            case SWAP_BITS -> {
+                owner.ensureStaticArrayBitIndexInBounds(
+                        node.receiver.type,
+                        node.args.get(0),
+                        "swap_bits() first bit index"
+                );
+                owner.ensureStaticArrayBitIndexInBounds(
+                        node.receiver.type,
+                        node.args.get(1),
+                        "swap_bits() second bit index"
+                );
+            }
+
+            case REVERSE_BITS -> owner.ensureStaticArrayBitRangeInBounds(
+                    node.receiver.type,
+                    node.args.get(0),
+                    node.args.get(1),
+                    "reverse_bits() range"
+            );
+
+            case MEMSET_NOT -> {
+                if (node.args.size() == 2) {
+                    owner.ensureStaticArrayRangeInBounds(
+                            node.receiver.type,
+                            node.args.get(0),
+                            node.args.get(1),
+                            "memset_not() range"
+                    );
+                }
+            }
+
+            case MEMSET_XOR, MEMSET_AND, MEMSET_OR -> {
+                if (node.args.size() == 3) {
+                    owner.ensureStaticArrayRangeInBounds(
+                            node.receiver.type,
+                            node.args.get(1),
+                            node.args.get(2),
+                            node.intrinsicKind.runtimeName + "() range"
+                    );
+                }
+            }
+
+            default -> { }
         }
 
         ensureArrayIntrinsicReturnType(node, node.intrinsicKind.returnType());

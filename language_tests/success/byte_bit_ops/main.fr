@@ -3,10 +3,11 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Byte Bit Intrinsics
 // ============================================================
-// Covers the bit intrinsics (doc 21.15): read_bit/write_bit/
-// flip_bit across byte boundaries, the bitwise_*_mask operators,
-// shift_bits_left/shift_bits_right (including shifts at and beyond
-// the total bit count), count_set_bits, dynamic receivers, and
+// Covers the bit intrinsics: read_bit/write_bit/flip_bit/swap_bits/
+// reverse_bits across byte boundaries, the memset_* byte fills
+// (whole-array and ranged), shift_bits_left/shift_bits_right
+// (including shifts at and beyond the total bit count), popcount,
+// inclusive trailing/leading zero scans, dynamic receivers, and
 // read-only access through a view.
 // ============================================================
 
@@ -18,11 +19,11 @@ func main() -> int32 {
     stdout(f.read_bit(0))
     stdout(f.read_bit(1))
     stdout(f.read_bit(9))
-    stdout(f.count_set_bits())
+    stdout(f.popcount())
 
     f.flip_bit(1)
     stdout(f.read_bit(1))
-    stdout(f.count_set_bits())
+    stdout(f.popcount())
 
     f.flip_bit(9)
     stdout(f.read_bit(9))
@@ -36,20 +37,20 @@ func main() -> int32 {
     // Masks apply to every byte.
     [byte, 4] m
     m.memset(0)
-    m.bitwise_or_mask(0x0F)
+    m.memset_or(0x0F)
     stdout(m[0])
     stdout(m[3])
-    stdout(m.count_set_bits())
+    stdout(m.popcount())
 
-    m.bitwise_and_mask(0x03)
+    m.memset_and(0x03)
     stdout(m[0])
-    stdout(m.count_set_bits())
+    stdout(m.popcount())
 
-    m.bitwise_xor_mask(0xFF)
+    m.memset_xor(0xFF)
     stdout(m[0])
-    m.bitwise_not_mask()
+    m.memset_not()
     stdout(m[0])
-    stdout(m.count_set_bits())
+    stdout(m.popcount())
 
     // Shifts move the whole bit string across byte boundaries.
     [byte, 4] s
@@ -64,22 +65,100 @@ func main() -> int32 {
     s.shift_bits_right(9)
     stdout(s[1])
     s.shift_bits_left(32)
-    stdout(s.count_set_bits())
+    stdout(s.popcount())
 
     // Dynamic receiver.
     [byte] dyn
     dyn.init_zero(1)
     dyn.write_bit(7, 1)
     stdout(dyn.read_bit(7))
-    stdout(dyn.count_set_bits())
+    stdout(dyn.popcount())
     dyn.shift_bits_right(1)
     stdout(dyn[0])
     dyn.uninit()
 
+    // Ranged byte fills.
+    [byte, 4] r
+    r.memset(0)
+    r.memset_or(0x0F, 1, 2)
+    stdout(r[0])
+    stdout(r[1])
+    stdout(r[2])
+    stdout(r[3])
+    r.memset_and(0x03, 1, 2)
+    stdout(r[0])
+    stdout(r[1])
+    r.memset_xor(0xFF, 0, 4)
+    stdout(r[0])
+    stdout(r[1])
+    r.memset_not(0, 4)
+    stdout(r[0])
+    stdout(r[1])
+
+    // Swap bits across byte boundaries.
+    [byte, 2] sw
+    sw.memset(0)
+    sw.write_bit(1, 1)
+    sw.swap_bits(1, 10)
+    stdout(sw.read_bit(1))
+    stdout(sw.read_bit(10))
+
+    // Reverse a bit range.
+    [byte, 2] rev
+    rev.memset(0)
+    rev.write_bit(0, 1)
+    rev.reverse_bits(0, 16)
+    stdout(rev.read_bit(0))
+    stdout(rev.read_bit(15))
+    rev.reverse_bits(0, 0)
+    stdout(rev.read_bit(15))
+
+    // Inclusive zero scans from a bit index.
+    [byte, 2] z
+    z.memset(0)
+    z.write_bit(5, 1)
+    z.write_bit(10, 1)
+    stdout(z.count_trailing_zeros(0))
+    stdout(z.count_trailing_zeros(6))
+    stdout(z.count_trailing_zeros(10))
+    stdout(z.count_trailing_zeros(11))
+    stdout(z.count_leading_zeros(15))
+    stdout(z.count_leading_zeros(10))
+    stdout(z.count_leading_zeros(9))
+
+    // Wider buffers exercise the SIMD fill and popcount loops.
+    [byte, 32] wide
+    wide.memset(0)
+    wide.memset_or(0x01, 0, 32)
+    stdout(wide.popcount())
+    wide.memset_xor(0xFF, 5, 17)
+    stdout(wide[4])
+    stdout(wide[5])
+    stdout(wide[21])
+    stdout(wide[22])
+    stdout(wide.popcount())
+    wide.memset_not()
+    stdout(wide[4])
+    stdout(wide[5])
+    stdout(wide.popcount())
+
+    // Wider shifts exercise the multiword paths.
+    [byte, 20] sh
+    sh.memset(0)
+    sh.write_bit(0, 1)
+    sh.shift_bits_left(13)
+    stdout(sh.read_bit(13))
+    stdout(sh.read_bit(12))
+    sh.write_bit(19, 1)
+    sh.shift_bits_right(13)
+    stdout(sh.read_bit(0))
+    stdout(sh.read_bit(6))
+
     // Read-only receiver through a view.
     view<[byte, 4]> ro = view(m)
-    stdout($(ro).count_set_bits())
+    stdout($(ro).popcount())
     stdout($(ro).read_bit(2))
+    stdout($(ro).count_trailing_zeros(0))
 
     return 0
 }

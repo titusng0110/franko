@@ -330,9 +330,8 @@ public final class PointerPermissionChecker {
                  WRITE_INT16_LE, WRITE_INT16_BE,
                  WRITE_INT32_LE, WRITE_INT32_BE,
                  WRITE_INT64_LE, WRITE_INT64_BE,
-                 WRITE_BIT, FLIP_BIT,
-                 BITWISE_NOT_MASK, BITWISE_XOR_MASK,
-                 BITWISE_AND_MASK, BITWISE_OR_MASK,
+                 WRITE_BIT, FLIP_BIT, SWAP_BITS, REVERSE_BITS,
+                 MEMSET_NOT, MEMSET_XOR, MEMSET_AND, MEMSET_OR,
                  SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT ->
                     markPath(node.receiver, PtrPermission.MUTABLE);
 
@@ -343,7 +342,8 @@ public final class PointerPermissionChecker {
                  READ_INT16_LE, READ_INT16_BE,
                  READ_INT32_LE, READ_INT32_BE,
                  READ_INT64_LE, READ_INT64_BE,
-                 READ_BIT, COUNT_SET_BITS ->
+                 READ_BIT, POPCOUNT, COUNT_TRAILING_ZEROS,
+                 COUNT_LEADING_ZEROS ->
                     markPath(node.receiver, PtrPermission.READ_ONLY);
         }
 

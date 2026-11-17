@@ -356,8 +356,8 @@ the caller's lifecycle state.
 | `d.init(n)`, `d.init_zero(n)` | any | `INITED`; repeated init is not diagnosed |
 | `d.resize(n)` | `INITED` | stays `INITED` |
 | `d.uninit()` | `INITED` | `UNINITED`; invalid free if never initialized, double free if already uninitialized |
-| `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove` | `INITED` | unchanged |
-| `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.count_set_bits` | `INITED` | unchanged |
+| `d[i]`, `d.memset`, `d.memcpy` destination, `d.memmove`, `d.memset_*`, `d.write_bit`, `d.flip_bit`, `d.swap_bits`, `d.reverse_bits`, `d.shift_bits_*` | `INITED` | unchanged |
+| `d.memcmp`, `d.memchr`, `d.memmem`, `d.read_*`, `d.read_bit`, `d.popcount`, `d.count_trailing_zeros`, `d.count_leading_zeros` | `INITED` | unchanged |
 | `d.length()` | any state | unchanged; safe after `uninit` |
 
 `d.memcpy`, `d.memcmp`, and `d.memmem` also check the first argument's array

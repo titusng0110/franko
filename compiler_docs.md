@@ -1043,9 +1043,10 @@ throughout the compiler and serializer.
 The array-intrinsic vocabulary is still `SemanticArrayIntrinsicKind`: INIT,
 INIT_ZERO, RESIZE, UNINIT, MEMSET, MEMCPY, MEMMOVE, LENGTH, MEMCMP, MEMCHR,
 MEMMEM, the twenty-four `READ_*`/`WRITE_*_{LE,BE}` endian accessors,
-READ_BIT, WRITE_BIT, FLIP_BIT, BITWISE_NOT_MASK, BITWISE_XOR_MASK,
-BITWISE_AND_MASK, BITWISE_OR_MASK, SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT,
-COUNT_SET_BITS. Each descriptor carries a runtime member name, return kind,
+READ_BIT, WRITE_BIT, FLIP_BIT, SWAP_BITS, REVERSE_BITS, MEMSET_NOT,
+MEMSET_XOR, MEMSET_AND, MEMSET_OR, SHIFT_BITS_LEFT, SHIFT_BITS_RIGHT,
+POPCOUNT, COUNT_TRAILING_ZEROS, COUNT_LEADING_ZEROS. Each descriptor carries
+a runtime member name, return kind,
 dynamic-only flag, element rule (none/memset-safe/memcpy-safe/byte), receiver
 permission, allowed arities, and per-argument kinds.
 `SastNode.ARRAY_INTRINSIC_CALL` stores `intrinsicKind`, `receiver`, and `args`
@@ -2510,11 +2511,13 @@ used:
   assignment into a `ptr`-typed slot, method `self`).
 - *Mutation (mview)*: assignment through the variable's region,
   `memset`/`memcpy`/`memmove`, the byte/bit mutators (`write_*`,
-  `write_bit`, `flip_bit`, `bitwise_*_mask`, `shift_bits_*`), or use where an
+  `write_bit`, `flip_bit`, `swap_bits`, `reverse_bits`, `memset_*`,
+  `shift_bits_*`), or use where an
   `mview<T>` is expected.
 - *Read (view)*: reads through the region, `length`, `memcmp`, `memchr`,
-  `memmem`, the `read_*` accessors, `read_bit`, `count_set_bits`, or use
-  where a `view<T>` is expected.
+  `memmem`, the `read_*` accessors, `read_bit`, `popcount`,
+  `count_trailing_zeros`, `count_leading_zeros`, or use where a `view<T>` is
+  expected.
 
 Attribution follows the pointer-boundary rule (§4.9): an operation through
 `$(v)` credits `v` at the level its region is used, but once the access path

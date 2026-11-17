@@ -1,0 +1,6 @@
+// Failure fixture: intrinsics/reverse_bits_static_oob
+func main() -> int32 {
+    [byte, 2] a;
+    a.reverse_bits(15, 2);
+    return 0;
+}

@@ -10,6 +10,7 @@
 // partial assignments that failed and caused the search to retreat.
 
 import "franko/stdio"
+import "franko/bit"
 
 namespace text {
     func read_line_len(mview<[byte]> buf, const uint32 cap, mview<uint32> line_len) -> int32 {
@@ -174,12 +175,13 @@ struct Sudoku {
             return SolveResult::no_solution
         }
 
-        for (byte digit = 1; digit <= 9; digit++) {
+        uint32 remaining = candidates
+        while (remaining != 0) {
+            uint32 bit_index = bit::ctz32(remaining)
             uint32 bit = 1
-            bit = bit << (digit - 1)
-            if ((candidates & bit) == 0) {
-                continue
-            }
+            bit = bit << bit_index
+            byte digit = unsafe_cast<byte>(bit_index + 1)
+            remaining = remaining & (remaining - 1)
 
             $(self).board[best_row][best_col] = digit
             $(self).row_mask[best_row] = $(self).row_mask[best_row] | bit

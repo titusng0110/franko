@@ -561,7 +561,7 @@ func main() -> int32 {
     flags.memset(0);
     flags.write_bit(15, 1);
     stdout(flags.read_bit(15));         // 1
-    stdout(flags.count_set_bits());     // 1
+    stdout(flags.popcount());           // 1
 
     return 0;
 }

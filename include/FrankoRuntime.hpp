@@ -20,9 +20,10 @@
 //
 // What FRANKO_BOUNDS_UNCHECKED strips: static array indexing,
 // fat-pointer operator[], memset/memcpy/memmove/memcmp ranges,
-// memchr/memmem start/range, endian offset+width, bit indices, and
-// unsafe_cast range checks. Null, uninitialized, lifecycle, and
-// dynamic-array descriptor checks always stay.
+// memchr/memmem start/range, endian offset+width, bit indices and bit
+// ranges, memset_* byte ranges, and unsafe_cast range checks. Null,
+// uninitialized, lifecycle, and dynamic-array descriptor checks always
+// stay.
 // ============================================================
 
 #ifndef FRANKO_USE_JEMALLOC
@@ -52,6 +53,14 @@
 
 #if FRANKO_USE_JEMALLOC
 #include <jemalloc/jemalloc.h> // for je_malloc, je_calloc, je_realloc, je_free
+#endif
+
+#if defined(__aarch64__)
+#include <arm_neon.h> // for the byte-array fill and popcount fast paths
+#elif defined(_M_ARM64)
+#include <arm64_neon.h> // MSVC ARM64 NEON header
+#elif defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h> // for the SSE2 byte-array fill fast paths
 #endif
 
 [[noreturn]] inline void franko_panic(const char* message) {
@@ -379,8 +388,8 @@ T (&franko_static_array_ref(T* data))[N] {
 //
 // These implement the Franko byte-array intrinsics: memchr / memmem,
 // the read_*_{LE,BE} / write_*_{LE,BE} endian accessors,
-// read_bit / write_bit / flip_bit, the bitwise_*_mask and
-// shift_bits_* mutators, and count_set_bits. memcmp is not here: it
+// read_bit / write_bit / flip_bit / swap_bits / reverse_bits, the
+// memset_* byte fills, shift_bits_* mutators, and popcount. memcmp is not here: it
 // lives inside Franko_Fat_Pointer next to memset / memcpy / memmove.
 //
 // Design:
@@ -700,45 +709,335 @@ inline void flip_bit_impl(const char* cls, const char* op, uint8_t* data, uint32
     data[bitIndex >> 3] ^= static_cast<uint8_t>(1u << (bitIndex & 7));
 }
 
+inline void swap_bits_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint64_t firstBit, uint64_t secondBit) {
+    check_bit_index(cls, op, data, count, firstBit);
+    check_bit_index(cls, op, data, count, secondBit);
+
+    if (firstBit == secondBit) {
+        return;
+    }
+
+    const uint64_t firstByte = firstBit >> 3;
+    const uint64_t secondByte = secondBit >> 3;
+    const uint8_t firstMask = static_cast<uint8_t>(1u << (firstBit & 7));
+    const uint8_t secondMask = static_cast<uint8_t>(1u << (secondBit & 7));
+    const uint8_t firstValue = static_cast<uint8_t>(data[firstByte] & firstMask);
+    const uint8_t secondValue = static_cast<uint8_t>(data[secondByte] & secondMask);
+
+    if (firstValue != secondValue) {
+        data[firstByte] ^= firstMask;
+        data[secondByte] ^= secondMask;
+    }
+}
+
+inline void reverse_bits_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint64_t startBit, uint64_t bitCount) {
+    if (data == nullptr)
+        fail(cls, op, "on uninitialized array");
+
+#if !FRANKO_BOUNDS_UNCHECKED
+    const uint64_t totalBits = static_cast<uint64_t>(count) * 8;
+
+    if (startBit > totalBits || bitCount > totalBits - startBit)
+        fail(cls, op, "bit range out of bounds");
+#else
+    (void)count;
+#endif
+
+    if (bitCount < 2) {
+        return;
+    }
+
+    uint64_t low = startBit;
+    uint64_t high = startBit + bitCount - 1;
+
+    while (low < high) {
+        const uint8_t lowMask = static_cast<uint8_t>(1u << (low & 7));
+        const uint8_t highMask = static_cast<uint8_t>(1u << (high & 7));
+        const uint8_t lowValue = static_cast<uint8_t>(data[low >> 3] & lowMask);
+        const uint8_t highValue = static_cast<uint8_t>(data[high >> 3] & highMask);
+
+        if (lowValue != highValue) {
+            data[low >> 3] ^= lowMask;
+            data[high >> 3] ^= highMask;
+        }
+
+        ++low;
+        --high;
+    }
+}
+
+// Count zero bits starting at bitIndex and walking toward the array
+// end. The bit at bitIndex is included, so a set bit returns zero.
+inline uint64_t count_trailing_zeros_impl(const char* cls, const char* op, const uint8_t* data, uint32_t count, uint64_t bitIndex) {
+    check_bit_index(cls, op, data, count, bitIndex);
+
+    const uint64_t byteIndex = bitIndex >> 3;
+    const uint32_t bitOffset = static_cast<uint32_t>(bitIndex & 7);
+    uint32_t value = static_cast<uint32_t>(data[byteIndex]) >> bitOffset;
+
+    if (value != 0) {
+        uint32_t zeros = 0;
+
+        while ((value & 1u) == 0) {
+            ++zeros;
+            value >>= 1;
+        }
+
+        return zeros;
+    }
+
+    uint64_t zeros = static_cast<uint64_t>(8 - bitOffset);
+
+    for (uint64_t i = byteIndex + 1; i < count; ++i) {
+        if (data[i] != 0) {
+            uint32_t byteValue = data[i];
+            uint32_t inByte = 0;
+
+            while ((byteValue & 1u) == 0) {
+                ++inByte;
+                byteValue >>= 1;
+            }
+
+            return zeros + inByte;
+        }
+
+        zeros += 8;
+    }
+
+    return zeros;
+}
+
+// Count zero bits starting at bitIndex and walking toward the array
+// start. The bit at bitIndex is included, so a set bit returns zero.
+inline uint64_t count_leading_zeros_impl(const char* cls, const char* op, const uint8_t* data, uint32_t count, uint64_t bitIndex) {
+    check_bit_index(cls, op, data, count, bitIndex);
+
+    const uint64_t byteIndex = bitIndex >> 3;
+    const uint32_t bitOffset = static_cast<uint32_t>(bitIndex & 7);
+    const uint32_t mask = bitOffset == 7 ? 0xFFu : ((1u << (bitOffset + 1)) - 1u);
+    uint32_t value = static_cast<uint32_t>(data[byteIndex]) & mask;
+
+    if (value != 0) {
+        uint32_t highest = 0;
+
+        while ((value >> (highest + 1)) != 0) {
+            ++highest;
+        }
+
+        return static_cast<uint64_t>(bitOffset - highest);
+    }
+
+    uint64_t zeros = static_cast<uint64_t>(bitOffset + 1);
+
+    for (uint64_t i = byteIndex; i-- > 0; ) {
+        if (data[i] != 0) {
+            uint32_t byteValue = data[i];
+            uint32_t highest = 0;
+
+            while ((byteValue >> (highest + 1)) != 0) {
+                ++highest;
+            }
+
+            return zeros + static_cast<uint64_t>(7 - highest);
+        }
+
+        zeros += 8;
+    }
+
+    return zeros;
+}
+
 // ------------------------------------------------------------
-// Whole-array bitwise mask mutators: a[i] = ~a[i] / a[i] ^= mask /
-// a[i] &= mask / a[i] |= mask.
+// Ranged and whole-array byte fills: a[i] = ~a[i] / a[i] ^= value /
+// a[i] &= value / a[i] |= value. The range form checks start/count
+// exactly like memchr; the whole-array form passes start = 0.
 // ------------------------------------------------------------
 
-inline void bitwise_not_impl(const char* cls, const char* op, uint8_t* data, uint32_t count) {
+inline void memset_not_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint32_t start, uint32_t range) {
     if (data == nullptr)
         fail(cls, op, "on uninitialized array");
 
-    for (uint32_t i = 0; i < count; ++i) {
-        data[i] = static_cast<uint8_t>(~data[i]);
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (start > count)
+        fail(cls, op, "start out of bounds");
+
+    if (range > count - start)
+        fail(cls, op, "range out of bounds");
+#else
+    (void)count;
+#endif
+
+    uint8_t* bytes = data + start;
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+    uint32_t i = 0;
+
+    for (; i + 16 <= range; i += 16) {
+        const uint8x16_t v = vld1q_u8(bytes + i);
+        vst1q_u8(bytes + i, vmvnq_u8(v));
     }
+
+    for (; i < range; ++i) {
+        bytes[i] = static_cast<uint8_t>(~bytes[i]);
+    }
+#elif defined(__x86_64__) || defined(_M_X64)
+    uint32_t i = 0;
+    const __m128i ones = _mm_set1_epi8(-1);
+
+    for (; i + 16 <= range; i += 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bytes + i));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(bytes + i), _mm_xor_si128(v, ones));
+    }
+
+    for (; i < range; ++i) {
+        bytes[i] = static_cast<uint8_t>(~bytes[i]);
+    }
+#else
+    for (uint32_t i = 0; i < range; ++i) {
+        bytes[i] = static_cast<uint8_t>(~bytes[i]);
+    }
+#endif
 }
 
-inline void bitwise_xor_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint8_t mask) {
+inline void memset_xor_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint32_t start, uint32_t range, uint8_t value) {
     if (data == nullptr)
         fail(cls, op, "on uninitialized array");
 
-    for (uint32_t i = 0; i < count; ++i) {
-        data[i] ^= mask;
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (start > count)
+        fail(cls, op, "start out of bounds");
+
+    if (range > count - start)
+        fail(cls, op, "range out of bounds");
+#else
+    (void)count;
+#endif
+
+    uint8_t* bytes = data + start;
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+    uint32_t i = 0;
+    const uint8x16_t fill = vdupq_n_u8(value);
+
+    for (; i + 16 <= range; i += 16) {
+        const uint8x16_t v = vld1q_u8(bytes + i);
+        vst1q_u8(bytes + i, veorq_u8(v, fill));
     }
+
+    for (; i < range; ++i) {
+        bytes[i] ^= value;
+    }
+#elif defined(__x86_64__) || defined(_M_X64)
+    uint32_t i = 0;
+    const __m128i fill = _mm_set1_epi8(static_cast<char>(value));
+
+    for (; i + 16 <= range; i += 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bytes + i));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(bytes + i), _mm_xor_si128(v, fill));
+    }
+
+    for (; i < range; ++i) {
+        bytes[i] ^= value;
+    }
+#else
+    for (uint32_t i = 0; i < range; ++i) {
+        bytes[i] ^= value;
+    }
+#endif
 }
 
-inline void bitwise_and_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint8_t mask) {
+inline void memset_and_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint32_t start, uint32_t range, uint8_t value) {
     if (data == nullptr)
         fail(cls, op, "on uninitialized array");
 
-    for (uint32_t i = 0; i < count; ++i) {
-        data[i] &= mask;
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (start > count)
+        fail(cls, op, "start out of bounds");
+
+    if (range > count - start)
+        fail(cls, op, "range out of bounds");
+#else
+    (void)count;
+#endif
+
+    uint8_t* bytes = data + start;
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+    uint32_t i = 0;
+    const uint8x16_t fill = vdupq_n_u8(value);
+
+    for (; i + 16 <= range; i += 16) {
+        const uint8x16_t v = vld1q_u8(bytes + i);
+        vst1q_u8(bytes + i, vandq_u8(v, fill));
     }
+
+    for (; i < range; ++i) {
+        bytes[i] &= value;
+    }
+#elif defined(__x86_64__) || defined(_M_X64)
+    uint32_t i = 0;
+    const __m128i fill = _mm_set1_epi8(static_cast<char>(value));
+
+    for (; i + 16 <= range; i += 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bytes + i));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(bytes + i), _mm_and_si128(v, fill));
+    }
+
+    for (; i < range; ++i) {
+        bytes[i] &= value;
+    }
+#else
+    for (uint32_t i = 0; i < range; ++i) {
+        bytes[i] &= value;
+    }
+#endif
 }
 
-inline void bitwise_or_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint8_t mask) {
+inline void memset_or_impl(const char* cls, const char* op, uint8_t* data, uint32_t count, uint32_t start, uint32_t range, uint8_t value) {
     if (data == nullptr)
         fail(cls, op, "on uninitialized array");
 
-    for (uint32_t i = 0; i < count; ++i) {
-        data[i] |= mask;
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (start > count)
+        fail(cls, op, "start out of bounds");
+
+    if (range > count - start)
+        fail(cls, op, "range out of bounds");
+#else
+    (void)count;
+#endif
+
+    uint8_t* bytes = data + start;
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+    uint32_t i = 0;
+    const uint8x16_t fill = vdupq_n_u8(value);
+
+    for (; i + 16 <= range; i += 16) {
+        const uint8x16_t v = vld1q_u8(bytes + i);
+        vst1q_u8(bytes + i, vorrq_u8(v, fill));
     }
+
+    for (; i < range; ++i) {
+        bytes[i] |= value;
+    }
+#elif defined(__x86_64__) || defined(_M_X64)
+    uint32_t i = 0;
+    const __m128i fill = _mm_set1_epi8(static_cast<char>(value));
+
+    for (; i + 16 <= range; i += 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bytes + i));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(bytes + i), _mm_or_si128(v, fill));
+    }
+
+    for (; i < range; ++i) {
+        bytes[i] |= value;
+    }
+#else
+    for (uint32_t i = 0; i < range; ++i) {
+        bytes[i] |= value;
+    }
+#endif
 }
 
 // ------------------------------------------------------------
@@ -781,6 +1080,9 @@ inline void shift_bits_left_impl(const char* cls, const char* op, uint8_t* data,
     // bit i - bitShift. Run 64 bits at a time over the contiguous block
     // (unaligned-safe word loads), descending so every word still holds
     // old data: new_word = (word << bitShift) | (below >> (64 - bitShift)).
+    // A 16-byte SIMD version needs a cross-lane carry byte; this word pass
+    // already moves eight bytes per iteration and is memory-bound on large
+    // arrays, so it is not clearly slower than the extra carry work.
     const uint32_t words = count / 8;
 
     // Partial top bytes first (they read into the last full word).
@@ -842,6 +1144,9 @@ inline void shift_bits_right_impl(const char* cls, const char* op, uint8_t* data
     // bit i + bitShift. Run 64 bits at a time over the contiguous block
     // (unaligned-safe word loads), ascending so every word still holds
     // old data: new_word = (word >> bitShift) | (above << (64 - bitShift)).
+    // The SIMD trade-off is the same as in shift_bits_left_impl: a vector
+    // version needs a cross-lane carry byte, while this pass already moves
+    // eight bytes per iteration.
     const uint32_t rem = count % 8;
     const uint32_t words = count / 8;
 
@@ -874,12 +1179,28 @@ inline void shift_bits_right_impl(const char* cls, const char* op, uint8_t* data
     }
 }
 
-inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8_t* data, uint32_t count) {
+inline uint64_t popcount_impl(const char* cls, const char* op, const uint8_t* data, uint32_t count) {
     if (data == nullptr)
         fail(cls, op, "on uninitialized array");
 
     uint64_t total = 0;
 
+#if defined(__aarch64__) || defined(_M_ARM64)
+    uint32_t i = 0;
+
+    for (; i + 16 <= count; i += 16) {
+        const uint8x16_t bits = vcntq_u8(vld1q_u8(data + i));
+        total += vaddvq_u8(bits);
+    }
+
+    for (; i < count; ++i) {
+        uint32_t v = data[i];
+        v = v - ((v >> 1) & 0x55u);
+        v = (v & 0x33u) + ((v >> 2) & 0x33u);
+        v = (v + (v >> 4)) & 0x0Fu;
+        total += v;
+    }
+#else
     for (uint32_t i = 0; i < count; ++i) {
         // Classic SWAR popcount of one byte, branch-free and
         // auto-vectorizable.
@@ -890,6 +1211,7 @@ inline uint64_t count_set_bits_impl(const char* cls, const char* op, const uint8
 
         total += v;
     }
+#endif
 
     return total;
 }
@@ -1635,40 +1957,112 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer flip_bit called on non-array");
     }
 
-    void bitwise_not_mask() {
+    void memset_not() {
         if (mode == 2)
-            franko_byte_arrays::bitwise_not_impl("Franko_Fat_Pointer", "bitwise_not_mask", static_cast<T*>(data), count);
+            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<T*>(data), count, 0, count);
         else if (mode == 3)
-            franko_byte_arrays::bitwise_not_impl("Franko_Fat_Pointer", "bitwise_not_mask", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
+            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
         else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_not_mask called on non-array");
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_not called on non-array");
     }
 
-    void bitwise_xor_mask(uint8_t mask) {
+    void memset_not(uint32_t start, uint32_t elementCount) {
         if (mode == 2)
-            franko_byte_arrays::bitwise_xor_impl("Franko_Fat_Pointer", "bitwise_xor_mask", static_cast<T*>(data), count, mask);
+            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<T*>(data), count, start, elementCount);
         else if (mode == 3)
-            franko_byte_arrays::bitwise_xor_impl("Franko_Fat_Pointer", "bitwise_xor_mask", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, mask);
+            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount);
         else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_xor_mask called on non-array");
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_not called on non-array");
     }
 
-    void bitwise_and_mask(uint8_t mask) {
+    void memset_xor(uint8_t value) {
         if (mode == 2)
-            franko_byte_arrays::bitwise_and_impl("Franko_Fat_Pointer", "bitwise_and_mask", static_cast<T*>(data), count, mask);
+            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<T*>(data), count, 0, count, value);
         else if (mode == 3)
-            franko_byte_arrays::bitwise_and_impl("Franko_Fat_Pointer", "bitwise_and_mask", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, mask);
+            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
         else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_and_mask called on non-array");
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_xor called on non-array");
     }
 
-    void bitwise_or_mask(uint8_t mask) {
+    void memset_xor(uint8_t value, uint32_t start, uint32_t elementCount) {
         if (mode == 2)
-            franko_byte_arrays::bitwise_or_impl("Franko_Fat_Pointer", "bitwise_or_mask", static_cast<T*>(data), count, mask);
+            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<T*>(data), count, start, elementCount, value);
         else if (mode == 3)
-            franko_byte_arrays::bitwise_or_impl("Franko_Fat_Pointer", "bitwise_or_mask", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, mask);
+            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
         else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer bitwise_or_mask called on non-array");
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_xor called on non-array");
+    }
+
+    void memset_and(uint8_t value) {
+        if (mode == 2)
+            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<T*>(data), count, 0, count, value);
+        else if (mode == 3)
+            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_and called on non-array");
+    }
+
+    void memset_and(uint8_t value, uint32_t start, uint32_t elementCount) {
+        if (mode == 2)
+            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<T*>(data), count, start, elementCount, value);
+        else if (mode == 3)
+            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_and called on non-array");
+    }
+
+    void memset_or(uint8_t value) {
+        if (mode == 2)
+            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<T*>(data), count, 0, count, value);
+        else if (mode == 3)
+            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_or called on non-array");
+    }
+
+    void memset_or(uint8_t value, uint32_t start, uint32_t elementCount) {
+        if (mode == 2)
+            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<T*>(data), count, start, elementCount, value);
+        else if (mode == 3)
+            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_or called on non-array");
+    }
+
+    void swap_bits(uint64_t firstBit, uint64_t secondBit) {
+        if (mode == 2)
+            franko_byte_arrays::swap_bits_impl("Franko_Fat_Pointer", "swap_bits", static_cast<T*>(data), count, firstBit, secondBit);
+        else if (mode == 3)
+            franko_byte_arrays::swap_bits_impl("Franko_Fat_Pointer", "swap_bits", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, firstBit, secondBit);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer swap_bits called on non-array");
+    }
+
+    void reverse_bits(uint64_t startBit, uint64_t bitCount) {
+        if (mode == 2)
+            franko_byte_arrays::reverse_bits_impl("Franko_Fat_Pointer", "reverse_bits", static_cast<T*>(data), count, startBit, bitCount);
+        else if (mode == 3)
+            franko_byte_arrays::reverse_bits_impl("Franko_Fat_Pointer", "reverse_bits", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, startBit, bitCount);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer reverse_bits called on non-array");
+    }
+
+    uint64_t count_trailing_zeros(uint64_t bitIndex) const {
+        if (mode == 2)
+            return franko_byte_arrays::count_trailing_zeros_impl("Franko_Fat_Pointer", "count_trailing_zeros", static_cast<T*>(data), count, bitIndex);
+        else if (mode == 3)
+            return franko_byte_arrays::count_trailing_zeros_impl("Franko_Fat_Pointer", "count_trailing_zeros", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer count_trailing_zeros called on non-array");
+    }
+
+    uint64_t count_leading_zeros(uint64_t bitIndex) const {
+        if (mode == 2)
+            return franko_byte_arrays::count_leading_zeros_impl("Franko_Fat_Pointer", "count_leading_zeros", static_cast<T*>(data), count, bitIndex);
+        else if (mode == 3)
+            return franko_byte_arrays::count_leading_zeros_impl("Franko_Fat_Pointer", "count_leading_zeros", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
+        else
+            franko_panic("Internal compiler error: Franko_Fat_Pointer count_leading_zeros called on non-array");
     }
 
     void shift_bits_left(uint64_t bitCount) {
@@ -1689,13 +2083,13 @@ struct Franko_Fat_Pointer {
             franko_panic("Internal compiler error: Franko_Fat_Pointer shift_bits_right called on non-array");
     }
 
-    uint64_t count_set_bits() const {
+    uint64_t popcount() const {
         if (mode == 2)
-            return franko_byte_arrays::count_set_bits_impl("Franko_Fat_Pointer", "count_set_bits", static_cast<T*>(data), count);
+            return franko_byte_arrays::popcount_impl("Franko_Fat_Pointer", "popcount", static_cast<T*>(data), count);
         else if (mode == 3)
-            return franko_byte_arrays::count_set_bits_impl("Franko_Fat_Pointer", "count_set_bits", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
+            return franko_byte_arrays::popcount_impl("Franko_Fat_Pointer", "popcount", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
         else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer count_set_bits called on non-array");
+            franko_panic("Internal compiler error: Franko_Fat_Pointer popcount called on non-array");
     }
 };
 

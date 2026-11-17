@@ -1279,6 +1279,61 @@ public class ExpressionChecker {
         }
     }
 
+    void ensureStaticArrayBitRangeInBounds(
+            SastType arrayType,
+            SastNode startExpr,
+            SastNode countExpr,
+            String message
+    ) {
+        if (!(arrayType.kind == SastTypeKind.STATIC_ARRAY)) {
+            return;
+        }
+
+        if (startExpr == null
+                || countExpr == null
+                || !startExpr.isConstant()
+                || !countExpr.isConstant()) {
+            return;
+        }
+
+        BigInteger start = startExpr.constantValue;
+        BigInteger count = countExpr.constantValue;
+
+        if (start == null
+                || count == null
+                || start.signum() < 0
+                || count.signum() < 0) {
+            return;
+        }
+
+        SastType staticArray = arrayType;
+        BigInteger size = staticArraySize(staticArray);
+
+        if (size == null) {
+            return;
+        }
+
+        BigInteger totalBits = size.multiply(BigInteger.valueOf(8));
+
+        if (start.compareTo(totalBits) > 0
+                || start.add(count).compareTo(totalBits) > 0) {
+            diagnostics.error(message
+                    + " is out of bounds for "
+                    + arrayType.describe()
+                    + " with "
+                    + totalBits
+                    + " bits: start bit "
+                    + start
+                    + ", bit count "
+                    + count
+                    + ". The reversed bit range must fit inside the array's "
+                    + "bit string. Reduce the start bit or bit count so "
+                    + "start + count does not exceed "
+                    + totalBits
+                    + ".");
+        }
+    }
+
     private BigInteger staticArraySize(SastType staticArray) {
         try {
             return types.parseIntegerLiteral(staticArray.sizeLiteral);

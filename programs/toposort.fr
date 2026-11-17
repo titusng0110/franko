@@ -164,8 +164,8 @@ struct TopoSort {
             return -1
         }
 
+        $(self).head.memset(0xFF)
         for (uint32 i = 0; i < nodes; i++) {
-            $(self).head[i] = NODE_NIL
             $(self).mark[i] = Mark::white
         }
 

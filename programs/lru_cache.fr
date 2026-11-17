@@ -125,14 +125,7 @@ namespace text {
         if (count != $(word).length()) {
             return 0
         }
-        std::String token
-        if (string_from_slice(buf, start, count, ptr(token)) != 0) {
-            token.uninit()
-            return 0
-        }
-        (uint32 idx, int32 err) hit = token.find(word)
-        token.uninit()
-        if (hit.err == 0 && hit.idx == 0) {
+        if ($(buf).memcmp(word, start, 0, count) == 0) {
             return 1
         }
         return 0
@@ -278,10 +271,8 @@ struct LruCache {
             return -1
         }
 
-        for (uint32 i = 0; i < slot_count; i++) {
-            $(self).prev[i] = NIL
-            $(self).next[i] = NIL
-        }
+        $(self).prev.memset(0xFF)
+        $(self).next.memset(0xFF)
         for (uint32 i = 0; i < table_size; i++) {
             $(self).table_states[i] = SlotState::empty
         }

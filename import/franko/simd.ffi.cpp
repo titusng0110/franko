@@ -3,8 +3,10 @@
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
-#elif defined(__aarch64__) || defined(_M_ARM64)
+#elif defined(__aarch64__)
 #include <arm_neon.h>
+#elif defined(_M_ARM64)
+#include <arm64_neon.h>
 #endif
 // @@end
 

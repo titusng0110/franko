@@ -1,0 +1,6 @@
+// Failure fixture: intrinsics/memset_xor_range_oob
+func main() -> int32 {
+    [byte, 4] a;
+    a.memset_xor(0xFF, 3, 2);
+    return 0;
+}
