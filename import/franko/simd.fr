@@ -1,3 +1,6 @@
+// Native x86_64/ARM64 SIMD wrappers. This surface is intentionally
+// architecture-specific: it exposes the underlying intrinsics instead of
+// providing a portable or unified SIMD layer. See library_docs/simd.md.
 namespace simd {
     #if (#IS_X86_64) {
         namespace x86 {
@@ -31,6 +34,46 @@ namespace simd {
             }
 
             #inline func min_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func add_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func sub_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func avg_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func blendv_epi8(mview<[byte]> target, view<[byte]> source, view<[byte]> mask, uint32 dst_start, uint32 src_start, uint32 mask_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func alignr_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count, uint32 shift) -> void {
+                return
+            }
+
+            #inline func unpacklo_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func unpackhi_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func packus_epi16(mview<[byte]> target, view<[int16]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func sad_epu8(view<[byte]> left, view<[byte]> right, uint32 left_start, uint32 right_start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func abs_epi8(mview<[int8]> target, view<[int8]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 
@@ -78,6 +121,50 @@ namespace simd {
             }
 
             #inline func vminq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vaddq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vsubq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vrhaddq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vbslq_u8(mview<[byte]> target, view<[byte]> source, view<[byte]> mask, uint32 dst_start, uint32 src_start, uint32 mask_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vextq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count, uint32 shift) -> void {
+                return
+            }
+
+            #inline func vzip1q_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vzip2q_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vqmovun_s16(mview<[byte]> target, view<[int16]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vabdq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vpaddlq_u16(mview<[uint32]> target, view<[uint16]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vabsq_s8(mview<[int8]> target, view<[int8]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 

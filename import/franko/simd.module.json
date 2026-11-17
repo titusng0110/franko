@@ -39,6 +39,46 @@
     },
     {
       "namespace": "simd::x86",
+      "name": "add_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "sub_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "avg_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "blendv_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "alignr_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "unpacklo_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "unpackhi_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "packus_epi16"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "sad_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "abs_epi8"
+    },
+    {
+      "namespace": "simd::x86",
       "name": "shuffle_epi8"
     },
     {
@@ -80,6 +120,50 @@
     {
       "namespace": "simd::arm",
       "name": "vminq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vaddq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vsubq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vrhaddq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vbslq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vextq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vzip1q_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vzip2q_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vqmovun_s16"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vabdq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vpaddlq_u16"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vabsq_s8"
     },
     {
       "namespace": "simd::arm",

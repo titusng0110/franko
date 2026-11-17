@@ -1,0 +1,368 @@
+import "franko/stdio"
+import "franko/time"
+import "franko/bit"
+
+// franko/bit vs naive Franko.
+//
+// 4,000,000 iterations per case. Inputs vary per iteration and every result
+// is accumulated so the optimizer cannot remove the work. Build with -Omax.
+
+// Naive scalar references.
+func naive_ctz32(uint32 value) -> uint32 {
+    uint32 count = 0
+    while (count < 32) {
+        if ((value & 1) != 0) {
+            return count
+        }
+        value = value >> 1
+        count = count + 1
+    }
+    return 32
+}
+
+func naive_ctz64(uint64 value) -> uint32 {
+    uint32 count = 0
+    while (count < 64) {
+        if ((value & 1) != 0) {
+            return count
+        }
+        value = value >> 1
+        count = count + 1
+    }
+    return 64
+}
+
+func naive_clz32(uint32 value) -> uint32 {
+    uint32 count = 0
+    while (count < 32) {
+        if ((value & 0x80000000) != 0) {
+            return count
+        }
+        value = value << 1
+        count = count + 1
+    }
+    return 32
+}
+
+func naive_clz64(uint64 value) -> uint32 {
+    uint32 count = 0
+    while (count < 64) {
+        if ((value & 0x8000000000000000) != 0) {
+            return count
+        }
+        value = value << 1
+        count = count + 1
+    }
+    return 64
+}
+
+func naive_popcount32(uint32 value) -> uint32 {
+    uint32 count = 0
+    while (value != 0) {
+        count = count + (value & 1)
+        value = value >> 1
+    }
+    return count
+}
+
+func naive_popcount64(uint64 value) -> uint32 {
+    uint32 count = 0
+    while (value != 0) {
+        if ((value & 1) != 0) {
+            count = count + 1
+        }
+        value = value >> 1
+    }
+    return count
+}
+
+func naive_bswap32(uint32 value) -> uint32 {
+    uint32 result = 0
+    uint32 i = 0
+    while (i < 4) {
+        result = (result << 8) | (value & 0xFF)
+        value = value >> 8
+        i = i + 1
+    }
+    return result
+}
+
+func naive_bswap64(uint64 value) -> uint64 {
+    uint64 result = 0
+    uint32 i = 0
+    while (i < 8) {
+        result = (result << 8) | (value & 0xFF)
+        value = value >> 8
+        i = i + 1
+    }
+    return result
+}
+
+// Benchmarks.
+func bench_ctz32(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint32 value = (cast<uint32>(1) << (r & 31)) | (r & 0x3FF)
+        simd_checksum = simd_checksum + cast<uint64>(bit::ctz32(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint32 value = (cast<uint32>(1) << (r & 31)) | (r & 0x3FF)
+        naive_checksum = naive_checksum + cast<uint64>(naive_ctz32(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_ctz64(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(1) << cast<uint64>(r & 63)) | cast<uint64>(r & 0x3FF)
+        simd_checksum = simd_checksum + cast<uint64>(bit::ctz64(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(1) << cast<uint64>(r & 63)) | cast<uint64>(r & 0x3FF)
+        naive_checksum = naive_checksum + cast<uint64>(naive_ctz64(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_clz32(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint32 value = (0x80000000 >> (r & 31)) | (r & 0x3FF)
+        simd_checksum = simd_checksum + cast<uint64>(bit::clz32(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint32 value = (0x80000000 >> (r & 31)) | (r & 0x3FF)
+        naive_checksum = naive_checksum + cast<uint64>(naive_clz32(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_clz64(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint64 value = (0x8000000000000000 >> cast<uint64>(r & 63)) | cast<uint64>(r & 0x3FF)
+        simd_checksum = simd_checksum + cast<uint64>(bit::clz64(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint64 value = (0x8000000000000000 >> cast<uint64>(r & 63)) | cast<uint64>(r & 0x3FF)
+        naive_checksum = naive_checksum + cast<uint64>(naive_clz64(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_popcount32(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint32 value = (r * 2654435761) ^ (r >> 3)
+        simd_checksum = simd_checksum + cast<uint64>(bit::popcount32(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint32 value = (r * 2654435761) ^ (r >> 3)
+        naive_checksum = naive_checksum + cast<uint64>(naive_popcount32(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_popcount64(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(r) * 11400714819323198485) ^ cast<uint64>(r >> 3)
+        simd_checksum = simd_checksum + cast<uint64>(bit::popcount64(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(r) * 11400714819323198485) ^ cast<uint64>(r >> 3)
+        naive_checksum = naive_checksum + cast<uint64>(naive_popcount64(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_bswap32(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint32 value = (r * 2654435761) ^ (r << 7)
+        simd_checksum = simd_checksum + cast<uint64>(bit::bswap32(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint32 value = (r * 2654435761) ^ (r << 7)
+        naive_checksum = naive_checksum + cast<uint64>(naive_bswap32(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func bench_bswap64(uint32 reps) -> (int64, int64, uint64, uint64) {
+    uint64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(r) * 11400714819323198485) ^ cast<uint64>(r << 3)
+        simd_checksum = simd_checksum + cast<uint64>(bit::bswap64(value))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    uint64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        uint64 value = (cast<uint64>(r) * 11400714819323198485) ^ cast<uint64>(r << 3)
+        naive_checksum = naive_checksum + cast<uint64>(naive_bswap64(value))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, uint64, uint64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+func main() -> int32 {
+    uint32 reps = 4000000
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) ctz32_r = bench_ctz32(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) ctz64_r = bench_ctz64(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) clz32_r = bench_clz32(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) clz64_r = bench_clz64(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) popcount32_r = bench_popcount32(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) popcount64_r = bench_popcount64(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) bswap32_r = bench_bswap32(reps)
+    (int64 simd_ns, int64 naive_ns, uint64 simd_checksum, uint64 naive_checksum) bswap64_r = bench_bswap64(reps)
+    uint64 simd_total = 0
+    uint64 naive_total = 0
+    simd_total = simd_total + ctz32_r.simd_checksum
+    naive_total = naive_total + ctz32_r.naive_checksum
+    stdout("ctz32 ", end = null)
+    stdout(ctz32_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(ctz32_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + ctz64_r.simd_checksum
+    naive_total = naive_total + ctz64_r.naive_checksum
+    stdout("ctz64 ", end = null)
+    stdout(ctz64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(ctz64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + clz32_r.simd_checksum
+    naive_total = naive_total + clz32_r.naive_checksum
+    stdout("clz32 ", end = null)
+    stdout(clz32_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(clz32_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + clz64_r.simd_checksum
+    naive_total = naive_total + clz64_r.naive_checksum
+    stdout("clz64 ", end = null)
+    stdout(clz64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(clz64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + popcount32_r.simd_checksum
+    naive_total = naive_total + popcount32_r.naive_checksum
+    stdout("popcount32 ", end = null)
+    stdout(popcount32_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(popcount32_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + popcount64_r.simd_checksum
+    naive_total = naive_total + popcount64_r.naive_checksum
+    stdout("popcount64 ", end = null)
+    stdout(popcount64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(popcount64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + bswap32_r.simd_checksum
+    naive_total = naive_total + bswap32_r.naive_checksum
+    stdout("bswap32 ", end = null)
+    stdout(bswap32_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(bswap32_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    simd_total = simd_total + bswap64_r.simd_checksum
+    naive_total = naive_total + bswap64_r.naive_checksum
+    stdout("bswap64 ", end = null)
+    stdout(bswap64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(bswap64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps))
+    stdout("simd_checksum ", end = null)
+    stdout(simd_total, end = null)
+    stdout(" ", end = null)
+    stdout("naive_checksum ", end = null)
+    stdout(naive_total)
+    return 0
+}

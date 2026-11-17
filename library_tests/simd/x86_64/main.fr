@@ -1,6 +1,15 @@
 import "franko/stdio"
 import "franko/simd"
 
+func copy_bytes(mview<[byte]> dst, view<[byte]> src, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        $(dst)[i] = $(src)[i]
+        i = i + 1
+    }
+    return
+}
+
 func main() -> int32 {
     [byte, 16] a
     [byte, 16] b
@@ -28,5 +37,139 @@ func main() -> int32 {
 
     simd::x86::aesenc_si128(mview(b), view(a), 0, 0, 16)
     simd::x86::aesdec_si128(mview(b), view(a), 0, 0, 16)
+
+    [byte, 16] mask
+    [byte, 16] out
+    i = 0
+    while (i < 16) {
+        a[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        b[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        if (i % 2 == 0) {
+            mask[i] = 0x80
+        } else {
+            mask[i] = 0x7F
+        }
+        i = i + 1
+    }
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::add_epi8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::sub_epi8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::avg_epu8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::blendv_epi8(mview(out), view(b), view(mask), 0, 0, 0, 16)
+    stdout(out[0])
+    stdout(out[1])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::alignr_epi8(mview(out), view(b), 0, 0, 16, 3)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::alignr_epi8(mview(out), view(b), 0, 0, 16, 15)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::alignr_epi8(mview(out), view(b), 0, 0, 16, 16)
+    stdout(out[0])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::unpacklo_epi8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[1])
+    stdout(out[15])
+
+    copy_bytes(mview(out), view(a), 16)
+    simd::x86::unpackhi_epi8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[1])
+    stdout(out[15])
+
+    [int16, 16] narrow_source
+    narrow_source[0] = unsafe_cast<int16>(0 - 300)
+    narrow_source[1] = unsafe_cast<int16>(0 - 1)
+    narrow_source[2] = 0
+    narrow_source[3] = 1
+    narrow_source[4] = 127
+    narrow_source[5] = 128
+    narrow_source[6] = 200
+    narrow_source[7] = 254
+    narrow_source[8] = 255
+    narrow_source[9] = 256
+    narrow_source[10] = 300
+    narrow_source[11] = 1000
+    narrow_source[12] = unsafe_cast<int16>(0 - 32768)
+    narrow_source[13] = 32767
+    narrow_source[14] = unsafe_cast<int16>(0 - 2)
+    narrow_source[15] = 42
+
+    simd::x86::packus_epi16(mview(out), view(narrow_source), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[11])
+    stdout(out[12])
+    stdout(out[13])
+    stdout(out[15])
+
+    stdout(simd::x86::sad_epu8(view(a), view(b), 0, 0, 16))
+
+    [int8, 16] signed_bytes
+    [int8, 16] absolute
+    signed_bytes[0] = unsafe_cast<int8>(0 - 128)
+    signed_bytes[1] = unsafe_cast<int8>(0 - 127)
+    signed_bytes[2] = unsafe_cast<int8>(0 - 1)
+    signed_bytes[3] = 0
+    signed_bytes[4] = 1
+    signed_bytes[5] = 2
+    signed_bytes[6] = unsafe_cast<int8>(0 - 2)
+    signed_bytes[7] = 127
+    signed_bytes[8] = unsafe_cast<int8>(0 - 50)
+    signed_bytes[9] = 50
+    signed_bytes[10] = unsafe_cast<int8>(0 - 3)
+    signed_bytes[11] = 3
+    signed_bytes[12] = unsafe_cast<int8>(0 - 100)
+    signed_bytes[13] = 100
+    signed_bytes[14] = unsafe_cast<int8>(0 - 128)
+    signed_bytes[15] = 127
+
+    simd::x86::abs_epi8(mview(absolute), view(signed_bytes), 0, 0, 16)
+    stdout(cast<int32>(absolute[0]))
+    stdout(cast<int32>(absolute[2]))
+    stdout(cast<int32>(absolute[7]))
+
+    [byte, 24] tail_a
+    [byte, 24] tail_b
+    [byte, 24] tail_out
+    i = 0
+    while (i < 24) {
+        tail_a[i] = unsafe_cast<byte>(i * 5 + 1)
+        tail_b[i] = unsafe_cast<byte>(i * 7 + 2)
+        i = i + 1
+    }
+
+    copy_bytes(mview(tail_out), view(tail_a), 20)
+    simd::x86::alignr_epi8(mview(tail_out), view(tail_b), 0, 0, 20, 3)
+    stdout(tail_out[16])
+    stdout(tail_out[19])
+
+    copy_bytes(mview(tail_out), view(tail_a), 20)
+    simd::x86::unpacklo_epi8(mview(tail_out), view(tail_b), 0, 0, 20)
+    stdout(tail_out[16])
+    stdout(tail_out[18])
+    stdout(tail_out[19])
     return 0
 }
