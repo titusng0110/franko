@@ -1,0 +1,33 @@
+namespace bit {
+    #inline func ctz32(const uint32 value) -> uint32 {
+        return 0
+    }
+
+    #inline func ctz64(const uint64 value) -> uint32 {
+        return 0
+    }
+
+    #inline func clz32(const uint32 value) -> uint32 {
+        return 0
+    }
+
+    #inline func clz64(const uint64 value) -> uint32 {
+        return 0
+    }
+
+    #inline func popcount32(const uint32 value) -> uint32 {
+        return 0
+    }
+
+    #inline func popcount64(const uint64 value) -> uint32 {
+        return 0
+    }
+
+    #inline func bswap32(const uint32 value) -> uint32 {
+        return 0
+    }
+
+    #inline func bswap64(const uint64 value) -> uint64 {
+        return 0
+    }
+}

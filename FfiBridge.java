@@ -99,7 +99,7 @@ final class FfiBridge {
         return common;
     }
 
-    String build(List<String> blockNames) {
+    String build(List<String> blockNames, Map<String, String> declarations) {
         StringBuilder out = new StringBuilder();
         String common = commonBlock();
         out.append(common);
@@ -113,6 +113,16 @@ final class FfiBridge {
         for (String name : blockNames) {
             if (!emitted.add(name)) {
                 continue;
+            }
+
+            String declaration = declarations.get(name);
+
+            if (declaration != null && !declaration.isEmpty()) {
+                out.append(declaration);
+
+                if (!declaration.endsWith("\n")) {
+                    out.append('\n');
+                }
             }
 
             String block = blocks.get(name);

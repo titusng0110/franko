@@ -121,9 +121,28 @@ Rules:
 - Merely importing a module with a bridge adds no bridge code unless a
   bridged function is actually used.
 
+### Generating a bridge template
+
+`frbridge.py` creates a starter bridge with the correct block names,
+emitted C++ names, and parameter types:
+
+```bash
+uv run python frbridge.py lib/mathx.fr
+uv run python frbridge.py lib/mathx.fr -o lib/mathx.ffi.cpp --force
+```
+
+If a sibling `mathx.module.json` exists, the script uses its `bridge` path
+and generates one block per listed function. Without a descriptor it
+generates a block for every non-`main` function declared in the module.
+Each generated body contains a `TODO`; replace it with the real
+implementation. The generator analyzes all supported targets and merges
+the declarations, so functions selected by different `#if` branches all
+receive blocks.
+
 ## 34.4 The Bundled FFI Modules
 
-`franko/os` and `franko/stdio` are Franko's standard FFI modules.
+`franko/os`, `franko/stdio`, `franko/bit`, and `franko/simd` are Franko's
+standard FFI modules.
 
 - `franko/os` ships `import/franko/os.module.json` and
   `import/franko/os.ffi.cpp` alongside `import/franko/os.fr`. Its functions
@@ -135,8 +154,12 @@ Rules:
   integer formatting, byte-view writes, and the stdin read-ahead buffer, so
   all standard I/O goes through `franko/stdio`. Its API is documented in
   [`franko/stdio`](../library_docs/stdio.md).
+- `franko/bit` provides scalar bit scans, popcount, and byte swaps; see
+  [`franko/bit`](../library_docs/bit.md).
+- `franko/simd` provides architecture-selected byte-vector operations; see
+  [`franko/simd`](../library_docs/simd.md).
 
-Both use the same descriptor and bridge rules described above.
+All use the same descriptor and bridge rules described above.
 
 ## 34.5 Failure Modes
 
@@ -144,8 +167,13 @@ The compiler rejects an FFI module when:
 
 - the descriptor is malformed or has an unsupported version;
 - a listed function does not exist in the `.fr` file;
+- a listed function is generic;
 - a bridged function has no bridge file or no matching block;
 - a bridged function block does not contain the expected generated name.
+
+`#inline` and `#noinline` are honored for bridged functions through a
+compiler-emitted declaration before the bridge block; the bridge body itself
+is still supplied by C++.
 
 Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
 

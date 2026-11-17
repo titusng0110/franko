@@ -1,0 +1,36 @@
+import "franko/stdio"
+import "franko/simd"
+
+func main() -> int32 {
+    [byte, 16] a
+    [byte, 16] b
+    [byte, 16] indices
+    uint32 i = 0
+    while (i < 16) {
+        a[i] = unsafe_cast<byte>(i + 1)
+        b[i] = unsafe_cast<byte>(i + 1)
+        indices[i] = unsafe_cast<byte>(i)
+        i = i + 1
+    }
+
+    stdout(simd::arm::vceqq_u8_mask(view(a), 5, 0, 16))
+    stdout(simd::arm::vcgtq_u8_mask(view(a), 14, 0, 16))
+    stdout(simd::arm::vcltq_u8_mask(view(a), 3, 0, 16))
+
+    simd::arm::veorq_u8(mview(b), view(a), 0, 0, 16)
+    stdout(b[0])
+    stdout(b[15])
+
+    simd::arm::vandq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vorrq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vbicq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vqaddq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vqsubq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vmaxq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vminq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vqtbl1q_u8(mview(b), view(indices), 0, 0, 16)
+
+    simd::arm::vaeseq_u8(mview(b), view(a), 0, 0, 16)
+    simd::arm::vaesdq_u8(mview(b), view(a), 0, 0, 16)
+    return 0
+}

@@ -4,7 +4,9 @@
     uv run python library_tests/run_library_tests.py
 
 Library tests are success-focused: each library has one free-function fixture,
-and each struct has one fixture covering all of its methods together. Additional
+and each struct has one fixture covering all of its methods together. A
+library may also have architecture-specific fixtures (for example
+`simd/arm64` and `simd/x86_64`), which are skipped on other hosts. Additional
 runtime fixtures cover functions whose contract is to abort, such as
 `std::panic`. There are no compiler-failure fixtures; a library failing to
 compile is a compiler bug.
@@ -18,7 +20,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
 from franko_test import Results, run_and_record
-from franko_tools import IS_WINDOWS, ToolError, relative, require_toolchain
+from franko_tools import (
+    IS_WINDOWS,
+    ToolError,
+    host_arch,
+    relative,
+    require_toolchain,
+)
 
 from compile import default_build_mode
 
@@ -34,6 +42,12 @@ def skip_platform_suite(src: Path, results: Results) -> bool:
         return True
     if suite == "posix" and IS_WINDOWS:
         results.skip(relative(src), "posix suite does not run on Windows")
+        return True
+    if suite == "x86_64" and host_arch() != "x86_64":
+        results.skip(relative(src), "x86_64-only suite")
+        return True
+    if suite == "arm64" and host_arch() != "arm64":
+        results.skip(relative(src), "arm64-only suite")
         return True
     return False
 

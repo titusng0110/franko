@@ -221,8 +221,10 @@ The import prefix `franko/` is reserved for those standard modules:
 ```franko
 import "franko/stdio"
 import "franko/algorithm"
+import "franko/bit"
 import "franko/os"
 import "franko/pool"
+import "franko/simd"
 ```
 
 User modules must not be placed under the compiler's `import/franko/`

@@ -64,7 +64,8 @@ public class Cpp14Codegen {
 
         if (ffiHandler != null && !usedFfiMatches.isEmpty()) {
             return ffiHandler.buildBridge(
-                    new ArrayList<>(usedFfiMatches.values())
+                    new ArrayList<>(usedFfiMatches.values()),
+                    this::ffiInlineDeclaration
             ) + body;
         }
 
@@ -721,6 +722,47 @@ public class Cpp14Codegen {
         return sb.toString();
     }
 
+    private String ffiInlineDeclaration(FfiMatch match) {
+        Symbol fn = match.symbol;
+
+        if (fn == null || fn.inlineMode == InlineMode.DEFAULT) {
+            return "";
+        }
+
+        String prefix = fn.inlineMode == InlineMode.INLINE
+                ? "FRANKO_INLINE "
+                : "FRANKO_NOINLINE ";
+
+        StringBuilder sb = new StringBuilder();
+        List<String> namespace = SymbolTable.splitNamespacePath(fn.namespace);
+
+        for (String segment : namespace) {
+            sb.append("namespace NS_").append(segment).append(" {\n");
+        }
+
+        sb.append(prefix)
+                .append(emitType(fn.returnType()))
+                .append(" ")
+                .append(fn.emittedLocalName())
+                .append("(");
+
+        for (int i = 0; i < fn.parameters.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+
+            sb.append(emitType(fn.parameters.get(i).type));
+        }
+
+        sb.append(");\n");
+
+        for (int i = namespace.size(); i > 0; i--) {
+            sb.append("}\n");
+        }
+
+        return sb.toString();
+    }
+
     private String inlineModePrefix(SastNode node) {
         if (node.symbol == null) {
             return "";
@@ -731,7 +773,7 @@ public class Cpp14Codegen {
         }
 
         if (node.symbol.inlineMode == InlineMode.INLINE) {
-            return "FRANKO_ALWAYS_INLINE ";
+            return "FRANKO_INLINE ";
         }
 
         if (node.symbol.inlineMode == InlineMode.NOINLINE) {

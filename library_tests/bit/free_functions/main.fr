@@ -1,0 +1,21 @@
+import "franko/stdio"
+import "franko/bit"
+
+func main() -> int32 {
+    stdout(bit::ctz32(0))
+    stdout(bit::ctz32(8))
+    stdout(bit::ctz64(0))
+    stdout(bit::ctz64(1))
+
+    stdout(bit::clz32(0))
+    stdout(bit::clz32(1))
+    stdout(bit::clz64(0))
+    stdout(bit::clz64(1))
+
+    stdout(bit::popcount32(0xF0F0))
+    stdout(bit::popcount64(0xFFFFFFFFFFFFFFFF))
+
+    stdout(bit::bswap32(0x11223344))
+    stdout(bit::bswap64(0x1122334455667788))
+    return 0
+}

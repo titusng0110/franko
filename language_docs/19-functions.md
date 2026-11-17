@@ -247,8 +247,11 @@ through methods. It uses the whole Franko call graph: marking a function in
 the cycle `#noinline` does not exempt an `#inline` function from the rule.
 `#noinline` functions may be recursive normally.
 
-The modifiers only describe functions that the Franko compiler emits.
-FFI-bridged functions are provided by their bridge and ignore them.
+The modifiers apply to ordinary Franko functions and to FFI-bridged
+declarations. For a bridged function, the compiler emits a C++ declaration
+carrying `FRANKO_INLINE` or `FRANKO_NOINLINE` before the bridge block, so the
+bridge definition inherits the requested inlining hint. The bridge body
+remains opaque to Franko, so the `#inline` recursion check cannot inspect it.
 
 ## 19.14 Generic Functions
 

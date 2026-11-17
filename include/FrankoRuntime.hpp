@@ -34,10 +34,10 @@
 #endif
 
 #if defined(_MSC_VER)
-#define FRANKO_ALWAYS_INLINE __forceinline
+#define FRANKO_INLINE __forceinline
 #define FRANKO_NOINLINE __declspec(noinline)
 #else
-#define FRANKO_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define FRANKO_INLINE __attribute__((always_inline)) inline
 #define FRANKO_NOINLINE __attribute__((noinline))
 #endif
 

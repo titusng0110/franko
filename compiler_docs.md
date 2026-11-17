@@ -802,8 +802,8 @@ A module sidecar named `<stem>.module.json` describes the module’s bridged
   discovers the sidecar next to every parsed `.fr` file, caches descriptors by
   canonical source path, and exposes `all()` plus `hasFfiEntities()`.
 - `ModuleValidator` checks each listed function exists in the parsed module
-  AST (including both branches of declaration-level `#if`s), and rejects
-  duplicate descriptor entries.
+  AST (including both branches of declaration-level `#if`s), rejects duplicate
+  descriptor entries, and rejects generic functions.
 
 #### `FfiHandler` / `FfiBridge`
 `FfiHandler` provides the generic descriptor-based FFI layer:
@@ -817,8 +817,9 @@ A module sidecar named `<stem>.module.json` describes the module’s bridged
   with the `ffi-verified` phase and diagnostics with declaration spans.
   Unselected `#if` branches never reach this pass, so off-target
   functions need no bridge block.
-- `buildBridge(used)` groups used matches by bridge file and emits the
-  `common` block plus one block per used declaration, in first-use order.
+- `buildBridge(used, declarationFactory)` groups used matches by bridge file
+  and emits the `common` block, an optional inline-hint declaration per
+  annotated function, and one block per used declaration in first-use order.
 - `FfiBridge` parses the fixed bridge format: `// @@<qualified-name>`,
   `// @@end`, and the reserved `common` block. The block name is the Franko
   qualified name (`os::posix::read`, `os::win32::ReadFile`) — module authors
@@ -2752,7 +2753,7 @@ per global, reopening each `NS_<segment>`) → global definitions → function
 prototypes →
 function definitions, all under mangled names and inside `NS_<segment>`
 namespaces where applicable. `emitFunctionHeader` prefixes a declaration or
-definition with `FRANKO_ALWAYS_INLINE ` for `InlineMode.INLINE` and
+definition with `FRANKO_INLINE ` for `InlineMode.INLINE` and
 `FRANKO_NOINLINE ` for `InlineMode.NOINLINE`; the same helper emits the
 forward declarations, so both spellings carry the hint. FFI-matched symbols
 are skipped, matching the definition-suppression rule. Default functions
@@ -2986,6 +2987,20 @@ emitted as decimal JSON strings. `JsonArtifacts` writes UTF-8 artifacts with a
 trailing newline, creates parent directories, recursively deletes stale
 artifact paths at the start of a run, and is a no-op unless `--emit-json` is
 enabled. It never prints AST/SAST JSON to stdout.
+
+#### `FfiTemplateGenerator`
+Standalone bridge-template generator (`java -cp build/classes
+FfiTemplateGenerator <module.fr> <import-dir>`), invoked by the root
+`frbridge.py` wrapper. It parses and desugars the module, resolves imports,
+appends a synthetic global `main` when the module has none, and runs semantic
+analysis for each supported target, merging the selected declarations by
+qualified name. It emits a `common` block plus one `// @@qualified-name` block
+per function, containing the exact emitted C++ name
+(`Symbol.emittedLocalName()`) and parameter types (`Cpp14Codegen.emitType`);
+bodies are TODO stubs. A sibling `<stem>.module.json` selects both the bridge
+path and the function list; without one, every non-`main` function declared in
+the module is included. Target-dependent signatures with the same qualified
+name are rejected.
 
 #### `CompilerJsonSelfTest`
 Standalone round-trip checker (not a compiler flag):
@@ -3517,7 +3532,7 @@ builds use `/MT` and import only `KERNEL32.dll`.
 All modes share the same array semantics (`Franko_Dynamic_Array`,
 `Franko_Fat_Pointer`, static-array helpers, byte kernels); only the
 allocator and the checked blocks differ. The header also defines the
-function-emission hints: `FRANKO_ALWAYS_INLINE` maps to
+function-emission hints: `FRANKO_INLINE` maps to
 `__attribute__((always_inline)) inline` on GCC/Clang and `__forceinline` on
 MSVC; `FRANKO_NOINLINE` maps to `__attribute__((noinline))` and
 `__declspec(noinline)` respectively. Function declarations with no inlining
@@ -4333,15 +4348,17 @@ legality-local and intentionally separate from `MemoryCallGraph`, which is
 built later from the pruned SAST with dense IDs and memory summaries.
 
 **Emission.** `Cpp14Codegen.emitFunctionHeader` adds
-`FRANKO_ALWAYS_INLINE ` or `FRANKO_NOINLINE ` from the symbol mode. The
+`FRANKO_INLINE ` or `FRANKO_NOINLINE ` from the symbol mode. The
 runtime header defines the macros portably: GNU/Clang use
 `__attribute__((always_inline)) inline` and `__attribute__((noinline))`;
 MSVC uses `__forceinline` and `__declspec(noinline)`. The `inline` keyword is
 part of the GNU always-inline spelling to avoid GCC's “might not be
 inlinable” warning. Forward declarations and definitions share
 `emitFunctionHeader`, so both carry the same hint. FFI-matched declarations
-emit no prefix because the bridge supplies the definition. Default functions
-emit no attribute at all.
+emit no function header because the bridge supplies the definition; instead,
+`FfiHandler.buildBridge` prepends a matching C++ declaration carrying
+`FRANKO_INLINE` or `FRANKO_NOINLINE` before the bridge block, so the bridge
+definition inherits the hint. Default functions emit no attribute at all.
 
 ## 4.33 Diagnostic message style
 
@@ -4369,6 +4386,9 @@ uv run python compile.py --emit-json path/to/test.fr
 # Main itself requires: <source> -o <out.cpp> -p <import-dir> --target <os>-<arch>
 # compile.py supplies all four: -o defaults to <source>.cpp, -p to ./import,
 # and --target to the host. --jemalloc is the Linux-only opt-in allocator.
+
+# Generate a starter FFI bridge for a module:
+uv run python frbridge.py path/to/module.fr
 
 # Validate one emitted artifact by deserializing and re-serializing it:
 java -cp build/classes CompilerJsonSelfTest <artifact.json>

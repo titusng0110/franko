@@ -1,0 +1,125 @@
+namespace simd {
+    #if (#IS_X86_64) {
+        namespace x86 {
+            #inline func cmpeq_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func cmpgt_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func cmplt_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func cmpestrm_mask(view<[byte]> target, view<[byte]> charset, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func xor_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func and_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func or_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func andnot_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func adds_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func subs_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func max_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func min_epu8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func shuffle_epi8(mview<[byte]> target, view<[byte]> indices, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func aesenc_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+                return 0
+            }
+
+            #inline func aesdec_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+                return 0
+            }
+        }
+    } #else #if (#IS_ARM64) {
+        namespace arm {
+            #inline func vceqq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func vcgtq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func vcltq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func veorq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vandq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vorrq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vbicq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vqaddq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vqsubq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vmaxq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vminq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vqtbl1q_u8(mview<[byte]> target, view<[byte]> indices, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vaeseq_u8(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+                return 0
+            }
+
+            #inline func vaesdq_u8(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+                return 0
+            }
+        }
+    } #else {
+        #panic("franko/simd supports only x86_64 and arm64 targets")
+    }
+}

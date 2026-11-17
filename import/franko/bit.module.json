@@ -1,0 +1,17 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "franko/bit",
+  "source": "bit.fr",
+  "bridge": "bit.ffi.cpp",
+  "functions": [
+    {"namespace": "bit", "name": "ctz32"},
+    {"namespace": "bit", "name": "ctz64"},
+    {"namespace": "bit", "name": "clz32"},
+    {"namespace": "bit", "name": "clz64"},
+    {"namespace": "bit", "name": "popcount32"},
+    {"namespace": "bit", "name": "popcount64"},
+    {"namespace": "bit", "name": "bswap32"},
+    {"namespace": "bit", "name": "bswap64"}
+  ]
+}

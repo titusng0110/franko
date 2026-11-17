@@ -23,10 +23,10 @@
       "include": "#declarations"
     },
     {
-      "include": "#keywords"
+      "include": "#operator-methods"
     },
     {
-      "include": "#qualified-names"
+      "include": "#keywords"
     },
     {
       "include": "#member-intrinsics"
@@ -38,7 +38,19 @@
       "include": "#intrinsics"
     },
     {
+      "include": "#library-functions"
+    },
+    {
+      "include": "#scope-resolution"
+    },
+    {
+      "include": "#function-calls"
+    },
+    {
       "include": "#types"
+    },
+    {
+      "include": "#constants"
     },
     {
       "include": "#operators"
@@ -49,12 +61,27 @@
   ],
   "repository": {
     "comments": {
-      "match": "//.*$",
-      "name": "comment.line.double-slash.franko"
+      "match": "(//).*$",
+      "name": "comment.line.double-slash.franko",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.comment.franko"
+        }
+      }
     },
     "strings": {
       "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.franko"
+        }
+      },
       "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.franko"
+        }
+      },
       "name": "string.quoted.double.franko",
       "patterns": [
         {
@@ -87,7 +114,7 @@
       "patterns": [
         {
           "match": "#(if|else)\\b",
-          "name": "keyword.control.compile-time.franko"
+          "name": "keyword.control.directive.compile-time.franko"
         },
         {
           "match": "#generic\\b",
@@ -102,26 +129,48 @@
           "name": "support.constant.compile-time.franko"
         },
         {
-          "match": "#(is_primitive|is_enum|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|is_matchable|is_comparable|is_assignable|is_value_assignable|what_type|panic|warning)\\b",
+          "match": "#(panic|warning)\\b",
+          "name": "keyword.control.directive.compile-time.franko"
+        },
+        {
+          "match": "#(is_primitive|is_enum|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|is_matchable|is_comparable|is_assignable|is_value_assignable|what_type)\\b",
           "name": "support.function.builtin.compile-time.franko"
         },
         {
-          "match": "#",
-          "name": "punctuation.definition.compile-time.franko"
+          "match": "#[A-Za-z_][A-Za-z0-9_]*\\b",
+          "name": "invalid.illegal.compile-time.franko"
         }
       ]
     },
     "declarations": {
       "patterns": [
         {
-          "match": "\\b(import)\\b",
-          "name": "keyword.other.declaration.franko"
+          "match": "\\b(import)\\s+(\"([^\"]*)\")?",
+          "captures": {
+            "1": {
+              "name": "keyword.other.import.franko"
+            },
+            "2": {
+              "name": "string.quoted.double.import.franko"
+            }
+          }
+        },
+        {
+          "match": "\\b(func)\\s+(OPERATOR_(?:EQ|NEQ|GT|LT|GTEQ|LTEQ|MOV|ADDMOV|SUBMOV|MULMOV|DIVMOV|MODMOV|ORMOV|ANDMOV|XORMOV))\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.declaration.function.franko"
+            },
+            "2": {
+              "name": "entity.name.function.operator.franko"
+            }
+          }
         },
         {
           "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
-              "name": "keyword.other.declaration.franko"
+              "name": "keyword.other.declaration.function.franko"
             },
             "2": {
               "name": "entity.name.function.franko"
@@ -132,7 +181,7 @@
           "match": "\\b(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
-              "name": "keyword.other.declaration.franko"
+              "name": "keyword.other.declaration.struct.franko"
             },
             "2": {
               "name": "entity.name.type.struct.franko"
@@ -140,24 +189,30 @@
           }
         },
         {
-          "match": "\\b(enum)\\s*(<[^>]*>)?\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(enum)\\s*(?:(<)\\s*([A-Za-z0-9_]+)\\s*(>))?\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
-              "name": "keyword.other.declaration.franko"
+              "name": "keyword.other.declaration.enum.franko"
             },
             "2": {
-              "name": "storage.type.primitive.franko"
+              "name": "punctuation.definition.typeparameters.begin.franko"
             },
             "3": {
+              "name": "storage.type.primitive.franko"
+            },
+            "4": {
+              "name": "punctuation.definition.typeparameters.end.franko"
+            },
+            "5": {
               "name": "entity.name.type.enum.franko"
             }
           }
         },
         {
-          "match": "\\b(namespace)\\s+([A-Za-z_][A-Za-z0-9_]*(?:[ \\t]*::[ \\t]*[A-Za-z_][A-Za-z0-9_]*)*)",
+          "match": "\\b(namespace)\\s+([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)",
           "captures": {
             "1": {
-              "name": "keyword.other.declaration.franko"
+              "name": "keyword.other.declaration.namespace.franko"
             },
             "2": {
               "name": "entity.name.namespace.franko"
@@ -165,6 +220,10 @@
           }
         }
       ]
+    },
+    "operator-methods": {
+      "match": "\\bOPERATOR_(?:EQ|NEQ|GT|LT|GTEQ|LTEQ|MOV|ADDMOV|SUBMOV|MULMOV|DIVMOV|MODMOV|ORMOV|ANDMOV|XORMOV)\\b",
+      "name": "entity.name.function.operator.franko"
     },
     "keywords": {
       "patterns": [
@@ -183,15 +242,15 @@
         {
           "match": "\\bnull\\b",
           "name": "constant.language.null.franko"
+        },
+        {
+          "match": "\\btypename\\b",
+          "name": "storage.type.generic.franko"
         }
       ]
     },
-    "qualified-names": {
-      "match": "\\b(?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*",
-      "name": "entity.name.namespace.franko"
-    },
     "member-intrinsics": {
-      "match": "(\\.)(init_zero|init|resize|uninit|memset|memcpy|memmove|length|memcmp|memchr|memmem|read_bit|write_bit|flip_bit|bitwise_not_mask|bitwise_xor_mask|bitwise_and_mask|bitwise_or_mask|shift_bits_left|shift_bits_right|count_set_bits|(?:read|write)_(?:u?int(?:16|32|64))_(?:LE|BE))(?=\\s*\\()",
+      "match": "(\\.)(init_zero|init|resize|uninit|memset|memcpy|memmove|memcmp|length|memchr|memmem|read_bit|write_bit|flip_bit|bitwise_not_mask|bitwise_xor_mask|bitwise_and_mask|bitwise_or_mask|shift_bits_left|shift_bits_right|count_set_bits|(?:read|write)_(?:u?int(?:16|32|64))_(?:LE|BE))\\b(?=\\s*\\()",
       "captures": {
         "1": {
           "name": "punctuation.accessor.dot.franko"
@@ -204,13 +263,24 @@
     "member-access": {
       "patterns": [
         {
-          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:<[^>]+>)?\\s*\\()",
           "captures": {
             "1": {
               "name": "punctuation.accessor.dot.franko"
             },
             "2": {
               "name": "entity.name.function.member.franko"
+            }
+          }
+        },
+        {
+          "match": "(\\.)(_[0-9]+)\\b",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.dot.franko"
+            },
+            "2": {
+              "name": "variable.other.property.tuple.franko"
             }
           }
         },
@@ -230,12 +300,12 @@
     "intrinsics": {
       "patterns": [
         {
-          "match": "\\b(cast|unsafe_cast)\\b",
-          "name": "support.function.builtin.franko"
+          "match": "\\b(cast|unsafe_cast)\\b(?=\\s*<)",
+          "name": "keyword.operator.cast.franko"
         },
         {
           "match": "\\b(ptr|mview|view)\\b(?=\\s*\\()",
-          "name": "support.function.builtin.franko"
+          "name": "support.function.builtin.pointer.franko"
         },
         {
           "match": "\\$",
@@ -246,6 +316,29 @@
           "name": "keyword.operator.inferred-size.franko"
         }
       ]
+    },
+    "library-functions": {
+      "match": "\\bstdout\\b(?=\\s*\\()",
+      "name": "support.function.builtin.stdio.franko"
+    },
+    "scope-resolution": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(::)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.franko"
+        },
+        "2": {
+          "name": "punctuation.accessor.scope.franko"
+        }
+      }
+    },
+    "function-calls": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:<[^>]+>)?\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.franko"
+        }
+      }
     },
     "types": {
       "patterns": [
@@ -258,25 +351,21 @@
           "name": "storage.type.primitive.franko"
         },
         {
-          "match": "\\b(ptr|mview|view)\\b",
+          "match": "\\b(ptr|mview|view)\\b(?=\\s*<)",
           "name": "storage.type.pointer.franko"
         },
         {
-          "match": "\\btypename\\b",
-          "name": "storage.type.generic.franko"
-        },
-        {
-          "match": "\\b[A-Z][a-z][A-Za-z0-9_]*(?=\\s*<)",
-          "name": "entity.name.type.generic.franko"
-        },
-        {
-          "match": "\\b[A-Z][a-z][A-Za-z0-9_]*\\b",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
           "name": "entity.name.type.franko"
         }
       ]
     },
+    "constants": {
+      "match": "\\b(?:_{0,2})[A-Z][A-Z0-9_]{1,}\\b",
+      "name": "variable.other.constant.franko"
+    },
     "operators": {
-      "match": "->|::|\\+\\+|--|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|==|!=|<=|>=|&&|\\|\\||<<|>>|[+\\-*/%&|^~!<>=]",
+      "match": "->|\\+\\+|--|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|==|!=|<=|>=|&&|\\|\\||<<|>>|[+\\-*/%&|^~!<>=]",
       "name": "keyword.operator.franko"
     },
     "punctuation": {

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 final class FfiMatch {
 
@@ -15,6 +16,7 @@ final class FfiMatch {
     final String blockName;
     final Path bridgePath;
     final String emittedName;
+    final Symbol symbol;
 
     FfiMatch(
             ModuleDescriptor module,
@@ -22,7 +24,8 @@ final class FfiMatch {
             String qualifiedName,
             String blockName,
             Path bridgePath,
-            String emittedName
+            String emittedName,
+            Symbol symbol
     ) {
         this.module = module;
         this.function = function;
@@ -30,6 +33,7 @@ final class FfiMatch {
         this.blockName = blockName;
         this.bridgePath = bridgePath;
         this.emittedName = emittedName;
+        this.symbol = symbol;
     }
 
     String key() {
@@ -69,7 +73,8 @@ final class FfiHandler {
                     qualifiedName,
                     qualifiedName,
                     descriptor.bridgePath,
-                    function.mangledName()
+                    function.mangledName(),
+                    function
             );
         }
 
@@ -135,8 +140,12 @@ final class FfiHandler {
         );
     }
 
-    String buildBridge(List<FfiMatch> used) {
+    String buildBridge(
+            List<FfiMatch> used,
+            Function<FfiMatch, String> declarationFactory
+    ) {
         Map<Path, List<String>> blocksByPath = new LinkedHashMap<>();
+        Map<Path, Map<String, String>> declarationsByPath = new LinkedHashMap<>();
 
         for (FfiMatch match : used) {
             List<String> names = blocksByPath.get(match.bridgePath);
@@ -147,6 +156,17 @@ final class FfiHandler {
             }
 
             names.add(match.blockName);
+
+            Map<String, String> declarations = declarationsByPath.get(
+                    match.bridgePath
+            );
+
+            if (declarations == null) {
+                declarations = new LinkedHashMap<>();
+                declarationsByPath.put(match.bridgePath, declarations);
+            }
+
+            declarations.put(match.blockName, declarationFactory.apply(match));
         }
 
         StringBuilder out = new StringBuilder();
@@ -165,7 +185,13 @@ final class FfiHandler {
                 );
             }
 
-            out.append(bridge.build(entry.getValue()));
+            out.append(bridge.build(
+                    entry.getValue(),
+                    declarationsByPath.getOrDefault(
+                            entry.getKey(),
+                            Map.of()
+                    )
+            ));
         }
 
         return out.toString();

@@ -17,7 +17,7 @@ final class ModuleValidator {
             return diagnostics;
         }
 
-        Map<String, SourceSpan> functions = new LinkedHashMap<>();
+        Map<String, List<SourceSpan>> functions = new LinkedHashMap<>();
         Map<String, SourceSpan> genericFunctions = new LinkedHashMap<>();
 
         collectItems(root.items, null, functions, genericFunctions);
@@ -28,8 +28,7 @@ final class ModuleValidator {
             String name = function.qualifiedName();
             requireUnique(module, "function", name, seenFunctions, diagnostics);
 
-            if (genericFunctions.containsKey(name)
-                    && !functions.containsKey(name)) {
+            if (genericFunctions.containsKey(name)) {
                 diagnostics.add(Diagnostic.error(
                         genericFunctions.get(name),
                         "Module '" + module.id + "': generic function '" + name
@@ -42,7 +41,11 @@ final class ModuleValidator {
                 continue;
             }
 
-            requireDeclared(module, "function", name, functions, diagnostics);
+            List<SourceSpan> declarations = functions.get(name);
+
+            if (declarations == null || declarations.isEmpty()) {
+                requireDeclared(module, "function", name, functions, diagnostics);
+            }
         }
 
         return diagnostics;
@@ -51,7 +54,7 @@ final class ModuleValidator {
     private static void collectItems(
             List<AstNode> items,
             String parentNamespace,
-            Map<String, SourceSpan> functions,
+            Map<String, List<SourceSpan>> functions,
             Map<String, SourceSpan> genericFunctions
     ) {
         for (AstNode item : items) {
@@ -75,7 +78,10 @@ final class ModuleValidator {
                 if (item.isGeneric) {
                     genericFunctions.put(name, item.span);
                 } else {
-                    functions.put(name, item.span);
+                    functions.computeIfAbsent(
+                            name,
+                            ignored -> new ArrayList<>()
+                    ).add(item.span);
                 }
             }
         }
@@ -104,7 +110,7 @@ final class ModuleValidator {
             ModuleDescriptor module,
             String kind,
             String name,
-            Map<String, SourceSpan> declarations,
+            Map<String, List<SourceSpan>> declarations,
             List<Diagnostic> diagnostics
     ) {
         if (!declarations.containsKey(name)) {
