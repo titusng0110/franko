@@ -62,6 +62,11 @@ FRANKO_INLINE void FUNC_xor_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -126,6 +131,11 @@ FRANKO_INLINE void FUNC_and_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -190,6 +200,11 @@ FRANKO_INLINE void FUNC_or_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -254,6 +269,11 @@ FRANKO_INLINE void FUNC_andnot_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -318,6 +338,11 @@ FRANKO_INLINE void FUNC_adds_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -383,6 +408,11 @@ FRANKO_INLINE void FUNC_subs_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -447,6 +477,11 @@ FRANKO_INLINE void FUNC_max_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -511,6 +546,11 @@ FRANKO_INLINE void FUNC_min_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -575,6 +615,11 @@ FRANKO_INLINE void FUNC_veorq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -639,6 +684,11 @@ FRANKO_INLINE void FUNC_vandq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -703,6 +753,11 @@ FRANKO_INLINE void FUNC_vorrq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -767,6 +822,11 @@ FRANKO_INLINE void FUNC_vbicq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -831,6 +891,11 @@ FRANKO_INLINE void FUNC_vqaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -896,6 +961,11 @@ FRANKO_INLINE void FUNC_vqsubq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -960,6 +1030,11 @@ FRANKO_INLINE void FUNC_vmaxq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1024,6 +1099,11 @@ FRANKO_INLINE void FUNC_vminq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1088,6 +1168,11 @@ FRANKO_INLINE void FUNC_add_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1152,6 +1237,11 @@ FRANKO_INLINE void FUNC_sub_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1216,6 +1306,11 @@ FRANKO_INLINE void FUNC_avg_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1300,6 +1395,21 @@ FRANKO_INLINE void FUNC_blendv_epi8_bea41bc9(Franko_Fat_Pointer<uint8_t> PARAM_t
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == mask && PARAM_dst_start != PARAM_mask_start) {
+        franko_panic("simd: overlapping target and mask ranges");
+    }
+#endif
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (source == mask && PARAM_src_start != PARAM_mask_start) {
+        franko_panic("simd: overlapping source and mask ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     mask += PARAM_mask_start;
@@ -1368,6 +1478,11 @@ FRANKO_INLINE void FUNC_alignr_epi8_62d3997c(Franko_Fat_Pointer<uint8_t> PARAM_t
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1570,6 +1685,11 @@ FRANKO_INLINE void FUNC_unpacklo_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1644,6 +1764,11 @@ FRANKO_INLINE void FUNC_unpackhi_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1720,6 +1845,12 @@ FRANKO_INLINE void FUNC_packus_epi16_ed547b8f(Franko_Fat_Pointer<uint8_t> PARAM_
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (static_cast<const void*>(target) == static_cast<const void*>(source)
+            && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1855,6 +1986,11 @@ FRANKO_INLINE void FUNC_abs_epi8_6c5347dd(Franko_Fat_Pointer<int8_t> PARAM_targe
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -1921,6 +2057,11 @@ FRANKO_INLINE void FUNC_shuffle_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == indices && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and indices ranges");
+    }
+#endif
     target += PARAM_dst_start;
     indices += PARAM_src_start;
     uint32_t i = 0;
@@ -2127,6 +2268,11 @@ FRANKO_INLINE void FUNC_vaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2191,6 +2337,11 @@ FRANKO_INLINE void FUNC_vsubq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2255,6 +2406,11 @@ FRANKO_INLINE void FUNC_vrhaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_ta
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2339,6 +2495,21 @@ FRANKO_INLINE void FUNC_vbslq_u8_bea41bc9(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == mask && PARAM_dst_start != PARAM_mask_start) {
+        franko_panic("simd: overlapping target and mask ranges");
+    }
+#endif
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (source == mask && PARAM_src_start != PARAM_mask_start) {
+        franko_panic("simd: overlapping source and mask ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     mask += PARAM_mask_start;
@@ -2405,6 +2576,11 @@ FRANKO_INLINE void FUNC_vextq_u8_62d3997c(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2590,6 +2766,11 @@ FRANKO_INLINE void FUNC_vzip1q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2664,6 +2845,11 @@ FRANKO_INLINE void FUNC_vzip2q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_tar
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2740,6 +2926,12 @@ FRANKO_INLINE void FUNC_vqmovun_s16_ed547b8f(Franko_Fat_Pointer<uint8_t> PARAM_t
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (static_cast<const void*>(target) == static_cast<const void*>(source)
+            && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2804,6 +2996,11 @@ FRANKO_INLINE void FUNC_vabdq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_targ
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2868,6 +3065,12 @@ FRANKO_INLINE void FUNC_vpaddlq_u16_8c3520d3(Franko_Fat_Pointer<uint32_t> PARAM_
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (static_cast<const void*>(target) == static_cast<const void*>(source)
+            && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2931,6 +3134,11 @@ FRANKO_INLINE void FUNC_vabsq_s8_6c5347dd(Franko_Fat_Pointer<int8_t> PARAM_targe
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == source && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and source ranges");
+    }
+#endif
     target += PARAM_dst_start;
     source += PARAM_src_start;
     uint32_t i = 0;
@@ -2995,6 +3203,11 @@ FRANKO_INLINE void FUNC_vqtbl1q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_ta
     if (PARAM_count == 0) {
         return;
     }
+#if !FRANKO_BOUNDS_UNCHECKED
+    if (target == indices && PARAM_dst_start != PARAM_src_start) {
+        franko_panic("simd: overlapping target and indices ranges");
+    }
+#endif
     target += PARAM_dst_start;
     indices += PARAM_src_start;
     for (uint32_t i = 0; i + 16 <= PARAM_count; i += 16) {

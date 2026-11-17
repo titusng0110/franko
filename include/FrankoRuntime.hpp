@@ -1378,21 +1378,23 @@ struct Franko_Fat_Pointer {
     void memcpy(const Franko_Fat_Pointer<T> other) {
         if (mode == 2 && other.mode == 2) {
             const uint32_t copyCount = (count < other.count) ? count : other.count;
-            if (copyCount > 0)
+            if (copyCount > 0 && static_cast<T*>(data) != static_cast<T*>(other.data))
                 std::memcpy(static_cast<T*>(data), static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(copyCount));
         }
         else if (mode == 2 && other.mode == 3) {
             if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
                 franko_panic("Franko dynamic array source is not initialized");
             const uint32_t copyCount = (count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (copyCount > 0)
+            if (copyCount > 0
+                    && static_cast<T*>(data) != static_cast<Franko_Dynamic_Array<T>*>(other.data)->data)
                 std::memcpy(static_cast<T*>(data), static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(copyCount));
         }
         else if (mode == 3 && other.mode == 2) {
             if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
                 franko_panic("Franko dynamic array is not initialized");
             const uint32_t copyCount = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < other.count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : other.count;
-            if (copyCount > 0)
+            if (copyCount > 0
+                    && static_cast<Franko_Dynamic_Array<T>*>(data)->data != static_cast<T*>(other.data))
                 std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(copyCount));
         }
         else if (mode == 3 && other.mode == 3) {
@@ -1401,7 +1403,8 @@ struct Franko_Fat_Pointer {
             if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
                 franko_panic("Franko dynamic array source is not initialized");
             const uint32_t copyCount = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (copyCount > 0)
+            if (copyCount > 0
+                    && static_cast<Franko_Dynamic_Array<T>*>(data)->data != static_cast<Franko_Dynamic_Array<T>*>(other.data)->data)
                 std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(copyCount));
         }
         else
@@ -1419,6 +1422,13 @@ struct Franko_Fat_Pointer {
                 franko_panic("Franko static array memcpy destination range out of bounds");
             if (elementCount > other.count - srcStart)
                 franko_panic("Franko static array memcpy source range out of bounds");
+            if (static_cast<T*>(data) == static_cast<T*>(other.data)) {
+                if (dstStart == srcStart)
+                    return;
+                if (dstStart < srcStart + elementCount
+                        && srcStart < dstStart + elementCount)
+                    franko_panic("Franko array memcpy source and destination overlap");
+            }
 #endif
             if (elementCount > 0)
                 std::memcpy(static_cast<T*>(data) + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
@@ -1435,6 +1445,13 @@ struct Franko_Fat_Pointer {
                 franko_panic("Franko static array memcpy destination range out of bounds");
             if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
                 franko_panic("Franko dynamic array memcpy source range out of bounds");
+            if (static_cast<T*>(data) == static_cast<Franko_Dynamic_Array<T>*>(other.data)->data) {
+                if (dstStart == srcStart)
+                    return;
+                if (dstStart < srcStart + elementCount
+                        && srcStart < dstStart + elementCount)
+                    franko_panic("Franko array memcpy source and destination overlap");
+            }
 #endif
             if (elementCount > 0)
                 std::memcpy(static_cast<T*>(data) + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
@@ -1451,6 +1468,13 @@ struct Franko_Fat_Pointer {
                 franko_panic("Franko dynamic array memcpy destination range out of bounds");
             if (elementCount > other.count - srcStart)
                 franko_panic("Franko static array memcpy source range out of bounds");
+            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == static_cast<T*>(other.data)) {
+                if (dstStart == srcStart)
+                    return;
+                if (dstStart < srcStart + elementCount
+                        && srcStart < dstStart + elementCount)
+                    franko_panic("Franko array memcpy source and destination overlap");
+            }
 #endif
             if (elementCount > 0)
                 std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
@@ -1469,6 +1493,13 @@ struct Franko_Fat_Pointer {
                 franko_panic("Franko dynamic array memcpy destination range out of bounds");
             if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
                 franko_panic("Franko dynamic array memcpy source range out of bounds");
+            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == static_cast<Franko_Dynamic_Array<T>*>(other.data)->data) {
+                if (dstStart == srcStart)
+                    return;
+                if (dstStart < srcStart + elementCount
+                        && srcStart < dstStart + elementCount)
+                    franko_panic("Franko array memcpy source and destination overlap");
+            }
 #endif
             if (elementCount > 0)
                 std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));

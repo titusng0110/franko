@@ -3957,7 +3957,13 @@ Rules:
 - for static arrays, constant start/count ranges on both the destination and the source are checked against the static sizes at compile time.
 
 The whole-array form copies the smaller of the two lengths; bytes past the
-destination's length are never written.
+destination's length are never written. It is a no-op when source and target
+refer to the same storage.
+
+The ranged form also treats identical `dst_start` and `src_start` as a no-op.
+If the two ranges overlap but have different starts, the call aborts in
+checked builds; this aliasing check is stripped by `-Omax` together with the
+other bounds checks. Use `memmove` when overlapping movement is intentional.
 
 ## 23.8 `memmove`
 
