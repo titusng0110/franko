@@ -1,21 +1,6 @@
 namespace simd {
     #if (#IS_X86_64) {
         namespace x86 {
-            #inline func cmpeq_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
-
-            #inline func cmpgt_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
-
-            #inline func cmplt_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
-
-            #inline func cmpestrm_mask(view<[byte]> target, view<[byte]> charset, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
 
             #inline func xor_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
@@ -63,17 +48,6 @@ namespace simd {
         }
     } #else #if (#IS_ARM64) {
         namespace arm {
-            #inline func vceqq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
-
-            #inline func vcgtq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
-
-            #inline func vcltq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64 {
-                return 0
-            }
 
             #inline func veorq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return

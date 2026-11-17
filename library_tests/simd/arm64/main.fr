@@ -13,10 +13,6 @@ func main() -> int32 {
         i = i + 1
     }
 
-    stdout(simd::arm::vceqq_u8_mask(view(a), 5, 0, 16))
-    stdout(simd::arm::vcgtq_u8_mask(view(a), 14, 0, 16))
-    stdout(simd::arm::vcltq_u8_mask(view(a), 3, 0, 16))
-
     simd::arm::veorq_u8(mview(b), view(a), 0, 0, 16)
     stdout(b[0])
     stdout(b[15])

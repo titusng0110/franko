@@ -17,18 +17,12 @@ import/franko/simd.ffi.cpp
 The `.fr` surface is selected by `#if (#IS_X86_64)` / `#if (#IS_ARM64)`.
 All functions are `#inline`; bounds are checked in the bridge unless
 `-Omax` defines `FRANKO_BOUNDS_UNCHECKED`, which removes them like the
-array runtime checks. Mask operations require `count <= 64`. Buffer operations process 16-byte
-chunks and a scalar tail. Non-crypto operations fall back to scalar loops
+array runtime checks. Buffer operations process 16-byte chunks and a scalar tail. Non-crypto operations fall back to scalar loops
 when the required instruction set is unavailable.
 
 ## x86_64
 
 ```franko
-simd::x86::cmpeq_epi8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64
-simd::x86::cmpgt_epi8_mask(...) -> uint64
-simd::x86::cmplt_epi8_mask(...) -> uint64
-simd::x86::cmpestrm_mask(view<[byte]> target, view<[byte]> charset, uint32 start, uint32 count) -> uint64
-
 simd::x86::xor_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 simd::x86::and_si128(...) -> void
 simd::x86::or_si128(...) -> void
@@ -45,10 +39,6 @@ simd::x86::aesdec_si128(...) -> int32
 ## ARM64
 
 ```franko
-simd::arm::vceqq_u8_mask(view<[byte]> target, byte value, uint32 start, uint32 count) -> uint64
-simd::arm::vcgtq_u8_mask(...) -> uint64
-simd::arm::vcltq_u8_mask(...) -> uint64
-
 simd::arm::veorq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 simd::arm::vandq_u8(...) -> void
 simd::arm::vorrq_u8(...) -> void
@@ -73,20 +63,21 @@ import "franko/stdio"
 import "franko/simd"
 
 func main() -> int32 {
-    [byte, 16] data
+    [byte, 16] a
+    [byte, 16] b
     uint32 i = 0
     while (i < 16) {
-        data[i] = unsafe_cast<byte>(i + 1)
+        a[i] = unsafe_cast<byte>(i + 1)
+        b[i] = unsafe_cast<byte>(i + 1)
         i = i + 1
     }
 
-    uint64 mask = 0
     #if (#IS_ARM64) {
-        mask = simd::arm::vceqq_u8_mask(view(data), 5, 0, 16)
+        simd::arm::veorq_u8(mview(b), view(a), 0, 0, 16)
     } #else #if (#IS_X86_64) {
-        mask = simd::x86::cmpeq_epi8_mask(view(data), 5, 0, 16)
+        simd::x86::xor_si128(mview(b), view(a), 0, 0, 16)
     }
-    stdout(mask)   // 16
+    stdout(b[0])   // 0
     return 0
 }
 ```

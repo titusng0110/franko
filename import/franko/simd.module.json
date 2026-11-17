@@ -5,34 +5,93 @@
   "source": "simd.fr",
   "bridge": "simd.ffi.cpp",
   "functions": [
-    {"namespace": "simd::x86", "name": "cmpeq_epi8_mask"},
-    {"namespace": "simd::x86", "name": "cmpgt_epi8_mask"},
-    {"namespace": "simd::x86", "name": "cmplt_epi8_mask"},
-    {"namespace": "simd::x86", "name": "cmpestrm_mask"},
-    {"namespace": "simd::x86", "name": "xor_si128"},
-    {"namespace": "simd::x86", "name": "and_si128"},
-    {"namespace": "simd::x86", "name": "or_si128"},
-    {"namespace": "simd::x86", "name": "andnot_si128"},
-    {"namespace": "simd::x86", "name": "adds_epu8"},
-    {"namespace": "simd::x86", "name": "subs_epu8"},
-    {"namespace": "simd::x86", "name": "max_epu8"},
-    {"namespace": "simd::x86", "name": "min_epu8"},
-    {"namespace": "simd::x86", "name": "shuffle_epi8"},
-    {"namespace": "simd::x86", "name": "aesenc_si128"},
-    {"namespace": "simd::x86", "name": "aesdec_si128"},
-    {"namespace": "simd::arm", "name": "vceqq_u8_mask"},
-    {"namespace": "simd::arm", "name": "vcgtq_u8_mask"},
-    {"namespace": "simd::arm", "name": "vcltq_u8_mask"},
-    {"namespace": "simd::arm", "name": "veorq_u8"},
-    {"namespace": "simd::arm", "name": "vandq_u8"},
-    {"namespace": "simd::arm", "name": "vorrq_u8"},
-    {"namespace": "simd::arm", "name": "vbicq_u8"},
-    {"namespace": "simd::arm", "name": "vqaddq_u8"},
-    {"namespace": "simd::arm", "name": "vqsubq_u8"},
-    {"namespace": "simd::arm", "name": "vmaxq_u8"},
-    {"namespace": "simd::arm", "name": "vminq_u8"},
-    {"namespace": "simd::arm", "name": "vqtbl1q_u8"},
-    {"namespace": "simd::arm", "name": "vaeseq_u8"},
-    {"namespace": "simd::arm", "name": "vaesdq_u8"}
+    {
+      "namespace": "simd::x86",
+      "name": "xor_si128"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "and_si128"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "or_si128"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "andnot_si128"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "adds_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "subs_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "max_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "min_epu8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "shuffle_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "aesenc_si128"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "aesdec_si128"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "veorq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vandq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vorrq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vbicq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vqaddq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vqsubq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vmaxq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vminq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vqtbl1q_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vaeseq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vaesdq_u8"
+    }
   ]
 }
