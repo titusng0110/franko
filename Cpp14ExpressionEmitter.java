@@ -175,7 +175,13 @@ final class Cpp14ExpressionEmitter {
         String index = emitAsType(owner, node.index, Cpp14Codegen.UINT32_TYPE);
 
         if (node.target.kind == SastKind.DEREF) {
-            return "(" + emitExpr(owner, node.target.expr) + "[" + index + "])";
+            String pointer = emitExpr(owner, node.target.expr);
+
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.target.expr.type)) {
+                return "((*" + pointer + ")[" + index + "])";
+            }
+
+            return "(" + pointer + "[" + index + "])";
         }
 
         if (node.target.type.kind == SastTypeKind.STATIC_ARRAY
@@ -277,7 +283,13 @@ final class Cpp14ExpressionEmitter {
         }
 
         if (node.receiver.kind == SastKind.DEREF) {
-            return emitExpr(owner, node.receiver.expr);
+            String pointer = emitExpr(owner, node.receiver.expr);
+
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.receiver.expr.type)) {
+                return "franko_make_dynamic_fat_pointer(" + pointer + ")";
+            }
+
+            return pointer;
         }
 
         if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -285,7 +297,7 @@ final class Cpp14ExpressionEmitter {
                     + emitLValue(owner, node.receiver)
                     + ", "
                     + node.receiver.type.sizeLiteral
-                    + ", 2)";
+                    + ")";
         }
 
         if (node.receiver.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
@@ -307,7 +319,13 @@ final class Cpp14ExpressionEmitter {
         }
 
         if (node.receiver.kind == SastKind.DEREF) {
-            return emitExpr(owner, node.receiver.expr) + ".length()";
+            String pointer = emitExpr(owner, node.receiver.expr);
+
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.receiver.expr.type)) {
+                return "(*" + pointer + ").length()";
+            }
+
+            return pointer + ".length()";
         }
 
         if (node.receiver.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -331,7 +349,13 @@ final class Cpp14ExpressionEmitter {
         SemanticIntrinsicArgKind argKind = node.intrinsicKind.argKind(index);
 
         if (argKind.isPointer()) {
-            return emitExpr(owner, arg);
+            String raw = emitExpr(owner, arg);
+
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(arg.type)) {
+                return "franko_make_dynamic_fat_pointer(" + raw + ")";
+            }
+
+            return raw;
         }
 
         return emitAsType(owner, arg, argKind.primitiveType());
@@ -396,17 +420,30 @@ final class Cpp14ExpressionEmitter {
 
             String borrowed = "franko_borrow(" + value + ")";
 
-            if (node.type.kind == SastTypeKind.PTR
-                    && !(node.type.referencedType.kind == SastTypeKind.STATIC_ARRAY)
-                    && !(node.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY)) {
-                return "franko_make_thin_pointer(" + borrowed + ")";
+            if (node.target.type.kind == SastTypeKind.STATIC_ARRAY) {
+                return "franko_make_fat_pointer(*"
+                        + borrowed
+                        + ", "
+                        + node.target.type.sizeLiteral
+                        + ")";
+            }
+
+            if (node.target.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+                return "franko_make_dynamic_fat_pointer(" + borrowed + ")";
             }
 
             return borrowed;
         }
 
         if (node.target.kind == SastKind.DEREF) {
-            return emitExpr(owner, node.target.expr);
+            String pointer = emitExpr(owner, node.target.expr);
+
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.target.expr.type)
+                    && !Cpp14Codegen.isOwnerDynamicArrayPointer(node.type)) {
+                return "franko_make_dynamic_fat_pointer(" + pointer + ")";
+            }
+
+            return pointer;
         }
 
         if (node.target.type.kind == SastTypeKind.STATIC_ARRAY) {
@@ -414,16 +451,20 @@ final class Cpp14ExpressionEmitter {
                     + emitLValue(owner, node.target)
                     + ", "
                     + node.target.type.sizeLiteral
-                    + ", 2)";
+                    + ")";
         }
 
         if (node.target.type.kind == SastTypeKind.DYNAMIC_ARRAY) {
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.type)) {
+                return "(&" + emitLValue(owner, node.target) + ")";
+            }
+
             return "franko_make_dynamic_fat_pointer(&"
                     + emitLValue(owner, node.target)
                     + ")";
         }
 
-        return "franko_make_thin_pointer(&" + emitLValue(owner, node.target) + ")";
+        return "(&" + emitLValue(owner, node.target) + ")";
     }
 
     private String emitDeref(SastNode node) {
@@ -442,25 +483,33 @@ final class Cpp14ExpressionEmitter {
                     + elementType
                     + ", "
                     + node.expr.type.referencedType.sizeLiteral
-                    + ">(static_cast<"
-                    + elementType
-                    + "*>("
+                    + ">("
                     + pointer
-                    + ".data))";
+                    + ".data)";
         }
 
         if (node.expr.type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
-            return "(*static_cast<Franko_Dynamic_Array<"
-                    + owner.emitType(node.expr.type.referencedType.elementType)
-                    + ">*>("
-                    + pointer
-                    + ".data))";
+            if (Cpp14Codegen.isOwnerDynamicArrayPointer(node.expr.type)) {
+                return "(*(" + pointer + "))";
+            }
+
+            throw new IllegalStateException(
+                    "Internal compiler error: cannot materialize a dynamic array lvalue from a flattened view"
+            );
         }
 
-        return "(*(" + pointer + ").data)";
+        return "(*(" + pointer + "))";
     }
 
     private String emitCast(SastNode node) {
+
+        if (node.type.kind == SastTypeKind.PTR) {
+            return Cpp14Codegen.emitPointerConversion(
+                    node.expr.type,
+                    node.type,
+                    emitExpr(owner, node.expr)
+            );
+        }
 
         if (node.type.kind == SastTypeKind.ENUM) {
             String raw = emitExpr(owner, node.expr);
@@ -530,6 +579,10 @@ final class Cpp14ExpressionEmitter {
     ) {
         this.owner = owner;
         String raw = emitExpr(owner, expr);
+
+        if (targetType.kind == SastTypeKind.PTR) {
+            return Cpp14Codegen.emitPointerConversion(expr.type, targetType, raw);
+        }
 
         if (targetType.kind == SastTypeKind.PRIMITIVE) {
 

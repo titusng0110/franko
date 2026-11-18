@@ -7745,12 +7745,13 @@ Rules:
   included once when any bridged function from that bridge file is used.
 - Put `#include "FrankoRuntime.hpp"` in the `common` block. It keeps each
   bridge valid for standalone C++ linting and exposes the runtime types
-  (`Franko_Thin_Pointer`, `Franko_Fat_Pointer`, `franko_panic`, fixed-width
+  (`Franko_Fat_Pointer`, `franko_panic`, fixed-width
   integers). The header is `#pragma once`, so a repeated include is harmless.
 - Bridge ABI: a pointer parameter whose pointee is not an array
-  (`ptr<T>`, `mview<T>`, or `view<T>`) is `Franko_Thin_Pointer<T>` in C++;
-  access its raw pointer through `.data`. A pointer to an array is
-  `Franko_Fat_Pointer<element(T)>`.
+  (`ptr<T>`, `mview<T>`, or `view<T>`) is a raw `T*` in C++; null-check and
+  dereference it directly. A pointer to a static array, and an `mview`/`view`
+  of a dynamic array, are `Franko_Fat_Pointer<element(T)>` with direct
+  `.data`/`.count`; an owning `ptr<[T]>` is `Franko_Dynamic_Array<T>*`.
 - The bridge block must define a function under the exact C++ name generated
   for the Franko declaration. The compiler reports an error if the block is
   missing or the name does not match.

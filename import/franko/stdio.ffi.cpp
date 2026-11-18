@@ -40,50 +40,25 @@ inline bool stdio_view(
         const uint8_t** data,
         uint32_t* length
 ) {
-    if (view.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array =
-                static_cast<Franko_Dynamic_Array<uint8_t>*>(view.data);
-
-        if (array == nullptr || array->data == nullptr) {
-            return false;
-        }
-
-        *data = array->data;
-        *length = array->count;
-        return true;
+    if (view.data == nullptr) {
+        return false;
     }
 
-    if (view.mode == 2) {
-        *data = static_cast<const uint8_t*>(view.data);
-        *length = view.count;
-        return true;
-    }
-
-    return false;
+    *data = view.data;
+    *length = view.count;
+    return true;
 }
 
 inline uint8_t* stdio_mutable_view(
         Franko_Fat_Pointer<uint8_t> view,
         uint32_t* length
 ) {
-    if (view.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array =
-                static_cast<Franko_Dynamic_Array<uint8_t>*>(view.data);
-
-        if (array == nullptr || array->data == nullptr) {
-            return nullptr;
-        }
-
-        *length = array->count;
-        return array->data;
+    if (view.data == nullptr) {
+        return nullptr;
     }
 
-    if (view.mode == 2) {
-        *length = view.count;
-        return static_cast<uint8_t*>(view.data);
-    }
-
-    return nullptr;
+    *length = view.count;
+    return view.data;
 }
 
 inline void stdio_write_bytes(

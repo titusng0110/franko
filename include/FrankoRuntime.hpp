@@ -4,10 +4,9 @@
 // Franko runtime
 // ============================================================
 //
-// One runtime for all three build modes. Pointers whose pointee is not
-// an array are emitted as Franko_Thin_Pointer<T>; pointers to arrays
-// are Franko_Fat_Pointer<T>. The C++ compile flags select the build
-// mode:
+// One runtime for all three build modes. Pointers are emitted as raw
+// C++ pointers; pointers to arrays are Franko_Fat_Pointer<T>. The C++
+// compile flags select the build mode:
 //
 //   FRANKO_USE_JEMALLOC=1      bundled jemalloc instead of the system
 //   FRANKO_BOUNDS_UNCHECKED=1  strip bounds/range/bit/offset checks
@@ -83,59 +82,6 @@
 template <typename T>
 typename std::remove_reference<T>::type* franko_borrow(T&& value) {
     return &value;
-}
-
-// ============================================================
-// Franko_Thin_Pointer<T>
-// ============================================================
-//
-// C++ representation of a pointer whose pointee is not an array:
-// ptr<T>, mview<T>, and view<T> for scalar, struct, tuple, and pointer
-// T. The wrapper has exactly one data field and default-constructs to
-// null, so pointer variables, fields, tuple elements, and array
-// elements are null-initialized.
-template <typename T>
-struct Franko_Thin_Pointer {
-    T* data = nullptr;
-
-    constexpr Franko_Thin_Pointer() : data(nullptr) {}
-    constexpr Franko_Thin_Pointer(std::nullptr_t) : data(nullptr) {}
-    constexpr explicit Franko_Thin_Pointer(T* value) : data(value) {}
-};
-
-template <typename T>
-constexpr Franko_Thin_Pointer<T> franko_make_thin_pointer(T* data) {
-    return Franko_Thin_Pointer<T>(data);
-}
-
-template <typename T>
-constexpr bool operator==(const Franko_Thin_Pointer<T>& left, const Franko_Thin_Pointer<T>& right) {
-    return left.data == right.data;
-}
-
-template <typename T>
-constexpr bool operator!=(const Franko_Thin_Pointer<T>& left, const Franko_Thin_Pointer<T>& right) {
-    return left.data != right.data;
-}
-
-template <typename T>
-constexpr bool operator==(const Franko_Thin_Pointer<T>& pointer, std::nullptr_t) {
-    return pointer.data == nullptr;
-}
-
-template <typename T>
-constexpr bool operator!=(const Franko_Thin_Pointer<T>& pointer, std::nullptr_t) {
-    return pointer.data != nullptr;
-}
-
-template <typename T>
-constexpr bool operator==(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer) {
-    return pointer.data == nullptr;
-}
-
-template <typename T>
-constexpr bool operator!=(std::nullptr_t, const Franko_Thin_Pointer<T>& pointer) {
-    return pointer.data != nullptr;
 }
 
 // ============================================================
@@ -246,7 +192,7 @@ struct franko_element_lifecycle<T[N]> {
     }
 };
 
-// A dynamic array is always wrapped in emitted code by a Franko_Fat_Pointer<T> with mode = 3. // malloc runtime checks are in here
+// Owning dynamic array. Array views over it use Franko_Fat_Pointer<T>.
 template <typename T>
 struct Franko_Dynamic_Array {
     T* data = nullptr;
@@ -1218,914 +1164,300 @@ inline uint64_t popcount_impl(const char* cls, const char* op, const uint8_t* da
 
 } // namespace franko_byte_arrays
 
-/*  this fat pointer is the C++ representation of pointers to arrays (static and dynamic). Pointers to scalars, structs, tuples, and other pointers use Franko_Thin_Pointer<T> and never use this type. Functions are done without check because the compiler should have already checked access permissions to functions.
-    Example:
-    Franko code:
-    [int, 5] imstatic
-    imstatic[0] = 1
-    view<[int,5]> v = view(imstatic)
-    $(v)[0] // value is 1
-    $(v).memset(0) // Compilation error: it is illegal to memset a view, as view is read only, but the compiler should have already checked that, and the C++ backend doesn't know and doesn't care
-    $(v).length() // should be compiled to constant 5
-    view<[int]> decayedV = v
-    // in Franko view<[int]> and view<[int,5]> are different types, but they essentially only has the same functions as they are both read only i.e. const [] access and length()
-    [uint64] imdynamic
-    imdynamic.init(10)
-    imdynamic[0] = 2
-    mview<[uint64]> v2 = mview(imdynamic) // mview is a mutable view, so it can call all mutable functions but not memory allocation functions, but this is checked by compiler
-    $(v2).memset(0xFF) // legal
-    C++ emission:
-    int32_t VAR_imstatic[5]
-    Franko_Fat_Pointer<int32_t> VAR_v = franko_make_fat_pointer(VAR_imstatic, 5, 2)
-    VAR_v[0] // value is 1
-    // nothing is emitted for the illegal memset, as it is a compile error
-    5; // VAR_v.length() is an error
-    Franko_Fat_Pointer<int32_t> VAR_decayedV = v // it changes type in Franko, but the C++ backend doesnt know and doesn't care
-    Franko_Dynamic_Array<uint64_t> VAR_imdynamic
-    VAR_imdynamic.init(10)
-    VAR_imdynamic[0] = 2
-    Franko_Fat_Pointer<uint64_t> VAR_v2 = franko_make_dynamic_fat_pointer(&VAR_imdynamic) // the fat pointer points to the dynamic array, and mode = 3 means it is a dynamic array, note count is 0 because the fat pointer doesn't know the length of the dynamic array, but it can call functions on the dynamic array
-    VAR_v2.memset(0xFF) // legal, the fat pointer points to a dynamic array, so it can call all functions of dynamic array
-    STRUCT_CustomStruct VAR_imstruct
-    Franko_Thin_Pointer<STRUCT_CustomStruct> VAR_v3 = franko_make_thin_pointer(&VAR_imstruct) // non-array pointers use the thin wrapper
-    (*VAR_v3.data).myfieldvar // this is how the field access is compiled
-
-    Therefore, basically Franko_Fat_Pointer provides the union of the static-array and dynamic-array intrinsic surface,
-    and the compiler should have already checked that the function is legal to call on the fat pointer, so the C++ backend doesn't need to check for legality of function calls.
-    However, there is a quirk. the new Franko_Dynamic_Array and the new static array does not have full capability, and need to make a temporary fat pointer to call the functions that are lost
-    Example:
-    Franko code:
-    [int, 5] imstatic
-    imstatic.memset(0) // legal, but the new static array doesn't have memset, so the compiler should emit a temporary fat pointer to call the function
-    [byte] imdynamic
-    imdynamic.init(10)
-    imdynamic.memset(0) // legal, but the new dynamic array doesn't have memset, so the compiler should emit a temporary fat pointer to call the function
-
-    C++ emission:
-    int32_t VAR_imstatic[5]
-    franko_make_fat_pointer(VAR_imstatic, 5, 2).memset(0) // the temporary fat pointer is created to call the function
-    Franko_Dynamic_Array<uint8_t> VAR_imdynamic
-    VAR_imdynamic.init(10)
-    franko_make_dynamic_fat_pointer(&VAR_imdynamic).memset(0) // the temporary fat pointer is created to call the function
- */
+// ============================================================
+// Franko_Fat_Pointer<T>
+// ============================================================
+//
+// 16-byte slice representing an array view. Holds a direct pointer to
+// the first element and the element count. Static arrays, string and
+// array literals, and dynamic-array views all use this representation.
+//
+// Operator `ptr<[T]>` values that own a dynamic array keep the array
+// descriptor instead (they must support init/resize/uninit); codegen
+// converts them to this slice when a view is needed.
 template <typename T>
 struct Franko_Fat_Pointer {
-    void* data = nullptr; // mode 2: first element. mode 3: the Franko_Dynamic_Array<T> object. mode 0: null
+    T* data = nullptr;
     uint32_t count = 0;
-    uint8_t mode = 0; // 0 = null, 2 = static array, 3 = dynamic array (non-array pointers use Franko_Thin_Pointer<T>)
 
-    Franko_Fat_Pointer() = default;
+    constexpr Franko_Fat_Pointer() = default;
 
     constexpr Franko_Fat_Pointer(std::nullptr_t)
-        : data(nullptr), count(0), mode(0) {
-    }
+        : data(nullptr), count(0) {}
 
-    constexpr Franko_Fat_Pointer(T* elements, uint32_t elementCount, uint8_t pointerMode)
-        : data(elements), count(elementCount), mode(pointerMode) {
-    }
+    constexpr Franko_Fat_Pointer(T* elements, uint32_t elementCount)
+        : data(elements), count(elementCount) {}
 
     uint32_t length() const {
-        if (mode == 2)
-            return count;
-        else if (mode == 3)
-            return static_cast<Franko_Dynamic_Array<T>*>(data)->count;
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer length() called on non-array");
+        return count;
     }
 
-    // compiler checks dictates that this function will only be called on a static array or dynamic array
     const T& operator[](uint32_t index) const {
-        if (mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (index >= count)
-                franko_panic("Franko static array index out of bounds");
+        if (data == nullptr) franko_panic("Franko array pointer is null or uninitialized");
+        if (index >= count)  franko_panic("Franko array index out of bounds");
 #endif
-            return static_cast<T*>(data)[index];
-        } else if (mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (index >= static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array index out of bounds");
-#endif
-            return static_cast<Franko_Dynamic_Array<T>*>(data)->data[index];
-        } else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer operator[] called on non-array");
-
+        return data[index];
     }
 
     T& operator[](uint32_t index) {
-        if (mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (index >= count)
-                franko_panic("Franko static array index out of bounds");
+        if (data == nullptr) franko_panic("Franko array pointer is null or uninitialized");
+        if (index >= count)  franko_panic("Franko array index out of bounds");
 #endif
-            return static_cast<T*>(data)[index];
-        } else if (mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (index >= static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array index out of bounds");
-#endif
-            return static_cast<Franko_Dynamic_Array<T>*>(data)->data[index];
-        } else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer operator[] called on non-array");
+        return data[index];
     }
 
     void memset(uint8_t byteValue) {
-        if (mode == 2) {
-            if (count > 0)
-                std::memset(static_cast<T*>(data), byteValue, sizeof(T) * static_cast<size_t>(count));
-        }
-        else if (mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->count > 0)
-                std::memset(static_cast<Franko_Dynamic_Array<T>*>(data)->data, byteValue, sizeof(T) * static_cast<size_t>(static_cast<Franko_Dynamic_Array<T>*>(data)->count));
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset called on non-array");
+#if !FRANKO_BOUNDS_UNCHECKED
+        if (data == nullptr) franko_panic("Franko memset called on uninitialized array");
+#endif
+        if (count > 0)
+            std::memset(data, byteValue, sizeof(T) * static_cast<size_t>(count));
     }
 
     void memset(uint8_t byteValue, uint32_t start, uint32_t elementCount) {
-        if (mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (start > count)
-                franko_panic("Franko static array memset start out of bounds");
-            if (elementCount > count - start)
-                franko_panic("Franko static array memset range out of bounds");
+        if (data == nullptr) franko_panic("Franko memset called on uninitialized array");
+        if (start > count)   franko_panic("Franko memset start out of bounds");
+        if (elementCount > count - start) franko_panic("Franko memset range out of bounds");
 #endif
-            if (elementCount > 0)
-                std::memset(static_cast<T*>(data) + start, byteValue, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else if (mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (start > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memset start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - start)
-                franko_panic("Franko dynamic array memset range out of bounds");
-#endif
-            if (elementCount > 0)
-                std::memset(static_cast<Franko_Dynamic_Array<T>*>(data)->data + start, byteValue, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset called on non-array");
+        if (elementCount > 0)
+            std::memset(data + start, byteValue, sizeof(T) * static_cast<size_t>(elementCount));
     }
 
     void memcpy(const Franko_Fat_Pointer<T> other) {
-        if (mode == 2 && other.mode == 2) {
-            const uint32_t copyCount = (count < other.count) ? count : other.count;
-            if (copyCount > 0 && static_cast<T*>(data) != static_cast<T*>(other.data))
-                std::memcpy(static_cast<T*>(data), static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(copyCount));
-        }
-        else if (mode == 2 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-            const uint32_t copyCount = (count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (copyCount > 0
-                    && static_cast<T*>(data) != static_cast<Franko_Dynamic_Array<T>*>(other.data)->data)
-                std::memcpy(static_cast<T*>(data), static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(copyCount));
-        }
-        else if (mode == 3 && other.mode == 2) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            const uint32_t copyCount = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < other.count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : other.count;
-            if (copyCount > 0
-                    && static_cast<Franko_Dynamic_Array<T>*>(data)->data != static_cast<T*>(other.data))
-                std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(copyCount));
-        }
-        else if (mode == 3 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-            const uint32_t copyCount = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (copyCount > 0
-                    && static_cast<Franko_Dynamic_Array<T>*>(data)->data != static_cast<Franko_Dynamic_Array<T>*>(other.data)->data)
-                std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(copyCount));
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memcpy called on incompatible array types");
+#if !FRANKO_BOUNDS_UNCHECKED
+        if (data == nullptr || other.data == nullptr)
+            franko_panic("Franko memcpy called on uninitialized array");
+#endif
+        const uint32_t copyCount = (count < other.count) ? count : other.count;
+        if (copyCount > 0 && data != other.data)
+            std::memcpy(data, other.data, sizeof(T) * static_cast<size_t>(copyCount));
     }
 
     void memcpy(const Franko_Fat_Pointer<T> other, uint32_t dstStart, uint32_t srcStart, uint32_t elementCount) {
-        if (mode == 2 && other.mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > count)
-                franko_panic("Franko static array memcpy destination start out of bounds");
-            if (srcStart > other.count)
-                franko_panic("Franko static array memcpy source start out of bounds");
-            if (elementCount > count - dstStart)
-                franko_panic("Franko static array memcpy destination range out of bounds");
-            if (elementCount > other.count - srcStart)
-                franko_panic("Franko static array memcpy source range out of bounds");
-            if (static_cast<T*>(data) == static_cast<T*>(other.data)) {
-                if (dstStart == srcStart)
-                    return;
-                if (dstStart < srcStart + elementCount
-                        && srcStart < dstStart + elementCount)
-                    franko_panic("Franko array memcpy source and destination overlap");
-            }
-#endif
-            if (elementCount > 0)
-                std::memcpy(static_cast<T*>(data) + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
+        if (data == nullptr || other.data == nullptr)
+            franko_panic("Franko memcpy called on uninitialized array");
+        if (dstStart > count)
+            franko_panic("Franko memcpy destination start out of bounds");
+        if (srcStart > other.count)
+            franko_panic("Franko memcpy source start out of bounds");
+        if (elementCount > count - dstStart)
+            franko_panic("Franko memcpy destination range out of bounds");
+        if (elementCount > other.count - srcStart)
+            franko_panic("Franko memcpy source range out of bounds");
+        if (data == other.data) {
+            if (dstStart == srcStart) return;
+            if (dstStart < srcStart + elementCount && srcStart < dstStart + elementCount)
+                franko_panic("Franko array memcpy source and destination overlap");
         }
-        else if (mode == 2 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > count)
-                franko_panic("Franko static array memcpy destination start out of bounds");
-            if (srcStart > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                franko_panic("Franko dynamic array memcpy source start out of bounds");
-            if (elementCount > count - dstStart)
-                franko_panic("Franko static array memcpy destination range out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
-                franko_panic("Franko dynamic array memcpy source range out of bounds");
-            if (static_cast<T*>(data) == static_cast<Franko_Dynamic_Array<T>*>(other.data)->data) {
-                if (dstStart == srcStart)
-                    return;
-                if (dstStart < srcStart + elementCount
-                        && srcStart < dstStart + elementCount)
-                    franko_panic("Franko array memcpy source and destination overlap");
-            }
 #endif
-            if (elementCount > 0)
-                std::memcpy(static_cast<T*>(data) + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else if (mode == 3 && other.mode == 2) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memcpy destination start out of bounds");
-            if (srcStart > other.count)
-                franko_panic("Franko static array memcpy source start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - dstStart)
-                franko_panic("Franko dynamic array memcpy destination range out of bounds");
-            if (elementCount > other.count - srcStart)
-                franko_panic("Franko static array memcpy source range out of bounds");
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == static_cast<T*>(other.data)) {
-                if (dstStart == srcStart)
-                    return;
-                if (dstStart < srcStart + elementCount
-                        && srcStart < dstStart + elementCount)
-                    franko_panic("Franko array memcpy source and destination overlap");
-            }
-#endif
-            if (elementCount > 0)
-                std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else if (mode == 3 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memcpy destination start out of bounds");
-            if (srcStart > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                franko_panic("Franko dynamic array memcpy source start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - dstStart)
-                franko_panic("Franko dynamic array memcpy destination range out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
-                franko_panic("Franko dynamic array memcpy source range out of bounds");
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == static_cast<Franko_Dynamic_Array<T>*>(other.data)->data) {
-                if (dstStart == srcStart)
-                    return;
-                if (dstStart < srcStart + elementCount
-                        && srcStart < dstStart + elementCount)
-                    franko_panic("Franko array memcpy source and destination overlap");
-            }
-#endif
-            if (elementCount > 0)
-                std::memcpy(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memcpy called on incompatible array types");
+        if (elementCount > 0)
+            std::memcpy(data + dstStart, other.data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
     }
 
     void memmove(uint32_t dstStart, uint32_t srcStart, uint32_t elementCount) {
-        if (mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > count)
-                franko_panic("Franko static array memmove destination start out of bounds");
-            if (srcStart > count)
-                franko_panic("Franko static array memmove source start out of bounds");
-            if (elementCount > count - dstStart)
-                franko_panic("Franko static array memmove destination range out of bounds");
-            if (elementCount > count - srcStart)
-                franko_panic("Franko static array memmove source range out of bounds");
+        if (data == nullptr)
+            franko_panic("Franko memmove called on uninitialized array");
+        if (dstStart > count)
+            franko_panic("Franko memmove destination start out of bounds");
+        if (srcStart > count)
+            franko_panic("Franko memmove source start out of bounds");
+        if (elementCount > count - dstStart)
+            franko_panic("Franko memmove destination range out of bounds");
+        if (elementCount > count - srcStart)
+            franko_panic("Franko memmove source range out of bounds");
 #endif
-            if (elementCount > 0)
-                std::memmove(static_cast<T*>(data) + dstStart, static_cast<T*>(data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else if (mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memmove destination start out of bounds");
-            if (srcStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memmove source start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - dstStart)
-                franko_panic("Franko dynamic array memmove destination range out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - srcStart)
-                franko_panic("Franko dynamic array memmove source range out of bounds");
-#endif
-            if (elementCount > 0)
-                std::memmove(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<Franko_Dynamic_Array<T>*>(data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memmove called on non-array");
+        if (elementCount > 0)
+            std::memmove(data + dstStart, data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
     }
 
-    // memcmp: lexicographic raw-byte comparison, C semantics (the sign
-    // of the first differing byte; only the sign is meaningful).
-    // The compiler's memcpy-safe-element rule is the only gate. The
-    // whole form is lexicographic across lengths: on an equal shared
-    // prefix the shorter array is smaller. The ranged form compares
-    // exactly `elementCount` elements.
-
     int32_t memcmp(const Franko_Fat_Pointer<T> other) const {
-        if (mode == 2 && other.mode == 2) {
-            const uint32_t shared = (count < other.count) ? count : other.count;
-            if (shared > 0) {
-                const int result = std::memcmp(static_cast<T*>(data), static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(shared));
-                if (result != 0)
-                    return result;
-            }
-            if (count < other.count)
-                return -1;
-            if (count > other.count)
-                return 1;
-            return 0;
+#if !FRANKO_BOUNDS_UNCHECKED
+        if (data == nullptr || other.data == nullptr)
+            franko_panic("Franko memcmp called on uninitialized array");
+#endif
+        const uint32_t shared = (count < other.count) ? count : other.count;
+        if (shared > 0 && data != other.data) {
+            const int result = std::memcmp(data, other.data, sizeof(T) * static_cast<size_t>(shared));
+            if (result != 0) return result;
         }
-        else if (mode == 2 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-            const uint32_t shared = (count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (shared > 0) {
-                const int result = std::memcmp(static_cast<T*>(data), static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(shared));
-                if (result != 0)
-                    return result;
-            }
-            if (count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                return -1;
-            if (count > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                return 1;
-            return 0;
-        }
-        else if (mode == 3 && other.mode == 2) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            const uint32_t shared = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < other.count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : other.count;
-            if (shared > 0) {
-                const int result = std::memcmp(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<T*>(other.data), sizeof(T) * static_cast<size_t>(shared));
-                if (result != 0)
-                    return result;
-            }
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->count < other.count)
-                return -1;
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->count > other.count)
-                return 1;
-            return 0;
-        }
-        else if (mode == 3 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-            const uint32_t shared = (static_cast<Franko_Dynamic_Array<T>*>(data)->count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count) ? static_cast<Franko_Dynamic_Array<T>*>(data)->count : static_cast<Franko_Dynamic_Array<T>*>(other.data)->count;
-            if (shared > 0) {
-                const int result = std::memcmp(static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data, sizeof(T) * static_cast<size_t>(shared));
-                if (result != 0)
-                    return result;
-            }
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->count < static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                return -1;
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->count > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                return 1;
-            return 0;
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memcmp called on incompatible array types");
+        if (count < other.count) return -1;
+        if (count > other.count) return 1;
+        return 0;
     }
 
     int32_t memcmp(const Franko_Fat_Pointer<T> other, uint32_t dstStart, uint32_t srcStart, uint32_t elementCount) const {
-        if (mode == 2 && other.mode == 2) {
 #if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > count)
-                franko_panic("Franko static array memcmp destination start out of bounds");
-            if (srcStart > other.count)
-                franko_panic("Franko static array memcmp source start out of bounds");
-            if (elementCount > count - dstStart)
-                franko_panic("Franko static array memcmp destination range out of bounds");
-            if (elementCount > other.count - srcStart)
-                franko_panic("Franko static array memcmp source range out of bounds");
+        if (data == nullptr || other.data == nullptr)
+            franko_panic("Franko memcmp called on uninitialized array");
+        if (dstStart > count)
+            franko_panic("Franko memcmp destination start out of bounds");
+        if (srcStart > other.count)
+            franko_panic("Franko memcmp source start out of bounds");
+        if (elementCount > count - dstStart)
+            franko_panic("Franko memcmp destination range out of bounds");
+        if (elementCount > other.count - srcStart)
+            franko_panic("Franko memcmp source range out of bounds");
 #endif
-            if (elementCount > 0)
-                return std::memcmp(static_cast<T*>(data) + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-            return 0;
-        }
-        else if (mode == 2 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > count)
-                franko_panic("Franko static array memcmp destination start out of bounds");
-            if (srcStart > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                franko_panic("Franko dynamic array memcmp source start out of bounds");
-            if (elementCount > count - dstStart)
-                franko_panic("Franko static array memcmp destination range out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
-                franko_panic("Franko dynamic array memcmp source range out of bounds");
-#endif
-            if (elementCount > 0)
-                return std::memcmp(static_cast<T*>(data) + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-            return 0;
-        }
-        else if (mode == 3 && other.mode == 2) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memcmp destination start out of bounds");
-            if (srcStart > other.count)
-                franko_panic("Franko static array memcmp source start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - dstStart)
-                franko_panic("Franko dynamic array memcmp destination range out of bounds");
-            if (elementCount > other.count - srcStart)
-                franko_panic("Franko static array memcmp source range out of bounds");
-#endif
-            if (elementCount > 0)
-                return std::memcmp(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<T*>(other.data) + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-            return 0;
-        }
-        else if (mode == 3 && other.mode == 3) {
-            if (static_cast<Franko_Dynamic_Array<T>*>(data)->data == nullptr)
-                franko_panic("Franko dynamic array is not initialized");
-            if (static_cast<Franko_Dynamic_Array<T>*>(other.data)->data == nullptr)
-                franko_panic("Franko dynamic array source is not initialized");
-#if !FRANKO_BOUNDS_UNCHECKED
-            if (dstStart > static_cast<Franko_Dynamic_Array<T>*>(data)->count)
-                franko_panic("Franko dynamic array memcmp destination start out of bounds");
-            if (srcStart > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count)
-                franko_panic("Franko dynamic array memcmp source start out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(data)->count - dstStart)
-                franko_panic("Franko dynamic array memcmp destination range out of bounds");
-            if (elementCount > static_cast<Franko_Dynamic_Array<T>*>(other.data)->count - srcStart)
-                franko_panic("Franko dynamic array memcmp source range out of bounds");
-#endif
-            if (elementCount > 0)
-                return std::memcmp(static_cast<Franko_Dynamic_Array<T>*>(data)->data + dstStart, static_cast<Franko_Dynamic_Array<T>*>(other.data)->data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
-            return 0;
-        }
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memcmp called on incompatible array types");
+        if (elementCount > 0)
+            return std::memcmp(data + dstStart, other.data + srcStart, sizeof(T) * static_cast<size_t>(elementCount));
+        return 0;
     }
 
-    // ==========================================================
-    // Byte-array and bit intrinsics (see franko_byte_arrays above).
-    // The compiler only emits these for byte (uint8_t) arrays.
-    // ==========================================================
-
     uint32_t memchr(uint8_t value) const {
-        if (mode == 2)
-            return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<T*>(data), count, 0, count, value);
-        else if (mode == 3)
-            return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memchr called on non-array");
+        return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, 0, count, value);
     }
 
     uint32_t memchr(uint8_t value, uint32_t start, uint32_t elementCount) const {
-        if (mode == 2)
-            return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<T*>(data), count, start, elementCount, value);
-        else if (mode == 3)
-            return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memchr called on non-array");
+        return franko_byte_arrays::memchr_impl("Franko_Fat_Pointer", "memchr", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, start, elementCount, value);
     }
 
     uint32_t memmem(const Franko_Fat_Pointer<T> needle) const {
-        if (needle.mode == 0)
-            franko_byte_arrays::fail("Franko_Fat_Pointer", "memmem", "source pointer is null");
-        if (mode == 2) {
-            if (needle.mode == 2)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<T*>(data), count, 0, count, static_cast<T*>(needle.data), needle.count);
-            else if (needle.mode == 3)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<T*>(data), count, 0, count, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->data, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->count);
-        } else if (mode == 3) {
-            if (needle.mode == 2)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, static_cast<T*>(needle.data), needle.count);
-            else if (needle.mode == 3)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->data, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->count);
-        }
-        franko_panic("Internal compiler error: Franko_Fat_Pointer memmem called on non-array");
+        return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, 0, count, static_cast<const uint8_t*>(static_cast<const void*>(needle.data)), needle.count);
     }
 
     uint32_t memmem(const Franko_Fat_Pointer<T> needle, uint32_t start, uint32_t elementCount) const {
-        if (needle.mode == 0)
-            franko_byte_arrays::fail("Franko_Fat_Pointer", "memmem", "source pointer is null");
-        if (mode == 2) {
-            if (needle.mode == 2)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<T*>(data), count, start, elementCount, static_cast<T*>(needle.data), needle.count);
-            else if (needle.mode == 3)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<T*>(data), count, start, elementCount, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->data, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->count);
-        } else if (mode == 3) {
-            if (needle.mode == 2)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, static_cast<T*>(needle.data), needle.count);
-            else if (needle.mode == 3)
-                return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->data, static_cast<Franko_Dynamic_Array<T>*>(needle.data)->count);
-        }
-        franko_panic("Internal compiler error: Franko_Fat_Pointer memmem called on non-array");
+        return franko_byte_arrays::memmem_impl("Franko_Fat_Pointer", "memmem", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, start, elementCount, static_cast<const uint8_t*>(static_cast<const void*>(needle.data)), needle.count);
     }
 
     uint16_t read_uint16_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint16_t, true>("Franko_Fat_Pointer", "read_uint16_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint16_t, true>("Franko_Fat_Pointer", "read_uint16_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint16_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint16_t, true>("Franko_Fat_Pointer", "read_uint16_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     uint16_t read_uint16_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint16_t, false>("Franko_Fat_Pointer", "read_uint16_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint16_t, false>("Franko_Fat_Pointer", "read_uint16_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint16_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint16_t, false>("Franko_Fat_Pointer", "read_uint16_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_uint16_LE(uint32_t offset, uint16_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint16_t, true>("Franko_Fat_Pointer", "write_uint16_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint16_t, true>("Franko_Fat_Pointer", "write_uint16_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint16_LE called on non-array");
+        franko_byte_arrays::write_int_impl<uint16_t, true>("Franko_Fat_Pointer", "write_uint16_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_uint16_BE(uint32_t offset, uint16_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint16_t, false>("Franko_Fat_Pointer", "write_uint16_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint16_t, false>("Franko_Fat_Pointer", "write_uint16_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint16_BE called on non-array");
+        franko_byte_arrays::write_int_impl<uint16_t, false>("Franko_Fat_Pointer", "write_uint16_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     uint32_t read_uint32_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint32_t, true>("Franko_Fat_Pointer", "read_uint32_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint32_t, true>("Franko_Fat_Pointer", "read_uint32_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint32_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint32_t, true>("Franko_Fat_Pointer", "read_uint32_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     uint32_t read_uint32_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint32_t, false>("Franko_Fat_Pointer", "read_uint32_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint32_t, false>("Franko_Fat_Pointer", "read_uint32_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint32_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint32_t, false>("Franko_Fat_Pointer", "read_uint32_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_uint32_LE(uint32_t offset, uint32_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint32_t, true>("Franko_Fat_Pointer", "write_uint32_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint32_t, true>("Franko_Fat_Pointer", "write_uint32_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint32_LE called on non-array");
+        franko_byte_arrays::write_int_impl<uint32_t, true>("Franko_Fat_Pointer", "write_uint32_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_uint32_BE(uint32_t offset, uint32_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint32_t, false>("Franko_Fat_Pointer", "write_uint32_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint32_t, false>("Franko_Fat_Pointer", "write_uint32_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint32_BE called on non-array");
+        franko_byte_arrays::write_int_impl<uint32_t, false>("Franko_Fat_Pointer", "write_uint32_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     uint64_t read_uint64_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint64_t, true>("Franko_Fat_Pointer", "read_uint64_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint64_t, true>("Franko_Fat_Pointer", "read_uint64_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint64_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint64_t, true>("Franko_Fat_Pointer", "read_uint64_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     uint64_t read_uint64_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<uint64_t, false>("Franko_Fat_Pointer", "read_uint64_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<uint64_t, false>("Franko_Fat_Pointer", "read_uint64_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_uint64_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<uint64_t, false>("Franko_Fat_Pointer", "read_uint64_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_uint64_LE(uint32_t offset, uint64_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint64_t, true>("Franko_Fat_Pointer", "write_uint64_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint64_t, true>("Franko_Fat_Pointer", "write_uint64_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint64_LE called on non-array");
+        franko_byte_arrays::write_int_impl<uint64_t, true>("Franko_Fat_Pointer", "write_uint64_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_uint64_BE(uint32_t offset, uint64_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<uint64_t, false>("Franko_Fat_Pointer", "write_uint64_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<uint64_t, false>("Franko_Fat_Pointer", "write_uint64_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_uint64_BE called on non-array");
+        franko_byte_arrays::write_int_impl<uint64_t, false>("Franko_Fat_Pointer", "write_uint64_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     int16_t read_int16_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int16_t, true>("Franko_Fat_Pointer", "read_int16_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int16_t, true>("Franko_Fat_Pointer", "read_int16_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int16_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<int16_t, true>("Franko_Fat_Pointer", "read_int16_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     int16_t read_int16_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int16_t, false>("Franko_Fat_Pointer", "read_int16_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int16_t, false>("Franko_Fat_Pointer", "read_int16_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int16_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<int16_t, false>("Franko_Fat_Pointer", "read_int16_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_int16_LE(uint32_t offset, int16_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int16_t, true>("Franko_Fat_Pointer", "write_int16_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int16_t, true>("Franko_Fat_Pointer", "write_int16_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int16_LE called on non-array");
+        franko_byte_arrays::write_int_impl<int16_t, true>("Franko_Fat_Pointer", "write_int16_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_int16_BE(uint32_t offset, int16_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int16_t, false>("Franko_Fat_Pointer", "write_int16_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int16_t, false>("Franko_Fat_Pointer", "write_int16_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int16_BE called on non-array");
+        franko_byte_arrays::write_int_impl<int16_t, false>("Franko_Fat_Pointer", "write_int16_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     int32_t read_int32_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int32_t, true>("Franko_Fat_Pointer", "read_int32_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int32_t, true>("Franko_Fat_Pointer", "read_int32_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int32_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<int32_t, true>("Franko_Fat_Pointer", "read_int32_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     int32_t read_int32_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int32_t, false>("Franko_Fat_Pointer", "read_int32_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int32_t, false>("Franko_Fat_Pointer", "read_int32_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int32_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<int32_t, false>("Franko_Fat_Pointer", "read_int32_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_int32_LE(uint32_t offset, int32_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int32_t, true>("Franko_Fat_Pointer", "write_int32_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int32_t, true>("Franko_Fat_Pointer", "write_int32_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int32_LE called on non-array");
+        franko_byte_arrays::write_int_impl<int32_t, true>("Franko_Fat_Pointer", "write_int32_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_int32_BE(uint32_t offset, int32_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int32_t, false>("Franko_Fat_Pointer", "write_int32_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int32_t, false>("Franko_Fat_Pointer", "write_int32_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int32_BE called on non-array");
+        franko_byte_arrays::write_int_impl<int32_t, false>("Franko_Fat_Pointer", "write_int32_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     int64_t read_int64_LE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int64_t, true>("Franko_Fat_Pointer", "read_int64_LE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int64_t, true>("Franko_Fat_Pointer", "read_int64_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int64_LE called on non-array");
+        return franko_byte_arrays::read_int_impl<int64_t, true>("Franko_Fat_Pointer", "read_int64_LE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     int64_t read_int64_BE(uint32_t offset) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_int_impl<int64_t, false>("Franko_Fat_Pointer", "read_int64_BE", static_cast<T*>(data), count, offset);
-        else if (mode == 3)
-            return franko_byte_arrays::read_int_impl<int64_t, false>("Franko_Fat_Pointer", "read_int64_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_int64_BE called on non-array");
+        return franko_byte_arrays::read_int_impl<int64_t, false>("Franko_Fat_Pointer", "read_int64_BE", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, offset);
     }
-
     void write_int64_LE(uint32_t offset, int64_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int64_t, true>("Franko_Fat_Pointer", "write_int64_LE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int64_t, true>("Franko_Fat_Pointer", "write_int64_LE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int64_LE called on non-array");
+        franko_byte_arrays::write_int_impl<int64_t, true>("Franko_Fat_Pointer", "write_int64_LE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
-
     void write_int64_BE(uint32_t offset, int64_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_int_impl<int64_t, false>("Franko_Fat_Pointer", "write_int64_BE", static_cast<T*>(data), count, offset, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_int_impl<int64_t, false>("Franko_Fat_Pointer", "write_int64_BE", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, offset, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_int64_BE called on non-array");
+        franko_byte_arrays::write_int_impl<int64_t, false>("Franko_Fat_Pointer", "write_int64_BE", static_cast<uint8_t*>(static_cast<void*>(data)), count, offset, value);
     }
 
     uint8_t read_bit(uint64_t bitIndex) const {
-        if (mode == 2)
-            return franko_byte_arrays::read_bit_impl("Franko_Fat_Pointer", "read_bit", static_cast<T*>(data), count, bitIndex);
-        else if (mode == 3)
-            return franko_byte_arrays::read_bit_impl("Franko_Fat_Pointer", "read_bit", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer read_bit called on non-array");
+        return franko_byte_arrays::read_bit_impl("Franko_Fat_Pointer", "read_bit", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, bitIndex);
     }
-
     void write_bit(uint64_t bitIndex, uint8_t value) {
-        if (mode == 2)
-            franko_byte_arrays::write_bit_impl("Franko_Fat_Pointer", "write_bit", static_cast<T*>(data), count, bitIndex, value);
-        else if (mode == 3)
-            franko_byte_arrays::write_bit_impl("Franko_Fat_Pointer", "write_bit", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer write_bit called on non-array");
+        franko_byte_arrays::write_bit_impl("Franko_Fat_Pointer", "write_bit", static_cast<uint8_t*>(static_cast<void*>(data)), count, bitIndex, value);
     }
-
     void flip_bit(uint64_t bitIndex) {
-        if (mode == 2)
-            franko_byte_arrays::flip_bit_impl("Franko_Fat_Pointer", "flip_bit", static_cast<T*>(data), count, bitIndex);
-        else if (mode == 3)
-            franko_byte_arrays::flip_bit_impl("Franko_Fat_Pointer", "flip_bit", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer flip_bit called on non-array");
+        franko_byte_arrays::flip_bit_impl("Franko_Fat_Pointer", "flip_bit", static_cast<uint8_t*>(static_cast<void*>(data)), count, bitIndex);
     }
-
-    void memset_not() {
-        if (mode == 2)
-            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<T*>(data), count, 0, count);
-        else if (mode == 3)
-            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_not called on non-array");
-    }
-
-    void memset_not(uint32_t start, uint32_t elementCount) {
-        if (mode == 2)
-            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<T*>(data), count, start, elementCount);
-        else if (mode == 3)
-            franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_not called on non-array");
-    }
-
-    void memset_xor(uint8_t value) {
-        if (mode == 2)
-            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<T*>(data), count, 0, count, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_xor called on non-array");
-    }
-
-    void memset_xor(uint8_t value, uint32_t start, uint32_t elementCount) {
-        if (mode == 2)
-            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<T*>(data), count, start, elementCount, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_xor called on non-array");
-    }
-
-    void memset_and(uint8_t value) {
-        if (mode == 2)
-            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<T*>(data), count, 0, count, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_and called on non-array");
-    }
-
-    void memset_and(uint8_t value, uint32_t start, uint32_t elementCount) {
-        if (mode == 2)
-            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<T*>(data), count, start, elementCount, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_and called on non-array");
-    }
-
-    void memset_or(uint8_t value) {
-        if (mode == 2)
-            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<T*>(data), count, 0, count, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, 0, static_cast<Franko_Dynamic_Array<T>*>(data)->count, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_or called on non-array");
-    }
-
-    void memset_or(uint8_t value, uint32_t start, uint32_t elementCount) {
-        if (mode == 2)
-            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<T*>(data), count, start, elementCount, value);
-        else if (mode == 3)
-            franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, start, elementCount, value);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer memset_or called on non-array");
-    }
-
     void swap_bits(uint64_t firstBit, uint64_t secondBit) {
-        if (mode == 2)
-            franko_byte_arrays::swap_bits_impl("Franko_Fat_Pointer", "swap_bits", static_cast<T*>(data), count, firstBit, secondBit);
-        else if (mode == 3)
-            franko_byte_arrays::swap_bits_impl("Franko_Fat_Pointer", "swap_bits", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, firstBit, secondBit);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer swap_bits called on non-array");
+        franko_byte_arrays::swap_bits_impl("Franko_Fat_Pointer", "swap_bits", static_cast<uint8_t*>(static_cast<void*>(data)), count, firstBit, secondBit);
     }
-
     void reverse_bits(uint64_t startBit, uint64_t bitCount) {
-        if (mode == 2)
-            franko_byte_arrays::reverse_bits_impl("Franko_Fat_Pointer", "reverse_bits", static_cast<T*>(data), count, startBit, bitCount);
-        else if (mode == 3)
-            franko_byte_arrays::reverse_bits_impl("Franko_Fat_Pointer", "reverse_bits", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, startBit, bitCount);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer reverse_bits called on non-array");
+        franko_byte_arrays::reverse_bits_impl("Franko_Fat_Pointer", "reverse_bits", static_cast<uint8_t*>(static_cast<void*>(data)), count, startBit, bitCount);
     }
-
     uint64_t count_trailing_zeros(uint64_t bitIndex) const {
-        if (mode == 2)
-            return franko_byte_arrays::count_trailing_zeros_impl("Franko_Fat_Pointer", "count_trailing_zeros", static_cast<T*>(data), count, bitIndex);
-        else if (mode == 3)
-            return franko_byte_arrays::count_trailing_zeros_impl("Franko_Fat_Pointer", "count_trailing_zeros", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer count_trailing_zeros called on non-array");
+        return franko_byte_arrays::count_trailing_zeros_impl("Franko_Fat_Pointer", "count_trailing_zeros", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, bitIndex);
     }
-
     uint64_t count_leading_zeros(uint64_t bitIndex) const {
-        if (mode == 2)
-            return franko_byte_arrays::count_leading_zeros_impl("Franko_Fat_Pointer", "count_leading_zeros", static_cast<T*>(data), count, bitIndex);
-        else if (mode == 3)
-            return franko_byte_arrays::count_leading_zeros_impl("Franko_Fat_Pointer", "count_leading_zeros", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitIndex);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer count_leading_zeros called on non-array");
+        return franko_byte_arrays::count_leading_zeros_impl("Franko_Fat_Pointer", "count_leading_zeros", static_cast<const uint8_t*>(static_cast<const void*>(data)), count, bitIndex);
     }
-
     void shift_bits_left(uint64_t bitCount) {
-        if (mode == 2)
-            franko_byte_arrays::shift_bits_left_impl("Franko_Fat_Pointer", "shift_bits_left", static_cast<T*>(data), count, bitCount);
-        else if (mode == 3)
-            franko_byte_arrays::shift_bits_left_impl("Franko_Fat_Pointer", "shift_bits_left", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitCount);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer shift_bits_left called on non-array");
+        franko_byte_arrays::shift_bits_left_impl("Franko_Fat_Pointer", "shift_bits_left", static_cast<uint8_t*>(static_cast<void*>(data)), count, bitCount);
     }
-
     void shift_bits_right(uint64_t bitCount) {
-        if (mode == 2)
-            franko_byte_arrays::shift_bits_right_impl("Franko_Fat_Pointer", "shift_bits_right", static_cast<T*>(data), count, bitCount);
-        else if (mode == 3)
-            franko_byte_arrays::shift_bits_right_impl("Franko_Fat_Pointer", "shift_bits_right", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count, bitCount);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer shift_bits_right called on non-array");
+        franko_byte_arrays::shift_bits_right_impl("Franko_Fat_Pointer", "shift_bits_right", static_cast<uint8_t*>(static_cast<void*>(data)), count, bitCount);
     }
-
     uint64_t popcount() const {
-        if (mode == 2)
-            return franko_byte_arrays::popcount_impl("Franko_Fat_Pointer", "popcount", static_cast<T*>(data), count);
-        else if (mode == 3)
-            return franko_byte_arrays::popcount_impl("Franko_Fat_Pointer", "popcount", static_cast<Franko_Dynamic_Array<T>*>(data)->data, static_cast<Franko_Dynamic_Array<T>*>(data)->count);
-        else
-            franko_panic("Internal compiler error: Franko_Fat_Pointer popcount called on non-array");
+        return franko_byte_arrays::popcount_impl("Franko_Fat_Pointer", "popcount", static_cast<const uint8_t*>(static_cast<const void*>(data)), count);
+    }
+    void memset_not() {
+        franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<uint8_t*>(static_cast<void*>(data)), count, 0, count);
+    }
+    void memset_not(uint32_t start, uint32_t elementCount) {
+        franko_byte_arrays::memset_not_impl("Franko_Fat_Pointer", "memset_not", static_cast<uint8_t*>(static_cast<void*>(data)), count, start, elementCount);
+    }
+    void memset_xor(uint8_t value) {
+        franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<uint8_t*>(static_cast<void*>(data)), count, 0, count, value);
+    }
+    void memset_xor(uint8_t value, uint32_t start, uint32_t elementCount) {
+        franko_byte_arrays::memset_xor_impl("Franko_Fat_Pointer", "memset_xor", static_cast<uint8_t*>(static_cast<void*>(data)), count, start, elementCount, value);
+    }
+    void memset_and(uint8_t value) {
+        franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<uint8_t*>(static_cast<void*>(data)), count, 0, count, value);
+    }
+    void memset_and(uint8_t value, uint32_t start, uint32_t elementCount) {
+        franko_byte_arrays::memset_and_impl("Franko_Fat_Pointer", "memset_and", static_cast<uint8_t*>(static_cast<void*>(data)), count, start, elementCount, value);
+    }
+    void memset_or(uint8_t value) {
+        franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<uint8_t*>(static_cast<void*>(data)), count, 0, count, value);
+    }
+    void memset_or(uint8_t value, uint32_t start, uint32_t elementCount) {
+        franko_byte_arrays::memset_or_impl("Franko_Fat_Pointer", "memset_or", static_cast<uint8_t*>(static_cast<void*>(data)), count, start, elementCount, value);
     }
 };
 
-// Pointer identity is address identity. Count/mode are derived from the
-// pointee and never distinguish two pointers to the same storage.
 template <typename T>
 constexpr bool operator==(const Franko_Fat_Pointer<T>& left, const Franko_Fat_Pointer<T>& right) {
     return left.data == right.data;
@@ -2133,7 +1465,7 @@ constexpr bool operator==(const Franko_Fat_Pointer<T>& left, const Franko_Fat_Po
 
 template <typename T>
 constexpr bool operator!=(const Franko_Fat_Pointer<T>& left, const Franko_Fat_Pointer<T>& right) {
-    return !(left == right);
+    return left.data != right.data;
 }
 
 template <typename T>
@@ -2157,23 +1489,17 @@ constexpr bool operator!=(std::nullptr_t, const Franko_Fat_Pointer<T>& pointer) 
 }
 
 template <typename T>
-constexpr Franko_Fat_Pointer<T> franko_make_fat_pointer(T* data, uint32_t count, uint8_t mode) {
-    return Franko_Fat_Pointer<T>(data, count, mode);
+constexpr Franko_Fat_Pointer<T> franko_make_fat_pointer(T* data, uint32_t count) {
+    return Franko_Fat_Pointer<T>(data, count);
 }
 
 template <typename T>
-constexpr Franko_Fat_Pointer<T> franko_make_fat_pointer(const T* data, uint32_t count, uint8_t mode) {
-    return Franko_Fat_Pointer<T>(const_cast<T*>(data), count, mode);
+constexpr Franko_Fat_Pointer<T> franko_make_fat_pointer(const T* data, uint32_t count) {
+    return Franko_Fat_Pointer<T>(const_cast<T*>(data), count);
 }
 
-// Mode 3 must have its own name: a pointer to a Franko_Dynamic_Array<T>
-// is indistinguishable (after array-to-pointer decay) from a static
-// array whose element type is Franko_Dynamic_Array<T>.
 template <typename T>
-Franko_Fat_Pointer<T> franko_make_dynamic_fat_pointer(Franko_Dynamic_Array<T>* array) {
-    Franko_Fat_Pointer<T> fp;
-    fp.data = array;
-    fp.count = 0;
-    fp.mode = 3;
-    return fp;
+inline Franko_Fat_Pointer<T> franko_make_dynamic_fat_pointer(Franko_Dynamic_Array<T>* array) {
+    if (array == nullptr) return Franko_Fat_Pointer<T>(nullptr, 0);
+    return Franko_Fat_Pointer<T>(array->data, array->count);
 }

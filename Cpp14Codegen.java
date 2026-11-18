@@ -1313,6 +1313,12 @@ public class Cpp14Codegen {
         }
 
         if (type.kind == SastTypeKind.PTR) {
+            if (isOwnerDynamicArrayPointer(type)) {
+                return "Franko_Dynamic_Array<"
+                        + emitType(type.referencedType.elementType)
+                        + ">*";
+            }
+
             if (type.referencedType.kind == SastTypeKind.STATIC_ARRAY
                     || type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY) {
                 return "Franko_Fat_Pointer<"
@@ -1320,9 +1326,7 @@ public class Cpp14Codegen {
                         + ">";
             }
 
-            return "Franko_Thin_Pointer<"
-                    + emitType(type.referencedType)
-                    + ">";
+            return emitType(type.referencedType) + "*";
         }
 
         if (type.kind == SastTypeKind.STRUCT) {
@@ -1386,6 +1390,29 @@ public class Cpp14Codegen {
         }
 
         return referencedType;
+    }
+
+    static boolean isOwnerDynamicArrayPointer(SastType type) {
+        return type.kind == SastTypeKind.PTR
+                && type.permission == PtrPermission.OWNER
+                && type.referencedType.kind == SastTypeKind.DYNAMIC_ARRAY;
+    }
+
+    static String emitPointerConversion(SastType source, SastType target, String raw) {
+        if (target.kind != SastTypeKind.PTR
+                || source == null
+                || source.kind != SastTypeKind.PTR) {
+            return raw;
+        }
+
+        boolean sourceOwnerDynamic = isOwnerDynamicArrayPointer(source);
+        boolean targetOwnerDynamic = isOwnerDynamicArrayPointer(target);
+
+        if (sourceOwnerDynamic && !targetOwnerDynamic) {
+            return "franko_make_dynamic_fat_pointer(" + raw + ")";
+        }
+
+        return raw;
     }
 
     private String emitPrimitiveType(SemanticPrimitiveKind kind) {

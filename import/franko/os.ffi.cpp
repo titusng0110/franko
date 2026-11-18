@@ -34,9 +34,9 @@
 //
 //   - The bridge is spliced after the program template's runtime
 //     `#include` (selected via the `__FRANKO_RUNTIME_HEADER__`
-//     placeholder), so Franko_Thin_Pointer, Franko_Fat_Pointer,
-//     franko_panic, and the fixed-width integer types are available.
-//     Keep every block warning-clean under
+//     placeholder), so Franko_Fat_Pointer, franko_panic, and the
+//     fixed-width integer types are available. Keep every block
+//     warning-clean under
 //     -Wall -Wextra -Wpedantic -Wshadow.
 //
 // Platform notes:
@@ -105,19 +105,10 @@ int64_t FUNC_read_bee7609e(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_b
         franko_panic("os::posix::read: standard streams are reserved for franko/stdio");
     }
 
-    uint8_t* buffer;
-    uint32_t length;
+    uint8_t* buffer = PARAM_buf.data;
+    uint32_t length = PARAM_buf.count;
 
-    if (PARAM_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
-            return -1;
-        }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
-    } else if (PARAM_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(PARAM_buf.data);
-        length = PARAM_buf.count;
-    } else {
+    if (buffer == nullptr) {
         return -1;
     }
 
@@ -139,19 +130,10 @@ int64_t FUNC_write_7c35a12f(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_
         franko_panic("os::posix::write: standard streams are reserved for franko/stdio");
     }
 
-    uint8_t* buffer;
-    uint32_t length;
+    uint8_t* buffer = PARAM_buf.data;
+    uint32_t length = PARAM_buf.count;
 
-    if (PARAM_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
-            return -1;
-        }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
-    } else if (PARAM_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(PARAM_buf.data);
-        length = PARAM_buf.count;
-    } else {
+    if (buffer == nullptr) {
         return -1;
     }
 
@@ -167,17 +149,17 @@ int64_t FUNC_write_7c35a12f(int32_t PARAM_fd, Franko_Fat_Pointer<uint8_t> PARAM_
 // @@os::posix::clock_gettime
 namespace NS_os {
 namespace NS_posix {
-int32_t FUNC_clock_gettime_de6e7c37(int32_t PARAM_clock_id, Franko_Thin_Pointer<int64_t> PARAM_sec, Franko_Thin_Pointer<int64_t> PARAM_nanosec)
+int32_t FUNC_clock_gettime_de6e7c37(int32_t PARAM_clock_id, int64_t* PARAM_sec, int64_t* PARAM_nanosec)
 {
     struct timespec ts;
     if (::clock_gettime(static_cast<clockid_t>(PARAM_clock_id), &ts) != 0) {
         return -1;
     }
-    if (PARAM_sec.data != nullptr) {
-        *PARAM_sec.data = static_cast<int64_t>(ts.tv_sec);
+    if (PARAM_sec != nullptr) {
+        *PARAM_sec = static_cast<int64_t>(ts.tv_sec);
     }
-    if (PARAM_nanosec.data != nullptr) {
-        *PARAM_nanosec.data = static_cast<int64_t>(ts.tv_nsec);
+    if (PARAM_nanosec != nullptr) {
+        *PARAM_nanosec = static_cast<int64_t>(ts.tv_nsec);
     }
     return 0;
 }
@@ -188,25 +170,16 @@ int32_t FUNC_clock_gettime_de6e7c37(int32_t PARAM_clock_id, Franko_Thin_Pointer<
 // @@os::win32::ReadFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesRead)
+int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, uint32_t* PARAM_bytesRead)
 {
     if (os_is_standard_handle(PARAM_hFile)) {
         franko_panic("os::win32::ReadFile: standard handles are reserved for franko/stdio");
     }
 
-    uint8_t* buffer;
-    uint32_t length;
+    uint8_t* buffer = PARAM_buf.data;
+    uint32_t length = PARAM_buf.count;
 
-    if (PARAM_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
-            return 0;
-        }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
-    } else if (PARAM_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(PARAM_buf.data);
-        length = PARAM_buf.count;
-    } else {
+    if (buffer == nullptr) {
         return 0;
     }
 
@@ -215,8 +188,8 @@ int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t>
     }
     DWORD n = 0;
     BOOL ok = ::ReadFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(PARAM_hFile)), buffer, static_cast<DWORD>(PARAM_count), &n, nullptr);
-    if (PARAM_bytesRead.data != nullptr) {
-        *PARAM_bytesRead.data = static_cast<uint32_t>(n);
+    if (PARAM_bytesRead != nullptr) {
+        *PARAM_bytesRead = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }
@@ -227,25 +200,16 @@ int32_t FUNC_ReadFile_e28eed45(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t>
 // @@os::win32::WriteFile
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, Franko_Thin_Pointer<uint32_t> PARAM_bytesWritten)
+int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t> PARAM_buf, uint32_t PARAM_count, uint32_t* PARAM_bytesWritten)
 {
     if (os_is_standard_handle(PARAM_hFile)) {
         franko_panic("os::win32::WriteFile: standard handles are reserved for franko/stdio");
     }
 
-    uint8_t* buffer;
-    uint32_t length;
+    uint8_t* buffer = PARAM_buf.data;
+    uint32_t length = PARAM_buf.count;
 
-    if (PARAM_buf.mode == 3) {
-        if (static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data == nullptr) {
-            return 0;
-        }
-        buffer = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->data;
-        length = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_buf.data)->count;
-    } else if (PARAM_buf.mode == 2) {
-        buffer = static_cast<uint8_t*>(PARAM_buf.data);
-        length = PARAM_buf.count;
-    } else {
+    if (buffer == nullptr) {
         return 0;
     }
 
@@ -254,8 +218,8 @@ int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t
     }
     DWORD n = 0;
     BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(PARAM_hFile)), buffer, static_cast<DWORD>(PARAM_count), &n, nullptr);
-    if (PARAM_bytesWritten.data != nullptr) {
-        *PARAM_bytesWritten.data = static_cast<uint32_t>(n);
+    if (PARAM_bytesWritten != nullptr) {
+        *PARAM_bytesWritten = static_cast<uint32_t>(n);
     }
     return static_cast<int32_t>(ok);
 }
@@ -266,14 +230,14 @@ int32_t FUNC_WriteFile_0f393550(uint64_t PARAM_hFile, Franko_Fat_Pointer<uint8_t
 // @@os::win32::QueryPerformanceCounter
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_QueryPerformanceCounter_b452b59a(Franko_Thin_Pointer<int64_t> PARAM_counter)
+int32_t FUNC_QueryPerformanceCounter_b452b59a(int64_t* PARAM_counter)
 {
     LARGE_INTEGER value;
     if (!::QueryPerformanceCounter(&value)) {
         return 0;
     }
-    if (PARAM_counter.data != nullptr) {
-        *PARAM_counter.data = static_cast<int64_t>(value.QuadPart);
+    if (PARAM_counter != nullptr) {
+        *PARAM_counter = static_cast<int64_t>(value.QuadPart);
     }
     return 1;
 }
@@ -284,14 +248,14 @@ int32_t FUNC_QueryPerformanceCounter_b452b59a(Franko_Thin_Pointer<int64_t> PARAM
 // @@os::win32::QueryPerformanceFrequency
 namespace NS_os {
 namespace NS_win32 {
-int32_t FUNC_QueryPerformanceFrequency_b452b59a(Franko_Thin_Pointer<int64_t> PARAM_frequency)
+int32_t FUNC_QueryPerformanceFrequency_b452b59a(int64_t* PARAM_frequency)
 {
     LARGE_INTEGER value;
     if (!::QueryPerformanceFrequency(&value)) {
         return 0;
     }
-    if (PARAM_frequency.data != nullptr) {
-        *PARAM_frequency.data = static_cast<int64_t>(value.QuadPart);
+    if (PARAM_frequency != nullptr) {
+        *PARAM_frequency = static_cast<int64_t>(value.QuadPart);
     }
     return 1;
 }

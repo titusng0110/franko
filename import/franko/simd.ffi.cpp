@@ -19,34 +19,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_xor_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -88,34 +68,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_and_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -157,34 +117,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_or_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -226,34 +166,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_andnot_si128_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -295,34 +215,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_adds_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -365,34 +265,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_subs_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -434,34 +314,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_max_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -503,34 +363,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_min_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -572,34 +412,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_veorq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -641,34 +461,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vandq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -710,34 +510,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vorrq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -779,34 +559,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vbicq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -848,34 +608,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vqaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -918,34 +658,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vqsubq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -987,34 +707,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vmaxq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1056,34 +756,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vminq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1125,34 +805,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_add_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1194,34 +854,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_sub_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1263,34 +903,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_avg_epu8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1332,49 +952,19 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_blendv_epi8_bea41bc9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, Franko_Fat_Pointer<uint8_t> PARAM_mask, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_mask_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
-    const uint8_t* mask = nullptr;
-    uint32_t mask_length = 0;
-    if (PARAM_mask.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_mask.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        mask = array->data;
-        mask_length = array->count;
-    } else if (PARAM_mask.mode == 2) {
-        mask = static_cast<const uint8_t*>(PARAM_mask.data);
-        mask_length = PARAM_mask.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* mask = PARAM_mask.data;
+    uint32_t mask_length = PARAM_mask.count;
+    if (mask == nullptr && PARAM_count != 0) {
         franko_panic("simd: null mask");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1435,34 +1025,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_alignr_epi8_62d3997c(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count, uint32_t PARAM_shift)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1642,34 +1212,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_unpacklo_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1721,34 +1271,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_unpackhi_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1802,34 +1332,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_packus_epi16_ed547b8f(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<int16_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const int16_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<int16_t>* array = static_cast<Franko_Dynamic_Array<int16_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const int16_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const int16_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1873,34 +1383,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE uint64_t FUNC_sad_epu8_4812cf2a(Franko_Fat_Pointer<uint8_t> PARAM_left, Franko_Fat_Pointer<uint8_t> PARAM_right, uint32_t PARAM_left_start, uint32_t PARAM_right_start, uint32_t PARAM_count)
 {
-    const uint8_t* left = nullptr;
-    uint32_t left_length = 0;
-    if (PARAM_left.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_left.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        left = array->data;
-        left_length = array->count;
-    } else if (PARAM_left.mode == 2) {
-        left = static_cast<const uint8_t*>(PARAM_left.data);
-        left_length = PARAM_left.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* left = PARAM_left.data;
+    uint32_t left_length = PARAM_left.count;
+    if (left == nullptr && PARAM_count != 0) {
         franko_panic("simd: null left");
     }
-    const uint8_t* right = nullptr;
-    uint32_t right_length = 0;
-    if (PARAM_right.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_right.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        right = array->data;
-        right_length = array->count;
-    } else if (PARAM_right.mode == 2) {
-        right = static_cast<const uint8_t*>(PARAM_right.data);
-        right_length = PARAM_right.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* right = PARAM_right.data;
+    uint32_t right_length = PARAM_right.count;
+    if (right == nullptr && PARAM_count != 0) {
         franko_panic("simd: null right");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -1943,34 +1433,14 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_abs_epi8_6c5347dd(Franko_Fat_Pointer<int8_t> PARAM_target, Franko_Fat_Pointer<int8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    int8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<int8_t>* array = static_cast<Franko_Dynamic_Array<int8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<int8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    int8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const int8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<int8_t>* array = static_cast<Franko_Dynamic_Array<int8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const int8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const int8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2014,19 +1484,9 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE void FUNC_shuffle_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_indices, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2034,19 +1494,9 @@ FRANKO_INLINE void FUNC_shuffle_epi8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_
         franko_panic("simd: target range out of bounds");
     }
 #endif
-    const uint8_t* indices = nullptr;
-    uint32_t indices_length = 0;
-    if (PARAM_indices.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_indices.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        indices = array->data;
-        indices_length = array->count;
-    } else if (PARAM_indices.mode == 2) {
-        indices = static_cast<const uint8_t*>(PARAM_indices.data);
-        indices_length = PARAM_indices.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* indices = PARAM_indices.data;
+    uint32_t indices_length = PARAM_indices.count;
+    if (indices == nullptr && PARAM_count != 0) {
         franko_panic("simd: null indices");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2090,19 +1540,9 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE int32_t FUNC_aesenc_si128_697d55d9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_round_key, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2110,19 +1550,9 @@ FRANKO_INLINE int32_t FUNC_aesenc_si128_697d55d9(Franko_Fat_Pointer<uint8_t> PAR
         franko_panic("simd: target range out of bounds");
     }
 #endif
-    const uint8_t* round_key = nullptr;
-    uint32_t round_key_length = 0;
-    if (PARAM_round_key.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_round_key.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        round_key = array->data;
-        round_key_length = array->count;
-    } else if (PARAM_round_key.mode == 2) {
-        round_key = static_cast<const uint8_t*>(PARAM_round_key.data);
-        round_key_length = PARAM_round_key.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* round_key = PARAM_round_key.data;
+    uint32_t round_key_length = PARAM_round_key.count;
+    if (round_key == nullptr && PARAM_count != 0) {
         franko_panic("simd: null round_key");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2156,19 +1586,9 @@ namespace NS_simd {
 namespace NS_x86 {
 FRANKO_INLINE int32_t FUNC_aesdec_si128_697d55d9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_round_key, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2176,19 +1596,9 @@ FRANKO_INLINE int32_t FUNC_aesdec_si128_697d55d9(Franko_Fat_Pointer<uint8_t> PAR
         franko_panic("simd: target range out of bounds");
     }
 #endif
-    const uint8_t* round_key = nullptr;
-    uint32_t round_key_length = 0;
-    if (PARAM_round_key.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_round_key.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        round_key = array->data;
-        round_key_length = array->count;
-    } else if (PARAM_round_key.mode == 2) {
-        round_key = static_cast<const uint8_t*>(PARAM_round_key.data);
-        round_key_length = PARAM_round_key.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* round_key = PARAM_round_key.data;
+    uint32_t round_key_length = PARAM_round_key.count;
+    if (round_key == nullptr && PARAM_count != 0) {
         franko_panic("simd: null round_key");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2225,34 +1635,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2294,34 +1684,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vsubq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2363,34 +1733,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vrhaddq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2432,49 +1782,19 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vbslq_u8_bea41bc9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, Franko_Fat_Pointer<uint8_t> PARAM_mask, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_mask_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
-    const uint8_t* mask = nullptr;
-    uint32_t mask_length = 0;
-    if (PARAM_mask.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_mask.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        mask = array->data;
-        mask_length = array->count;
-    } else if (PARAM_mask.mode == 2) {
-        mask = static_cast<const uint8_t*>(PARAM_mask.data);
-        mask_length = PARAM_mask.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* mask = PARAM_mask.data;
+    uint32_t mask_length = PARAM_mask.count;
+    if (mask == nullptr && PARAM_count != 0) {
         franko_panic("simd: null mask");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2533,34 +1853,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vextq_u8_62d3997c(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count, uint32_t PARAM_shift)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2723,34 +2023,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vzip1q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2802,34 +2082,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vzip2q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2883,34 +2143,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vqmovun_s16_ed547b8f(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<int16_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const int16_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<int16_t>* array = static_cast<Franko_Dynamic_Array<int16_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const int16_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const int16_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -2953,34 +2193,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vabdq_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -3022,34 +2242,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vpaddlq_u16_8c3520d3(Franko_Fat_Pointer<uint32_t> PARAM_target, Franko_Fat_Pointer<uint16_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint32_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint32_t>* array = static_cast<Franko_Dynamic_Array<uint32_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint32_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint32_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint16_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<uint16_t>* array = static_cast<Franko_Dynamic_Array<uint16_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const uint16_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const uint16_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -3091,34 +2291,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vabsq_s8_6c5347dd(Franko_Fat_Pointer<int8_t> PARAM_target, Franko_Fat_Pointer<int8_t> PARAM_source, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    int8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<int8_t>* array = static_cast<Franko_Dynamic_Array<int8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<int8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    int8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const int8_t* source = nullptr;
-    uint32_t source_length = 0;
-    if (PARAM_source.mode == 3) {
-        Franko_Dynamic_Array<int8_t>* array = static_cast<Franko_Dynamic_Array<int8_t>*>(PARAM_source.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        source = array->data;
-        source_length = array->count;
-    } else if (PARAM_source.mode == 2) {
-        source = static_cast<const int8_t*>(PARAM_source.data);
-        source_length = PARAM_source.count;
-    } else if (PARAM_count != 0) {
+    const int8_t* source = PARAM_source.data;
+    uint32_t source_length = PARAM_source.count;
+    if (source == nullptr && PARAM_count != 0) {
         franko_panic("simd: null source");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -3160,34 +2340,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE void FUNC_vqtbl1q_u8_7243e039(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_indices, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* indices = nullptr;
-    uint32_t indices_length = 0;
-    if (PARAM_indices.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_indices.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        indices = array->data;
-        indices_length = array->count;
-    } else if (PARAM_indices.mode == 2) {
-        indices = static_cast<const uint8_t*>(PARAM_indices.data);
-        indices_length = PARAM_indices.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* indices = PARAM_indices.data;
+    uint32_t indices_length = PARAM_indices.count;
+    if (indices == nullptr && PARAM_count != 0) {
         franko_panic("simd: null indices");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -3225,34 +2385,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE int32_t FUNC_vaeseq_u8_697d55d9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_round_key, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* round_key = nullptr;
-    uint32_t round_key_length = 0;
-    if (PARAM_round_key.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_round_key.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        round_key = array->data;
-        round_key_length = array->count;
-    } else if (PARAM_round_key.mode == 2) {
-        round_key = static_cast<const uint8_t*>(PARAM_round_key.data);
-        round_key_length = PARAM_round_key.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* round_key = PARAM_round_key.data;
+    uint32_t round_key_length = PARAM_round_key.count;
+    if (round_key == nullptr && PARAM_count != 0) {
         franko_panic("simd: null round key");
     }
 #if !FRANKO_BOUNDS_UNCHECKED
@@ -3291,34 +2431,14 @@ namespace NS_simd {
 namespace NS_arm {
 FRANKO_INLINE int32_t FUNC_vaesdq_u8_697d55d9(Franko_Fat_Pointer<uint8_t> PARAM_target, Franko_Fat_Pointer<uint8_t> PARAM_round_key, uint32_t PARAM_dst_start, uint32_t PARAM_src_start, uint32_t PARAM_count)
 {
-    uint8_t* target = nullptr;
-    uint32_t target_length = 0;
-    if (PARAM_target.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_target.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        target = array->data;
-        target_length = array->count;
-    } else if (PARAM_target.mode == 2) {
-        target = static_cast<uint8_t*>(PARAM_target.data);
-        target_length = PARAM_target.count;
-    } else if (PARAM_count != 0) {
+    uint8_t* target = PARAM_target.data;
+    uint32_t target_length = PARAM_target.count;
+    if (target == nullptr && PARAM_count != 0) {
         franko_panic("simd: null target");
     }
-    const uint8_t* round_key = nullptr;
-    uint32_t round_key_length = 0;
-    if (PARAM_round_key.mode == 3) {
-        Franko_Dynamic_Array<uint8_t>* array = static_cast<Franko_Dynamic_Array<uint8_t>*>(PARAM_round_key.data);
-        if (array == nullptr || (array->data == nullptr && array->count != 0)) {
-            franko_panic("simd: uninitialized dynamic array");
-        }
-        round_key = array->data;
-        round_key_length = array->count;
-    } else if (PARAM_round_key.mode == 2) {
-        round_key = static_cast<const uint8_t*>(PARAM_round_key.data);
-        round_key_length = PARAM_round_key.count;
-    } else if (PARAM_count != 0) {
+    const uint8_t* round_key = PARAM_round_key.data;
+    uint32_t round_key_length = PARAM_round_key.count;
+    if (round_key == nullptr && PARAM_count != 0) {
         franko_panic("simd: null round key");
     }
 #if !FRANKO_BOUNDS_UNCHECKED

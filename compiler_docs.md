@@ -21,9 +21,10 @@ Do not add comments to the Java source files. All design notes belong here.
   semantic AST and backend see only concrete declarations.
 - **Runtime**: `include/FrankoRuntime.hpp`, one header for all build
   modes: `Franko_Dynamic_Array<T>` (owning dynamic arrays), raw C++ static
-  arrays, `Franko_Thin_Pointer<T>` (pointers whose pointee is not an array;
-  null by default), `Franko_Fat_Pointer<T>` (pointers to arrays), the byte
-  intrinsics, and `franko_integer_unsafe_cast`. Two C++ defines select the mode:
+  arrays, raw C++ pointers (non-array pointees; null by default),
+  `Franko_Fat_Pointer<T>` (16-byte direct element pointer plus count for
+  array views), the byte intrinsics, and `franko_integer_unsafe_cast`. Two
+  C++ defines select the mode:
   `FRANKO_USE_JEMALLOC=1` links the bundled jemalloc (`third_party/`)
   instead of the system allocator on Linux; it is opt-in through
   `compile.py --jemalloc`. macOS and Windows builds always use the
@@ -1098,10 +1099,13 @@ the `cppSymbol`, so differently named tuples with the same ordered element
 types are the same type. `describe()` spells the canonical diagnostic form
 `(int32, int32)` and `mangleKey()` the space-free `(int32,int32)`.
 
-Emission depends on the referenced type: a pointer to an array becomes
-`Franko_Fat_Pointer<element(T)>`, while a pointer to a scalar, struct, tuple,
-or another pointer becomes `Franko_Thin_Pointer<T>`; permission is not part of
-the C++ type (see §4.9). `mangleKey()` spells pointers
+Emission depends on the referenced type: a pointer to a static array becomes
+`Franko_Fat_Pointer<element(T)>`; an `mview<[T]>` or `view<[T]>` over a
+dynamic array also becomes `Franko_Fat_Pointer<element(T)>`, while an owning
+`ptr<[T]>` emits `Franko_Dynamic_Array<element(T)>*` so lifecycle intrinsics
+still reach the descriptor. A pointer to a scalar, struct, tuple, or another
+pointer becomes a raw `T*`; permission is not part of the C++ type (see §4.9).
+`mangleKey()` spells pointers
 `ptr<…>`/`mview<…>`/`view<…>`, so owner signatures (and every pinned mangling)
 are unchanged. `PtrPermission.allows(other)` encodes the downgrade lattice:
 permissions only ever downgrade (owner → mutable → read-only), so a stronger
@@ -1141,7 +1145,7 @@ arguments inside `<...>` and drives the `GEN_` emitted-name prefix.
   conflict).
 - `METHOD` — adds `owner: StructSymbol`; emitted as
   `METH_<name>_OFSTRUCT_<Struct>_<hex>` free functions taking a
-  `Franko_Thin_Pointer<STRUCT_X>` for `PARAM_self` (the self permission is
+  `STRUCT_X*` for `PARAM_self` (the self permission is
   compile-time only). A generic method instance is emitted as
   `GEN_<generic-hash>_METH_<name>_OFSTRUCT_<Struct>_<hex>`, where the generic
   hash covers only the canonical arguments inside `<...>`. **Method overload
@@ -2702,9 +2706,8 @@ tuple-containing structs, nested tuples, and tuples containing user structs
 in the existing topological order. The global forward declarations let a
 pointer global's static address initializer reference a global declared
 later in the source (or across namespaces); uninitialized pointer
-variables and pointer members emit `= nullptr`, which selects the pointer
-wrapper's `std::nullptr_t` constructor. Pointer elements of static and
-dynamic arrays are default-constructed by the thin wrapper. All of these
+variables and pointer members emit `= nullptr`, and `Franko_Fat_Pointer`
+default-constructs to a null data pointer and zero count. All of these
 paths produce null, implementing the guaranteed null-initialization rule.
 Statement lowering assumes dead branches
 were already removed by `BranchPruner`. `VAR_DECL_INIT` emits the declaration
@@ -2720,30 +2723,29 @@ cast to the semantic result type, and compound assignments emit their operator
 text directly, so `~`, `&=`, `|=`, and `^=` need no special backend path. A
 pointer to an array emits
 `Franko_Fat_Pointer<element(T)>`, where `element(T)` is the immediate
-element type (`ptr<[U, N]>` and `ptr<[U]>` both emit
-`Franko_Fat_Pointer<U>`). A pointer to a scalar, struct, tuple, or another
-pointer emits `Franko_Thin_Pointer<T>`. The fat pointer records the array
-mode: 2 static array with count `N`, or 3 dynamic array with the
-`Franko_Dynamic_Array<T>` descriptor pointer. The thin pointer is a
-one-field wrapper whose default constructor sets `data` to `nullptr`.
-`ptr`/`mview`/`view(x)` emit
-`franko_make_thin_pointer(&x)` for a scalar/struct/tuple/pointer lvalue,
-`franko_make_fat_pointer(x, N, 2)` for a static array, and
-`franko_make_dynamic_fat_pointer(&x)` for a dynamic array (a distinct
-name, because a static array of `Franko_Dynamic_Array<T>` is
-pointer-indistinguishable from a `Franko_Dynamic_Array<T>` lvalue). A
+element type (`ptr<[U, N]>` and `view<[U]>` both emit
+`Franko_Fat_Pointer<U>`). An owning `ptr<[U]>` is the exception: it emits
+`Franko_Dynamic_Array<U>*`, so `init`/`resize`/`uninit` still mutate the
+descriptor. A pointer to a scalar, struct, tuple, or another pointer emits
+a raw `T*`. `Franko_Fat_Pointer<T>` is a 16-byte value holding `T* data`
+and `uint32_t count`; it has no mode field. `ptr`/`mview`/`view(x)` emit
+`&x` for a scalar/struct/tuple/pointer lvalue,
+`franko_make_fat_pointer(x, N)` for a static array,
+`franko_make_dynamic_fat_pointer(&x)` for a non-owning dynamic-array view,
+and `&x` for an owning `ptr<[T]>`. A
 `getPtr` node marked `temporary` (compiler-generated operator borrow)
-instead emits `franko_borrow(value)` and wraps the result in
-`franko_make_thin_pointer` for a thin-pointer result; when a constant was
+instead emits `franko_borrow(value)`; array operands build the fat pointer
+from the borrowed storage. When a constant was
 fitted to a different primitive referenced type, the value is first
 wrapped in `static_cast<referenced-type>(value)` so the borrowed temporary
 has the selected operator parameter type. Representation-preserving inner
 array-view decays need no cast. A
-dereference emits `(*(p).data)` for thin pointers,
-`(*static_cast<Franko_Dynamic_Array<T>*>(p.data))` for dynamic arrays,
-and `franko_static_array_ref<T, N>(static_cast<T*>(p.data))` for static
-arrays. Method `self` is an ordinary thin pointer parameter, so it is
-`Franko_Thin_Pointer<STRUCT_X>` at the call boundary. Enum declarations
+dereference emits `(*p)` for raw pointers and owning dynamic-array
+pointers, and `franko_static_array_ref<T, N>(p.data)` for static arrays.
+Non-owning dynamic-array views are consumed directly as fat pointers
+(indexing, `length`, and intrinsics); they are not materialized as dynamic
+array lvalues. Method `self` is an ordinary raw pointer parameter, so it is
+`STRUCT_X*` at the call boundary. Enum declarations
 emit wrapper structs with a backing field, a first-variant default
 constructor, an explicit backing constructor, `VARIANT_<name>()`
 accessors, a templated `from_integer_checked` (range-checked via
@@ -2767,26 +2769,31 @@ constant-value fast path: enum targets emit
 Array indexing through a raw static array emits
 `franko_static_array_at(array, index)` in ASan and `-O` builds; `-Omax`
 emits bare `array[index]` (the `uncheckedStaticArrayAccess` codegen flag,
-set only from `-Omax`). Indexing through a pointer emits the fat
-pointer's checked `operator[]`, including for a decayed view (`view<[T]>`
-whose runtime mode is still 2). Dynamic arrays always use their own
-checked `operator[]`, in every mode, so null/uninitialized checks
-survive `-Omax`.
+set only from `-Omax`). Indexing through a flattened array pointer
+(`ptr<[T, N]>`, `mview`/`view` of static or dynamic arrays) emits the fat
+pointer's checked `operator[]`; indexing through an owning `ptr<[T]>` and
+through a direct dynamic-array lvalue emits `Franko_Dynamic_Array<T>`'s
+checked `operator[]`, in every mode, so null/uninitialized checks survive
+`-Omax`.
 
 Array intrinsics emit `receiver.<runtimeName>(args)`; lifecycle
 intrinsics (`init`, `init_zero`, `resize`, `uninit`) stay direct calls on
-the dynamic array lvalue, while every other intrinsic wraps its receiver
-in a fat pointer: a dereferenced receiver is already a fat pointer and is
-reused as-is (keeping a decayed view's mode 2), a static array lvalue
-becomes `franko_make_fat_pointer(receiver, N, 2)`, and a dynamic array
+the dynamic array lvalue (an owning `ptr<[T]>` dereference is `(*p)`),
+while every other intrinsic wraps its receiver in a fat pointer: a
+dereferenced view is already a fat pointer and is reused as-is, an owning
+`ptr<[T]>` becomes `franko_make_dynamic_fat_pointer(p)`, a static array
+lvalue becomes `franko_make_fat_pointer(receiver, N)`, and a dynamic array
 lvalue becomes `franko_make_dynamic_fat_pointer(&receiver)`. Scalar
 arguments are cast to the argument descriptor's primitive type, pointer
-arguments pass through.
+arguments pass through (an owning dynamic-array pointer is converted to
+the fat-pointer argument form).
 
 Static-to-dynamic array view decay is representation-preserving: both
-sides are the same `Franko_Fat_Pointer<U>` and the value keeps mode 2
-with count `N`. `emitAsType` and `emitCast` therefore emit the value
-unchanged, with no temporary descriptor and no prelude buffering.
+sides are the same `Franko_Fat_Pointer<U>`, with the same direct element
+pointer and count `N`. `emitAsType` and `emitCast` therefore emit the value
+unchanged, with no temporary descriptor and no prelude buffering. An
+owning `ptr<[T]>` converts to a non-owning array view with
+`franko_make_dynamic_fat_pointer(p)`.
 Literal-backed string and array globals emit as `const uint8_t
 STRLIT_<hash>[N] = {…}` / `const int32_t ARRLIT_<hash>[N] = {…}`
 (constant initialization, so static-init order is irrelevant; nested
@@ -3324,10 +3331,12 @@ constant `unsafe_cast` values; codegen emits `static_cast` for `cast` and
   fd 0/1/2, and `os::win32::ReadFile`/`WriteFile` abort on the standard
   handles. `GetStdHandle` and the standard fd/handle constants are not
   exposed.
-- Bridge ABI: a thin pointer parameter or return (`ptr<T>`, `mview<T>`, or
-  `view<T>` whose pointee is not an array) is `Franko_Thin_Pointer<T>` in
-  the C++ bridge; use `.data` for the raw pointer and null checks. A
-  pointer to an array is `Franko_Fat_Pointer<element(T)>`. Generated
+- Bridge ABI: a pointer parameter or return whose pointee is not an array
+  (`ptr<T>`, `mview<T>`, or `view<T>`) is a raw `T*` in the C++ bridge;
+  null-check and dereference it directly. A pointer to a static array, and
+  an `mview`/`view` of a dynamic array, are
+  `Franko_Fat_Pointer<element(T)>` with direct `.data`/`.count`; an owning
+  `ptr<[T]>` is `Franko_Dynamic_Array<T>*`. Generated
   prototypes name parameters `PARAM_<name>` (variables and globals stay
   `VAR_<name>`), so bridge definitions use the same prefix for consistency.
 
@@ -3366,13 +3375,15 @@ single implementation home: `regionPermission` (the region rule),
 `PointerPermissionChecker` share it. The user-facing rules are in
 `25-pointers.md`.
 
-**Representation.** A pointer whose referent is an array is
-`Franko_Fat_Pointer<element(T)>`: mode 2 (static, with count `N`) or mode 3
-(dynamic, pointing at the `Franko_Dynamic_Array<T>` descriptor). A pointer to
-a scalar, struct, tuple, or another pointer is `Franko_Thin_Pointer<T>`, a
-one-field wrapper whose default constructor sets `data = nullptr`. This split
-gives pointer storage its null-initialization guarantee without adding a
-mode/count payload to non-array pointers.
+**Representation.** `Franko_Fat_Pointer<T>` is a 16-byte slice with a direct
+`T* data` pointer and `uint32_t count`; static arrays, literals, and
+non-owning dynamic-array views all use it. An owning `ptr<[T]>` (dynamic
+referent) is a raw `Franko_Dynamic_Array<T>*` so lifecycle intrinsics can
+mutate the descriptor; an owning `ptr<[T, N]>` is a fat pointer because
+static arrays have no lifecycle. A pointer to a scalar, struct, tuple, or
+another pointer is a raw `T*`. The explicit `= nullptr` declaration
+initializer provides the null-initialization guarantee for raw pointer
+storage; the fat pointer default-constructs to null.
 
 **Region rule.** An access path has one current storage region, set by the
 innermost (last) `$(...)` dereference on the path. Member and index accesses
@@ -3397,7 +3408,9 @@ need an OWNER region at every level, so `mview` never grants `init`/`resize`/
 `OverloadResolution`. Static-to-dynamic array pointer decay is
 representation-preserving: static and decayed values are the same
 `Franko_Fat_Pointer<T>`, and `Cpp14Codegen` emits no conversion code or
-temporary. `DanglingPointerChecker` therefore has no decay origin (§3.3):
+temporary. Downgrading an owning `ptr<[T]>` to `mview<[T]>`/`view<[T]>`
+converts the descriptor pointer with `franko_make_dynamic_fat_pointer(p)`.
+`DanglingPointerChecker` therefore has no decay origin (§3.3):
 returning a decayed parameter/global view is safe, while a local array decay
 is the ordinary frame escape.
 
@@ -3423,8 +3436,8 @@ share one global. An empty final result materializes as
 `SastNode.NULL_LITERAL`; `"" + "hello"` is non-empty, while `"" + ""` is the
 null view. C++ emission is a
 `const uint8_t STRLIT_<hash>[N] = {…}` constant initializer, so declaration
-and static-init order never matter. The literal expression is a mode-2 fat
-pointer over that storage (`franko_make_fat_pointer(STRLIT_<hash>, N, 2)`);
+and static-init order never matter. The literal expression is a fat
+pointer over that storage (`franko_make_fat_pointer(STRLIT_<hash>, N)`);
 decaying it to `view<[byte]>` copies the same fat pointer unchanged.
 
 No intermediate string is hoisted. A `what_type` result consumed by `+`, a
@@ -3476,18 +3489,22 @@ descriptor, so there is no borrowed-header marker.
 Element construction follows the C++ type of the elements: buffers for
 trivially default-constructible element types keep raw storage, while any
 other element type is default-constructed (placement new) when the buffer
-is allocated. Pointer element types are not trivially default-constructible,
-so their wrapper is constructed and its `data` field starts null. `uninit()`
+is allocated. Bare pointer elements are banned by the aggregate rule, so
+there are no raw-pointer elements to initialize; pointer-only struct
+elements are default-constructed and their raw pointer fields start null
+through their `= nullptr` NSDMIs. `uninit()`
 and the array destructor destroy constructed elements before freeing the
 buffer. Trivially destructible element types skip destruction entirely.
 Element lifetime in the dynamic array runtime:
 
 - `init(n)` and `init_zero(n)` default-construct all `n` elements when the
-  element type needs construction; pointer elements start null. Trivially
+  element type needs construction; pointer-only struct elements get null
+  pointer fields. Trivially
   constructible element types keep raw (`init`) or zeroed (`init_zero`)
   storage with no per-element work.
-- `resize(n)` default-constructs the grown tail when growing (pointer
-  elements in the grown tail start null) and destroys the dropped tail when
+- `resize(n)` default-constructs the grown tail when growing (pointer-only
+  struct elements in the grown tail get null pointer fields) and destroys
+  the dropped tail when
   shrinking; trivial element types skip both. The
   dropped tail is destroyed **before** the buffer is reallocated (its
   storage must still be alive for the elements' destructors to run), and
@@ -3518,9 +3535,8 @@ generated Franko C++ is compiled with exceptions and RTTI disabled
 The byte-array intrinsics (`memchr`/`memmem`, the endian accessors, the bit
 intrinsics) share one kernel layer (`franko_byte_arrays`) of free templates
 over `(pointer, length)` pairs; each `Franko_Fat_Pointer` member is a small
-delegate that supplies its class tag and the data/count for its runtime
-mode (static storage for mode 2, the `Franko_Dynamic_Array` descriptor for
-mode 3). Byte intrinsics exist only on `Franko_Fat_Pointer`, never on
+delegate that supplies its class tag and its direct data/count pair. Byte
+intrinsics exist only on `Franko_Fat_Pointer`, never on
 `Franko_Dynamic_Array` or raw static arrays; codegen wraps those receivers
 in a temporary fat pointer. `memchr`/`memmem` return `MEM_NOT_FOUND` (`0xFFFFFFFF`) on no
 match; the endian accessors are unaligned byte loads/stores built on
@@ -3662,7 +3678,7 @@ so identical contents share one `ARRLIT_<16hex-hash>` global. C++ emission is
 one `const <T> ARRLIT_<hash>[N] = {…}` raw array (outer dimension first, one
 brace level per dimension); no wrapper struct is emitted. Decaying the
 literal to a dynamic view is representation-preserving and reuses the same
-mode-2 fat pointer; there is no `_VIEW` header global and the pruner only
+fat pointer; there is no `_VIEW` header global and the pruner only
 follows the data global.
 
 **Overload resolution.** Call arguments lower in two phases through
@@ -3774,8 +3790,8 @@ symbol registration, and pruning.
 **Operand borrowing.** Lvalue operands become `view(lvalue)`. Rvalue
 operands (including comparison operands on either side) become a
 `SastNode.GET_PTR` with `temporary = true`, emitted as
-`franko_borrow(expr)` and, for a thin-pointer result, wrapped in
-`franko_make_thin_pointer(...)`. The C++ temporary lives to the end of the
+`franko_borrow(expr)`; array operands build a fat pointer from the borrowed
+storage. The C++ temporary lives to the end of the
 full expression. User-written `view` still requires a storage-backed
 lvalue, so `view(5)` remains invalid. Comparison operands are always
 borrowed as `view<their static type>`,
