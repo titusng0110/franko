@@ -34,30 +34,41 @@ public class DeclarationChecker {
         if (node.symbol.kind == SymbolKind.GLOBAL
                 && node.symbol.literalBytes == null
                 && node.symbol.literalValues == null
-                && !types.isValueAssignableType(node.symbol.type)) {
+                && !types.isPassableByValueType(node.symbol.type)) {
             diagnostics.error("Global variable '"
                 + node.symbol.qualifiedName()
                 + "' has type '"
                 + types.describeSafe(node.symbol.type)
                 + "'; global variables are implicitly const and must be"
-                + " value-assignable. Global storage is initialized once"
+                + " passable by value. Global storage is initialized once"
                 + " before main and never mutated, so it cannot hold an"
-                + " array or a pointer-only aggregate. Use a primitive,"
-                + " enum, pointer, or value-assignable struct/tuple, or"
+                + " array or an aggregate with pointer or array members. Use a primitive,"
+                + " enum, pointer, or passable-by-value struct/tuple, or"
                 + " move the storage into a function.");
         } else if (node.symbol.isConst
-                && !types.isValueAssignableType(node.symbol.type)) {
+                && !types.isPassableByValueType(node.symbol.type)) {
             diagnostics.error(constKindName(node.symbol)
                 + " '"
                 + node.symbol.qualifiedName()
                 + "' has type '"
                 + types.describeSafe(node.symbol.type)
-                + "'; const is only allowed for value-assignable types."
+                + "'; const is only allowed for passable-by-value types."
                 + " Const storage must hold a complete value that can"
                 + " be initialized and copied, which arrays and"
-                + " pointer-only aggregates cannot provide."
-                + " Use a primitive, enum, pointer, or value-assignable"
+                + " aggregates with pointer or array members cannot provide."
+                + " Use a primitive, enum, pointer, or passable-by-value"
                 + " struct/tuple, or remove const.");
+        }
+
+        if (node.symbol.kind == SymbolKind.GLOBAL
+                && node.symbol.type != null
+                && node.symbol.type.kind == SastTypeKind.PTR
+                && node.symbol.type.permission != PtrPermission.READ_ONLY) {
+            diagnostics.error("Global variable '"
+                + node.symbol.qualifiedName()
+                + "' has type '"
+                + types.describeSafe(node.symbol.type)
+                + "'; only read-only view<T> globals are allowed. Pointers are downward-only values, and a mutable or owning global would let any function write through shared storage. Use view<T> for a read-only global, or move mutable storage into a function.");
         }
 
         if (node.symbol.isConst
@@ -250,15 +261,15 @@ public class DeclarationChecker {
         SastType type,
         String where
     ) {
-        types.ensureNoEmbeddedOwnedPointer(type, where);
-        checkDeclaredType(type, where, new HashMap<>(), new HashSet<>());
+        checkDeclaredType(type, where, new HashMap<>(), new HashSet<>(), true);
     }
 
     private void checkDeclaredType(
         SastType type,
         String where,
         Map<String, StructWalkState> structWalkStates,
-        Set<String> byValuePath
+        Set<String> byValuePath,
+        boolean pointersAllowedHere
     ) {
         if (type == null) {
             diagnostics.error(where + " has null declared type");
@@ -273,13 +284,64 @@ public class DeclarationChecker {
             return;
         }
 
+        if (type.kind == SastTypeKind.PTR) {
+            if (!pointersAllowedHere) {
+                diagnostics.error(where
+                        + " has type '"
+                        + types.describeSafe(type)
+                        + "': pointers cannot appear in struct fields, static array elements, dynamic array elements, tuple elements, or nested aggregates, recursively. Pointers are downward-only values that are passed to callees, never stored in aggregates. Remove the pointer from the aggregate, use a dynamic array with a separate length or a pool index from franko/pool for linked data, or keep the pointer as a direct variable, parameter, or read-only global.");
+                return;
+            }
+
+            SastType referent = type.referencedType;
+
+            if (referent == null) {
+                return;
+            }
+
+            if (referent.kind == SastTypeKind.PTR) {
+                checkDeclaredType(
+                    referent,
+                    where + " pointer referenced type",
+                    structWalkStates,
+                    new HashSet<>(),
+                    true
+                );
+                return;
+            }
+
+            if (referent.kind == SastTypeKind.DYNAMIC_ARRAY
+                    || referent.kind == SastTypeKind.STATIC_ARRAY
+                    || referent.kind == SastTypeKind.STRUCT
+                    || referent.kind == SastTypeKind.TUPLE) {
+                checkDeclaredType(
+                    referent,
+                    where + " pointer referenced type",
+                    structWalkStates,
+                    new HashSet<>(),
+                    false
+                );
+                return;
+            }
+
+            checkDeclaredType(
+                referent,
+                where + " pointer referenced type",
+                structWalkStates,
+                new HashSet<>(),
+                true
+            );
+            return;
+        }
+
         if (type.kind == SastTypeKind.DYNAMIC_ARRAY) {
 
             checkDeclaredType(
                 type.elementType,
                 where + " dynamic array element",
                 structWalkStates,
-                new HashSet<>()
+                new HashSet<>(),
+                false
             );
             return;
         }
@@ -291,7 +353,8 @@ public class DeclarationChecker {
                 type.elementType,
                 where + " static array element",
                 structWalkStates,
-                byValuePath
+                byValuePath,
+                false
             );
             return;
         }
@@ -301,7 +364,8 @@ public class DeclarationChecker {
                 type,
                 where,
                 structWalkStates,
-                byValuePath
+                byValuePath,
+                pointersAllowedHere
             );
             return;
         }
@@ -333,21 +397,11 @@ public class DeclarationChecker {
                     field.type,
                     elementWhere,
                     structWalkStates,
-                    byValuePath
+                    byValuePath,
+                    false
                 );
             }
 
-            return;
-        }
-
-        if (type.kind == SastTypeKind.PTR) {
-
-            checkDeclaredType(
-                type.referencedType,
-                where + " pointer referenced type",
-                structWalkStates,
-                new HashSet<>()
-            );
             return;
         }
 
@@ -365,7 +419,8 @@ public class DeclarationChecker {
         SastType struct,
         String where,
         Map<String, StructWalkState> structWalkStates,
-        Set<String> byValuePath
+        Set<String> byValuePath,
+        boolean pointersAllowedHere
     ) {
         if (struct.structSymbol == null) {
             diagnostics.error(where + " has null struct symbol");
@@ -391,8 +446,7 @@ public class DeclarationChecker {
                     + "' cannot contain itself through its fields, tuple elements, or static array elements."
                     + " A by-value field needs the complete layout of its"
                     + " type, so a cycle would require infinite storage."
-                    + " Break the cycle by storing the field through a"
-                    + " ptr, mview, or view instead.");
+                    + " Break the cycle with a dynamic array edge or a pool index from franko/pool.");
             }
 
             return;
@@ -437,13 +491,12 @@ public class DeclarationChecker {
                 continue;
             }
 
-            types.ensureNoOwnedPointerAggregateMember(field.type, fieldWhere);
-
             checkDeclaredType(
                 field.type,
                 fieldWhere,
                 structWalkStates,
-                nextByValuePath
+                nextByValuePath,
+                false
             );
 
             if (field.foldedDefault != null) {
@@ -481,7 +534,7 @@ public class DeclarationChecker {
         diagnostics.error(where
             + " has an initializer, but only primitive fields can have default values."
             + " Field defaults are folded into primitive constants,"
-            + " and struct, array, and pointer values have no such"
+            + " and struct and array values have no such"
             + " representation."
             + " Remove the default and initialize the field at each"
             + " declaration or with an aggregate literal.");
@@ -513,14 +566,14 @@ public class DeclarationChecker {
         diagnostics.error("Variable '"
             + node.symbol.qualifiedName()
             + "' has a constant initializer, but only primitive globals "
-            + "can have constant initializers (pointer globals accept "
-            + "null, ptr/mview/view over a global, or a string "
+            + "can have constant initializers (read-only view globals accept "
+            + "null, view over a global, or a string "
             + "literal)."
             + " Global constant initializers are folded into static"
             + " storage, which only primitive values can represent"
             + " directly."
             + " Use a primitive global, or use one of the accepted"
-            + " pointer forms such as null, ptr/mview/view over"
+            + " read-only forms such as null, view over"
             + " a global, or a string literal.");
     }
 

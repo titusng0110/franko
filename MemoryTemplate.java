@@ -31,12 +31,10 @@ final class MemoryTemplateRegistry {
 
     final int paramCount;
     final int globalCount;
-    final int callSiteCount;
     final int variableCount;
 
     final int paramBase = 7;
     final int globalBase;
-    final int callBase;
     final int localBase;
     final int localElementBase;
     final int globalCellBase;
@@ -46,17 +44,14 @@ final class MemoryTemplateRegistry {
     MemoryTemplateRegistry(
             int paramCount,
             int globalCount,
-            int callSiteCount,
             int variableCount
     ) {
         this.paramCount = paramCount;
         this.globalCount = globalCount;
-        this.callSiteCount = callSiteCount;
         this.variableCount = variableCount;
 
         this.globalBase = paramBase + paramCount * PARAM_STRIDE;
-        this.callBase = globalBase + globalCount;
-        this.localBase = callBase + callSiteCount;
+        this.localBase = globalBase + globalCount;
         this.localElementBase = localBase + variableCount;
         this.globalCellBase = localElementBase + variableCount;
         this.templateCount = globalCellBase + globalCount;
@@ -105,10 +100,6 @@ final class MemoryTemplateRegistry {
 
     int globalValue(int globalIndex) {
         return globalBase + globalIndex;
-    }
-
-    int callResult(int callSiteIndex) {
-        return callBase + callSiteIndex;
     }
 
     int localValue(int variableId) {
@@ -234,11 +225,6 @@ final class MemoryTemplateRegistry {
     int globalIndexOf(int template) {
         int offset = template - globalBase;
         return offset >= 0 && offset < globalCount ? offset : -1;
-    }
-
-    int callSiteIndexOf(int template) {
-        int offset = template - callBase;
-        return offset >= 0 && offset < callSiteCount ? offset : -1;
     }
 
     int variableOfLocal(int template) {

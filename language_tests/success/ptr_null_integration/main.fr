@@ -12,17 +12,12 @@ import "franko/stdio"
 //   - assignment from another pointer copies its exact null state
 //   - guard refinement: deref inside if (p != null) is valid
 //   - loop-guard refinement and provable null after loop exit
-//   - null passed to ptr parameters and returned from ptr functions
-//   - struct fields of mview type default to null
+//   - null passed to ptr parameters
+//   - local mview defaults to null
 //   - equality-only pointer comparison (== and != only)
 //
 // Expected output is in null.expected.
 // ============================================================
-
-struct Box {
-    int32 v
-    mview<int32> link
-}
 
 func take_ptr(ptr<int32> q) -> int32 {
     if (q != null) {
@@ -30,10 +25,6 @@ func take_ptr(ptr<int32> q) -> int32 {
     }
 
     return -1
-}
-
-func make_null() -> ptr<int32> {
-    return null
 }
 
 func main() -> int32 {
@@ -91,20 +82,20 @@ func main() -> int32 {
 
     stdout(3)
 
-    // Global pointer variable is null-initialized.
+    // Local pointer variable is null-initialized.
     stdout(g == null)
     g = ptr(g_target)
     stdout(g != null)
 
     stdout(4)
 
-    // Struct field of pointer type defaults to null.
-    Box bo
-    stdout(bo.link == null)
-    bo.link = mview(x)
-    stdout(bo.link != null)
-    $(bo.link) = 5
-    stdout($(bo.link))
+    // Local mview defaults to null.
+    mview<int32> link
+    stdout(link == null)
+    link = mview(x)
+    stdout(link != null)
+    $(link) = 5
+    stdout($(link))
 
     stdout(5)
 
@@ -126,7 +117,7 @@ func main() -> int32 {
     stdout(take_ptr(null))
     stdout(take_ptr(ptr(x)))
 
-    ptr<int32> r = make_null()
+    ptr<int32> r = null
     stdout(r == null)
 
     return 0

@@ -113,20 +113,32 @@ public class FunctionChecker {
 
             declarations.checkVarDecl(SastNode.varDecl(node.span, param));
 
-            if (!types.isValueAssignableType(param.type)) {
+            if (!types.isPassableByValueType(param.type)) {
                 diagnostics.error("Parameter '"
                         + param.name
                         + "' in function '"
                         + node.symbol.qualifiedName()
                         + "' has invalid parameter type "
                         + types.describeSafe(param.type)
-                        + ": parameters must have assignable value types."
+                        + ": parameters must be passable by value."
                         + " Call arguments are passed by value, so the"
-                        + " parameter type must be copyable as a complete"
-                        + " value."
-                        + " Use ptr<T> or view<T> for pointer-only data,"
-                        + " or change the parameter to a value-assignable"
+                        + " parameter type must be a primitive, enum, pointer,"
+                        + " or struct/tuple with no pointer or array members."
+                        + " Pass aggregate storage through a pointer that points at non-pointer storage,"
+                        + " or change the parameter to a passable-by-value"
                         + " type.");
+            }
+
+            if (types.isWritablePointerToPointer(param.type)) {
+                diagnostics.error("Parameter '"
+                        + param.name
+                        + "' in function '"
+                        + node.symbol.qualifiedName()
+                        + "' has invalid writable pointer-to-pointer type "
+                        + types.describeSafe(param.type)
+                        + ". Writable pointer-to-pointer parameters would let a callee write a pointer into caller storage, so only read-only view<...> pointer-to-pointer parameters are allowed. Use view<"
+                        + types.describeSafe(param.type.referencedType)
+                        + "> or pass the pointer by value another way.");
             }
 
             if (param.parameterDefault != null) {
@@ -334,19 +346,18 @@ public class FunctionChecker {
 
     private void validateAssignmentOperatorMethod(Symbol method) {
         if ("OPERATOR_MOV".equals(method.name)
-                && types.isValueAssignableType(
+                && types.isPassableByValueType(
                         SastType.structType(method.owner))) {
             diagnostics.error("Struct '"
                     + method.owner.qualifiedName()
-                    + "' is value-assignable and cannot declare OPERATOR_MOV;"
+                    + "' is passable by value and cannot declare OPERATOR_MOV;"
                     + " built-in whole-value assignment is always used for"
-                    + " value-assignable structs."
+                    + " passable-by-value structs."
                     + " A move operator on a copyable struct would be"
                     + " unreachable because assignment already copies"
                     + " every field."
                     + " Remove OPERATOR_MOV, or make the struct"
-                    + " pointer-only by adding a non-value field such as a"
-                    + " dynamic array.");
+                    + " non-passable by adding an array field.");
         }
 
         boolean valid = method.parameters.size() == 2
@@ -415,33 +426,34 @@ public class FunctionChecker {
         }
 
         if (!types.isValidFunctionReturnType(returnType)) {
-            if (returnType.kind == SastTypeKind.STRUCT
-                    && !types.isValueAssignableType(returnType)) {
+            if (returnType.kind == SastTypeKind.PTR) {
                 diagnostics.error("Function '"
                         + fn.fullSignatureString()
-                        + "' cannot return pointer-only struct '"
+                        + "' cannot return pointer type '"
                         + returnType.describe()
-                        + "' by value: its fields are not all value-assignable. "
-                        + "Return ptr<"
+                        + "': pointers are downward-only values and cannot flow back up through returns. Return a primitive, enum, or value struct/tuple instead, or write the result through an out-parameter that points at non-pointer storage.");
+                return;
+            }
+
+            if (returnType.kind == SastTypeKind.STRUCT
+                    && !types.isReturnableByValueType(returnType)) {
+                diagnostics.error("Function '"
+                        + fn.fullSignatureString()
+                        + "' cannot return struct '"
                         + returnType.describe()
-                        + ">, or write through a ptr<"
-                        + returnType.describe()
-                        + "> output parameter.");
+                        + "' by value: its fields are not all returnable by value with no pointer or array members. "
+                        + "Write the result through an out-parameter that points at non-pointer storage.");
                 return;
             }
 
             if (returnType.kind == SastTypeKind.TUPLE
-                    && !types.isValueAssignableType(returnType)) {
+                    && !types.isReturnableByValueType(returnType)) {
                 diagnostics.error("Function '"
                         + fn.fullSignatureString()
-                        + "' cannot return pointer-only tuple '"
+                        + "' cannot return tuple '"
                         + returnType.describe()
-                        + "' by value: its elements are not all value-assignable. "
-                        + "Return ptr<"
-                        + returnType.describe()
-                        + ">, or write through a ptr<"
-                        + returnType.describe()
-                        + "> output parameter.");
+                        + "' by value: its elements are not all returnable by value with no pointer or array members. "
+                        + "Write the result through an out-parameter that points at non-pointer storage.");
                 return;
             }
 
@@ -449,12 +461,12 @@ public class FunctionChecker {
                     + fn.fullSignatureString()
                     + "' has invalid return type "
                     + types.describeSafe(returnType)
-                    + ": return type must be void or an assignable value type."
+                    + ": return type must be void or a returnable-by-value type."
                     + " Franko returns values by copy, so every part of"
-                    + " the return type must be value-assignable."
+                    + " the return type must be returnable by value with no pointer or array members."
                     + " Change the return type to void or a"
-                    + " value-assignable type, or return the value through"
-                    + " ptr<T>.");
+                    + " returnable-by-value type, or write the result through"
+                    + " an out-parameter that points at non-pointer storage.");
         }
     }
 
@@ -654,6 +666,25 @@ public class FunctionChecker {
                     + " declared return type."
                     + " Return an expression of the declared return type,"
                     + " or make the function void.");
+            return;
+        }
+
+        if (function.returnType() != null
+                && function.returnType().kind == SastTypeKind.PTR) {
+            return;
+        }
+
+        if (node.value.type != null
+                && node.value.type.kind == SastTypeKind.PTR) {
+            diagnostics.error("Invalid return from function '"
+                    + function.fullSignatureString()
+                    + "': cannot return pointer value of type '"
+                    + types.describeSafe(node.value.type)
+                    + "' from a function with non-pointer return type '"
+                    + types.describeSafe(function.returnType())
+                    + "'. Pointers are downward-only values and cannot flow back up through returns."
+                    + " Change the return type to a returnable-by-value type, or write the result through"
+                    + " an out-parameter that points at non-pointer storage.");
             return;
         }
 

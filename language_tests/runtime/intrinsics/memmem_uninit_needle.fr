@@ -1,7 +1,7 @@
 import "franko/stdio"
 
 // Runtime fixture: intrinsics/memmem_uninit_needle
-// The needle is passed as a caller-owned pointer, so the checker cannot
+// The needle is passed as a caller pointer, so the checker cannot
 // prove it is uninitialized; the runtime aborts.
 func find(
     ptr<[byte, 4]> hay,

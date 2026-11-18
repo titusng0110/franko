@@ -273,14 +273,6 @@ public final class PointerPermissionChecker {
             return;
         }
 
-        if (expr.kind == SastKind.AGGREGATE_LITERAL) {
-            for (SastNode field : expr.fields) {
-                markValue(field.value, requiredLevel(field.field.type));
-            }
-
-            return;
-        }
-
         if (expr.kind == SastKind.FUNCTION_CALL) {
             for (int i = 0; i < expr.args.size(); i++) {
                 markValue(expr.args.get(i), parameterLevel(expr, i));

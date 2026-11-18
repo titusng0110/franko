@@ -1,7 +1,5 @@
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 public final class DynamicArrayMemoryChecker {
@@ -23,7 +21,6 @@ public final class DynamicArrayMemoryChecker {
         final byte[] escapeMay;
         final byte[] useMust;
         final byte[] useMay;
-        final long[] returnAliasSet;
         final int edgeCount;
         final int[] edgeCallSiteIds;
         final long[] edgeAliasSets;
@@ -41,7 +38,6 @@ public final class DynamicArrayMemoryChecker {
                 byte[] escapeMay,
                 byte[] useMust,
                 byte[] useMay,
-                long[] returnAliasSet,
                 int edgeCount,
                 int[] edgeCallSiteIds,
                 long[] edgeAliasSets,
@@ -58,7 +54,6 @@ public final class DynamicArrayMemoryChecker {
             this.escapeMay = escapeMay;
             this.useMust = useMust;
             this.useMay = useMay;
-            this.returnAliasSet = returnAliasSet;
             this.edgeCount = edgeCount;
             this.edgeCallSiteIds = edgeCallSiteIds;
             this.edgeAliasSets = edgeAliasSets;
@@ -174,11 +169,6 @@ public final class DynamicArrayMemoryChecker {
     private int assumptionMode = ASSUMPTION_NONE;
     private int currentFunctionId = -1;
     private DynamicSummaryBuilder builder;
-    private final List<long[]> exitReturnSets = new ArrayList<>();
-
-    private AliasValue[] callResultAliases;
-    private boolean[] callResultResolving;
-    private MemoryBfsResult currentBfsResult;
 
     private long[] reportedErrorSites;
     private long[] reportedWarningSites;
@@ -247,8 +237,6 @@ public final class DynamicArrayMemoryChecker {
             state = null;
             bfs = null;
             summaries = null;
-            callResultAliases = null;
-            callResultResolving = null;
             reportedErrorSites = null;
             reportedWarningSites = null;
         }
@@ -257,8 +245,6 @@ public final class DynamicArrayMemoryChecker {
             state = new DynamicArrayAnalysisState(context);
             bfs = new MemorySummaryBfs(context);
             summaries = new DynamicSummary[context.callGraph.functionCount()];
-            callResultAliases = new AliasValue[context.callSiteCount];
-            callResultResolving = new boolean[context.callSiteCount];
             reportedErrorSites = new long[Math.max(1, (context.siteCount + 63) >>> 6)];
             reportedWarningSites = new long[Math.max(1, (context.siteCount + 63) >>> 6)];
         }
@@ -417,12 +403,8 @@ public final class DynamicArrayMemoryChecker {
             currentFunctionId = functionId;
             state.setFunction(functionId);
             state.reset();
-            exitReturnSets.clear();
-            Arrays.fill(callResultAliases, null);
-            Arrays.fill(callResultResolving, false);
             Arrays.fill(reportedErrorSites, 0L);
             Arrays.fill(reportedWarningSites, 0L);
-            currentBfsResult = null;
             suppressed = false;
 
             SastNode decl = context.functionDecl(functionId);
@@ -601,7 +583,6 @@ public final class DynamicArrayMemoryChecker {
 
             currentFunctionId = -1;
             builder = null;
-            currentBfsResult = null;
         }
 
         private DynamicSummary buildSummary(int exitCount) {
@@ -630,12 +611,6 @@ public final class DynamicArrayMemoryChecker {
                 useMay[param] = certainty(exitCount, param, 3, false);
             }
 
-            long[] returnAlias = context.templates.newSet();
-
-            for (long[] exitSet : exitReturnSets) {
-                context.templates.union(returnAlias, exitSet);
-            }
-
             int edgeCount = builder == null ? 0 : builder.edgeCount;
             int[] edgeCallSiteIds = new int[edgeCount];
 
@@ -660,7 +635,6 @@ public final class DynamicArrayMemoryChecker {
                     escapeMay,
                     useMust,
                     useMay,
-                    returnAlias,
                     edgeCount,
                     edgeCallSiteIds,
                     builder == null
@@ -1861,15 +1835,6 @@ public final class DynamicArrayMemoryChecker {
         }
 
         public void onReturn(SastNode node) {
-            if (summaryMode) {
-                exitReturnSets.add(
-                        node.value == null
-                                ? context.templates.newSet()
-                                : symbolicAliasOf(node.value)
-                );
-                return;
-            }
-
             if (!suppressed) {
                 for (int index = 0;
                         index < state.activeArrayCount();
@@ -1882,19 +1847,10 @@ public final class DynamicArrayMemoryChecker {
                                     + "'"
                     );
                 }
-
-                if (node.value != null) {
-                    checkAliasUse(node.value, node);
-                }
             }
         }
 
         public void onFallthrough() {
-            if (summaryMode) {
-                long[] set = context.templates.newSet();
-                context.templates.set(set, MemoryTemplate.UNKNOWN);
-                exitReturnSets.add(set);
-            }
         }
 
         public boolean guardPathFeasible(
@@ -2308,13 +2264,9 @@ public final class DynamicArrayMemoryChecker {
                     new MemorySummaryBfs.NodeProcessor(this)
             );
 
-            currentBfsResult = result;
-
             if (result.containsTop()) {
-                callResultAliases[callSiteId] = AliasValue.UNKNOWN;
                 markOwnerArgumentsMaybeInited(call);
                 invalidateGlobalOwners();
-                currentBfsResult = null;
                 return;
             }
 
@@ -2362,15 +2314,7 @@ public final class DynamicArrayMemoryChecker {
                 emitCrossParameterWarnings(call, summary, result, node);
             }
 
-            AliasValue returnAlias = resolveCallReturnAlias(result, callSiteId);
-            callResultAliases[callSiteId] = returnAlias;
-
-            if (returnAlias.arrayIndex >= 0) {
-                state.escaped[returnAlias.arrayIndex] = true;
-            }
-
             invalidateGlobalOwners();
-            currentBfsResult = null;
         }
 
         private void invalidateGlobalOwners() {
@@ -2696,55 +2640,6 @@ public final class DynamicArrayMemoryChecker {
             );
         }
 
-        private AliasValue resolveCallReturnAlias(
-                MemoryBfsResult result,
-                int callSiteId
-        ) {
-            if (callSiteId < 0 || callSiteId >= callResultAliases.length) {
-                return AliasValue.UNKNOWN;
-            }
-
-            if (callResultAliases[callSiteId] != null) {
-                return callResultAliases[callSiteId];
-            }
-
-            if (result.isCallSiteTop(callSiteId)) {
-                callResultAliases[callSiteId] = AliasValue.UNKNOWN;
-                return AliasValue.UNKNOWN;
-            }
-
-            int node = result.callSiteNodeIndex(callSiteId);
-
-            if (node < 0) {
-                callResultAliases[callSiteId] = AliasValue.UNKNOWN;
-                return AliasValue.UNKNOWN;
-            }
-
-            if (callResultResolving[callSiteId]) {
-                return AliasValue.UNKNOWN;
-            }
-
-            int functionId = result.functionId(node);
-            DynamicSummary summary = summaries[functionId];
-
-            if (summary == null) {
-                callResultAliases[callSiteId] = AliasValue.UNKNOWN;
-                return AliasValue.UNKNOWN;
-            }
-
-            callResultResolving[callSiteId] = true;
-            AliasValue value = evalAliasSet(
-                    summary.returnAliasSet,
-                    0,
-                    summary.templateWords,
-                    result,
-                    node
-            );
-            callResultResolving[callSiteId] = false;
-            callResultAliases[callSiteId] = value;
-            return value;
-        }
-
         private AliasValue evalAliasSet(
                 long[] sets,
                 int offset,
@@ -2900,20 +2795,6 @@ public final class DynamicArrayMemoryChecker {
                         );
             }
 
-            int callSite = context.templates.callSiteIndexOf(template);
-
-            if (callSite >= 0) {
-                MemoryBfsResult effective = result == null
-                        ? currentBfsResult
-                        : result;
-
-                if (effective == null) {
-                    return AliasValue.UNKNOWN;
-                }
-
-                return resolveCallReturnAlias(effective, callSite);
-            }
-
             return AliasValue.UNKNOWN;
         }
 
@@ -3047,14 +2928,7 @@ public final class DynamicArrayMemoryChecker {
             }
 
             if (expression.kind == SastKind.FUNCTION_CALL) {
-                int callSiteId = context.callSiteId(expression);
-
-                if (callSiteId < 0) {
-                    return AliasValue.UNKNOWN;
-                }
-
-                AliasValue value = callResultAliases[callSiteId];
-                return value == null ? AliasValue.UNKNOWN : value;
+                return AliasValue.UNKNOWN;
             }
 
             return AliasValue.UNKNOWN;
@@ -3227,11 +3101,7 @@ public final class DynamicArrayMemoryChecker {
             }
 
             if (expression.kind == SastKind.FUNCTION_CALL) {
-                int callSiteId = context.callSiteId(expression);
-                context.templates.set(
-                        set,
-                        context.templates.callResult(callSiteId)
-                );
+                context.templates.set(set, MemoryTemplate.UNKNOWN);
                 return set;
             }
 

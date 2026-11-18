@@ -1,0 +1,4 @@
+func main() -> int32 {
+    int32 x = #is_value_assignable(1)
+    return 0
+}

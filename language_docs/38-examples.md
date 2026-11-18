@@ -382,7 +382,7 @@ func main() -> int32 {
 
 ## 38.17 Structs Passed by Value and by Pointer
 
-Assignable structs may be passed and returned by value; pointer-only structs are accessed through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access).
+Passable-by-value structs may be passed by value, and returnable-by-value structs may be returned by value; structs with array members are neither passable nor returnable and are accessed through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access). Pointers themselves are passed by value but never returned: buffer output uses an out-parameter that points at non-pointer storage.
 
 ```franko
 struct Point {
@@ -415,7 +415,7 @@ func main() -> int32 {
 
 ## 38.18 Structs with Array Fields
 
-An array field makes the struct non-assignable: the struct is pointer-only and its arrays are managed through the usual intrinsics.
+An array field makes the struct neither assignable, passable, nor returnable by value: access such a struct through a pointer and manage its arrays through the usual intrinsics.
 
 ```franko
 struct Buffer {
@@ -446,7 +446,7 @@ Dynamic array fields are not allocated as part of the struct declaration; alloca
 ## 38.19 Struct Globals
 
 Global variables are implicitly const and are initialized before `main`.
-A struct global must be value-assignable.
+A struct global must be passable by value.
 
 ```franko
 struct Point {

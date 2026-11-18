@@ -169,7 +169,7 @@ struct Token {
 }
 
 struct Parser {
-    view<[byte]> line
+    [byte, 256] line_buf
     uint32 line_len = 0
     uint32 pos = 0
     Token current
@@ -177,7 +177,8 @@ struct Parser {
 
     // Reset the parser and prime the first token.
     func reset(mview<Parser> self, const view<[byte]> line, const uint32 line_len) -> void {
-        $(self).line = line
+        $(self).line_buf.memset(0)
+        $(self).line_buf.memcpy(line)
         $(self).line_len = line_len
         $(self).pos = 0
         $(self).error = CalcError::none
@@ -198,20 +199,14 @@ struct Parser {
 
     // Classify the next token, skipping spaces and tabs.
     func advance(mview<Parser> self) -> void {
-        view<[byte]> src = $(self).line
-        if (src == null) {
-            $(self).current.kind = TokenKind::endOfInput
-            return
-        }
-
         uint32 i = $(self).pos
         uint32 n = $(self).line_len
-        if (n > $(src).length()) {
-            n = $(src).length()
+        if (n > 256) {
+            n = 256
         }
 
         while (i < n) {
-            byte b = $(src)[i]
+            byte b = $(self).line_buf[i]
             if (b != 32 && b != 9) {
                 break
             }
@@ -228,12 +223,12 @@ struct Parser {
             return
         }
 
-        byte b = $(src)[i]
+        byte b = $(self).line_buf[i]
 
         if (b >= 48 && b <= 57) {
             uint32 start = i
             while (i < n) {
-                byte digit = $(src)[i]
+                byte digit = $(self).line_buf[i]
                 if (digit < 48 || digit > 57) {
                     break
                 }
@@ -242,6 +237,7 @@ struct Parser {
 
             uint32 count = i - start
             int64 number = 0
+            view<[byte]> src = view($(self).line_buf)
             if (text::parse_int64(src, start, count, mview(number)) == 0) {
                 $(self).current.kind = TokenKind::invalid
             } else {
@@ -404,23 +400,29 @@ func evaluate(const view<[byte]> line, const uint32 line_len) -> (int64 value, C
     return (int64 value, CalcError error) { value = result, error = err }
 }
 
-func error_text(const CalcError err) -> view<[byte]> {
+func print_error(const CalcError err) -> void {
     if (err == CalcError::unexpectedToken) {
-        return "unexpected token"
+        stdout("unexpected token", end = null)
+        return
     }
     if (err == CalcError::unexpectedEnd) {
-        return "unexpected end of expression"
+        stdout("unexpected end of expression", end = null)
+        return
     }
     if (err == CalcError::expectedRightParen) {
-        return "expected ')'"
+        stdout("expected ')'", end = null)
+        return
     }
     if (err == CalcError::divisionByZero) {
-        return "division by zero"
+        stdout("division by zero", end = null)
+        return
     }
     if (err == CalcError::trailingInput) {
-        return "trailing input"
+        stdout("trailing input", end = null)
+        return
     }
-    return "unknown error"
+    stdout("unknown error", end = null)
+    return
 }
 
 func main() -> int32 {
@@ -468,7 +470,8 @@ func main() -> int32 {
             stdout(result.value)
         } else {
             stdout("error: ", end = null)
-            stdout(error_text(result.error))
+            print_error(result.error)
+            stdout()
         }
     }
 

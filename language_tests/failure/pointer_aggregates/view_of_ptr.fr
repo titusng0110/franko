@@ -1,0 +1,4 @@
+func main() -> int32 {
+    [view<ptr<int32>>] a
+    return 0
+}

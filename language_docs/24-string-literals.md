@@ -19,16 +19,27 @@ A string literal materializes as a byte view only when it is used as:
 - the right-hand side of an assignment or declaration initializer;
 - a field value in an aggregate initializer;
 - an argument to a function, method, or compiler intrinsic;
-- a return value;
 - a parameter default value.
 
 ```franko
 view<[byte, 3]> s = "abc";     // declaration initializer
 s = "xyz";                     // assignment
 take("hi");                    // function argument
-return "hi";                   // return value
 stdout("hello");               // function argument
 buf.memcpy("hello");           // intrinsic argument
+take("a" + "b");               // folded string as an argument
+```
+
+Functions and methods cannot return pointers, so there is no
+return-value materialization context. To produce string bytes from a
+function, write through an out-parameter that points at non-pointer
+storage:
+
+```franko
+func fill(ptr<[byte]> out) -> void {
+    $(out).memcpy("hello");
+    return
+}
 ```
 
 Every other **value** position rejects the literal because it has no type.
@@ -150,8 +161,8 @@ array literal; see [Array Literals](22-array-literals.md).)
 
 ## 24.6 Global String Views
 
-A pointer-typed global may be initialized with a string expression, including
-a folded concatenation:
+A `view` global may be initialized with a string expression, including
+a folded concatenation (`ptr` and `mview` globals are rejected):
 
 ```franko
 view<[byte, 5]> GREETING = "he" + "llo";

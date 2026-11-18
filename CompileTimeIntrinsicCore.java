@@ -14,7 +14,8 @@ final class CompileTimeIntrinsicCore {
         IS_MATCHABLE,
         IS_COMPARABLE,
         IS_ASSIGNABLE,
-        IS_VALUE_ASSIGNABLE
+        IS_PASSABLE_BY_VALUE,
+        IS_RETURNABLE_BY_VALUE
     }
 
     enum RawKind {
@@ -344,7 +345,6 @@ final class CompileTimeIntrinsicCore {
                 }
                 return pointer || array || tuple ? Boolean.FALSE : null;
             case IS_ASSIGNABLE:
-            case IS_VALUE_ASSIGNABLE:
                 if (primitive || pointer) {
                     return true;
                 }
@@ -352,6 +352,40 @@ final class CompileTimeIntrinsicCore {
                     return false;
                 }
                 if (tuple) {
+                    if (rawContainsPointer(key)) {
+                        return false;
+                    }
+                    return tupleAll(key, predicate);
+                }
+                return null;
+            case IS_PASSABLE_BY_VALUE:
+                if (primitive || pointer) {
+                    return true;
+                }
+                if (array) {
+                    return false;
+                }
+                if (tuple) {
+                    if (rawContainsPointer(key)) {
+                        return false;
+                    }
+                    return tupleAll(key, predicate);
+                }
+                return null;
+            case IS_RETURNABLE_BY_VALUE:
+                if (primitive) {
+                    return true;
+                }
+                if (pointer) {
+                    return false;
+                }
+                if (array) {
+                    return false;
+                }
+                if (tuple) {
+                    if (rawContainsPointer(key)) {
+                        return false;
+                    }
                     return tupleAll(key, predicate);
                 }
                 return null;
@@ -418,9 +452,16 @@ final class CompileTimeIntrinsicCore {
             case "is_matchable": return Predicate.IS_MATCHABLE;
             case "is_comparable": return Predicate.IS_COMPARABLE;
             case "is_assignable": return Predicate.IS_ASSIGNABLE;
-            case "is_value_assignable": return Predicate.IS_VALUE_ASSIGNABLE;
+            case "is_passable_by_value": return Predicate.IS_PASSABLE_BY_VALUE;
+            case "is_returnable_by_value": return Predicate.IS_RETURNABLE_BY_VALUE;
             default: return null;
         }
+    }
+
+    private static boolean rawContainsPointer(String key) {
+        return key.contains("OWNER<")
+                || key.contains("MUTABLE<")
+                || key.contains("READ_ONLY<");
     }
 
     private static boolean isStaticArray(String key) {

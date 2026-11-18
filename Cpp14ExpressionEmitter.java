@@ -128,19 +128,12 @@ final class Cpp14ExpressionEmitter {
 
         if (negative) {
             if (value.equals(BigInteger.valueOf(Long.MIN_VALUE))) {
-                // INT64_MIN has no positive int64 representation. Building
-                // it from two representable values avoids negating an
-                // unsigned literal (MSVC C4146) and the implementation-
-                // defined unsigned-to-signed conversion that follows.
                 return "(-9223372036854775807LL - 1)";
             }
             if (magnitude.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
                 return "-" + digits + "ULL";
             }
             if (magnitude.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
-                // MSVC gives a plain decimal literal above int32 max an
-                // unsigned type, so an unsuffixed negative literal would
-                // apply unary minus to an unsigned value (C4146).
                 return "-" + digits + "LL";
             }
             return "-" + digits;

@@ -1,0 +1,5 @@
+mview<int32> m = null
+
+func main() -> int32 {
+    return 0
+}

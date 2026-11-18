@@ -1,0 +1,14 @@
+import "franko/stdio"
+
+view<[byte, 5]> greeting = "hello"
+view<[int32, 3]> numbers = [1, 2, 3]
+view<int32> g_view = null
+
+func main() -> int32 {
+    stdout($(greeting).length())
+    stdout($(numbers)[2])
+    stdout(greeting == null)
+    stdout(numbers == null)
+    stdout(g_view == null)
+    return 0
+}

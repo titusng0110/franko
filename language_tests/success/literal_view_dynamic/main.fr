@@ -4,32 +4,40 @@ import "franko/stdio"
 // LANGUAGE TEST: Literal Decay to Dynamic Views
 // ============================================================
 // Covers: a literal (or string literal) consumed at view<[T]>
-// in an assignment, call argument, or return is a fat pointer over
-// the literal's constant static storage — never a stack temporary or
-// a separate descriptor global. Returning one (including
-// recursively) is safe.
+// in an assignment or call argument is a fat pointer over
+// the literal's constant static storage — never a stack temporary
+// or a separate descriptor global. Literals are assigned to
+// locals and passed down to callees; functions never return
+// pointers. Recursion produces literal values through primitive
+// returns over local views.
 // ============================================================
 
 func take(view<[int32]> v) -> int32 {
     return $(v)[0] + $(v)[2];
 }
 
-func mk(int32 n) -> view<[int32, 3]> {
+func mk_pick(int32 n) -> int32 {
+    view<[int32, 3]> lit = [7, 8, 9];
     if (n == 0) {
-        return [7, 8, 9];
+        return $(lit)[0];
     }
-    return mk(n - 1);
+    return mk_pick(n - 1);
 }
 
-func mdyn(int32 n) -> view<[byte]> {
+func mdyn_pick(int32 n) -> byte {
+    view<[byte]> lit = [1, 2, 3];
     if (n == 0) {
-        return [1, 2, 3];
+        return $(lit)[2];
     }
-    return mdyn(n - 1);
+    return mdyn_pick(n - 1);
 }
 
-func mstr() -> view<[byte]> {
-    return "abc";
+func mstr_pick(int32 n) -> byte {
+    view<[byte]> s = "abc";
+    if (n == 0) {
+        return $(s)[2];
+    }
+    return mstr_pick(n - 1);
 }
 
 func main() -> int32 {
@@ -40,13 +48,10 @@ func main() -> int32 {
     // Call-argument decay.
     stdout(take([10, 20, 30]));
 
-    // Return decay, recursive.
-    view<[int32, 3]> w = mk(5);
-    stdout($(w)[0]);
-    view<[byte]> b = mdyn(5);
-    stdout($(b)[2]);
-    view<[byte]> s = mstr();
-    stdout($(s)[2]);
+    // Local decay with recursion through primitive returns.
+    stdout(mk_pick(5));
+    stdout(mdyn_pick(5));
+    stdout(mstr_pick(0));
 
     return 0;
 }

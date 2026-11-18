@@ -99,11 +99,11 @@ public class TypeChecker {
         return t.kind == SastTypeKind.PTR;
     }
 
-    public boolean containsOwnedPointer(SastType type) {
-        return containsOwnedPointer(type, new HashSet<>());
+    public boolean containsPointerInAggregateStorage(SastType type) {
+        return containsPointerInAggregateStorage(type, new HashSet<>());
     }
 
-    private boolean containsOwnedPointer(
+    private boolean containsPointerInAggregateStorage(
             SastType type,
             Set<SastType> visiting
     ) {
@@ -111,156 +111,75 @@ public class TypeChecker {
             return false;
         }
 
-        if (!visiting.add(type)) {
-            return false;
-        }
-
-        try {
-            if (type.kind == SastTypeKind.PTR) {
-                if (type.permission == PtrPermission.OWNER) {
-                    return true;
-                }
-
-                return containsOwnedPointer(type.referencedType, visiting);
-            }
-
-            if (type.kind == SastTypeKind.DYNAMIC_ARRAY
-                    || type.kind == SastTypeKind.STATIC_ARRAY) {
-                return containsOwnedPointer(type.elementType, visiting);
-            }
-
-            if (type.kind == SastTypeKind.STRUCT) {
-                if (type.structSymbol == null) {
-                    return false;
-                }
-
-                for (FieldSymbol field : type.structSymbol.fields) {
-                    if (containsOwnedPointer(field.type, visiting)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            }
-
-            if (type.kind == SastTypeKind.TUPLE) {
-                for (FieldSymbol field : type.fields) {
-                    if (containsOwnedPointer(field.type, visiting)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            }
-
-            return false;
-        } finally {
-            visiting.remove(type);
-        }
-    }
-
-    public boolean isForbiddenOwnedPointerNesting(SastType type) {
-        if (type == null) {
-            return false;
-        }
-
         if (type.kind == SastTypeKind.PTR) {
-            return containsOwnedPointer(type.referencedType);
-        }
-
-        if (type.kind == SastTypeKind.DYNAMIC_ARRAY
-                || type.kind == SastTypeKind.STATIC_ARRAY) {
-            return containsOwnedPointer(type.elementType);
-        }
-
-        if (type.kind == SastTypeKind.STRUCT
-                || type.kind == SastTypeKind.TUPLE) {
-            return containsOwnedPointer(type);
-        }
-
-        return false;
-    }
-
-    public boolean isForbiddenAggregateMemberType(SastType type) {
-        return containsOwnedPointer(type);
-    }
-
-    public void ensureNoEmbeddedOwnedPointer(
-            SastType type,
-            String where
-    ) {
-        if (type != null && type.kind == SastTypeKind.STRUCT) {
-            return;
-        }
-
-        if (isForbiddenOwnedPointerNesting(type)) {
-            reportEmbeddedOwnedPointer(type, where);
-        }
-    }
-
-    public void ensureNoOwnedPointerAggregateMember(
-            SastType type,
-            String where
-    ) {
-        if (isForbiddenAggregateMemberType(type)) {
-            reportEmbeddedOwnedPointer(type, where);
-        }
-    }
-
-    private void reportEmbeddedOwnedPointer(
-            SastType type,
-            String where
-    ) {
-        String nestedArrayHint = wantsNestedArrayHint(type)
-                ? " If you mean to build an array of arrays, prefer a nested "
-                        + "dynamic array such as [[T]] over [ptr<[T]>]: a "
-                        + "nested dynamic array owns its inner arrays and "
-                        + "manages their storage and lifetime itself, so it is "
-                        + "safe and cannot leak or dangle the inner storage."
-                : "";
-
-        diagnostics.error(where
-                + " has type '"
-                + describeSafe(type)
-                + "': owning pointer type 'ptr<T>' cannot appear inside an "
-                + "array, struct, tuple, or pointer, recursively (including "
-                + "the referents of inner ptr<T>, mview<T>, and view<T> "
-                + "types). Embedded owning pointers let allocation and free "
-                + "responsibility escape into unrelated code, so the storage "
-                + "lifetime cannot be reasoned about. Keep owning pointers as "
-                + "the outermost pointer type of direct variables, parameters, "
-                + "returns, and globals; store view<T>/mview<T> in aggregates "
-                + "or under another pointer; use the pool allocator "
-                + "(franko/pool) for linked or node-like data."
-                + nestedArrayHint);
-    }
-
-    private boolean wantsNestedArrayHint(SastType type) {
-        if (type == null) {
-            return false;
-        }
-
-        if (type.kind == SastTypeKind.DYNAMIC_ARRAY
-                || type.kind == SastTypeKind.STATIC_ARRAY) {
             return true;
         }
 
-        if (type.kind == SastTypeKind.PTR) {
-            return wantsNestedArrayHint(type.referencedType);
+        if (type.kind == SastTypeKind.DYNAMIC_ARRAY
+                || type.kind == SastTypeKind.STATIC_ARRAY) {
+            return containsPointerInAggregateStorage(type.elementType, visiting);
+        }
+
+        if (type.kind == SastTypeKind.STRUCT) {
+            if (type.structSymbol == null) {
+                return false;
+            }
+
+            if (!visiting.add(type)) {
+                return false;
+            }
+
+            try {
+                for (FieldSymbol field : type.structSymbol.fields) {
+                    if (containsPointerInAggregateStorage(field.type, visiting)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            } finally {
+                visiting.remove(type);
+            }
+        }
+
+        if (type.kind == SastTypeKind.TUPLE) {
+            if (!visiting.add(type)) {
+                return false;
+            }
+
+            try {
+                for (FieldSymbol field : type.fields) {
+                    if (containsPointerInAggregateStorage(field.type, visiting)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            } finally {
+                visiting.remove(type);
+            }
         }
 
         return false;
     }
 
-    public boolean isNullType(SastType t) {
-        return t.kind == SastTypeKind.NULL;
+    public void ensureNoPointerInAggregateStorage(
+            SastType type,
+            String where
+    ) {
+        if (type != null && containsPointerInAggregateStorage(type)) {
+            diagnostics.error(where
+                    + " has type '"
+                    + describeSafe(type)
+                    + "': pointers cannot appear in struct fields, static array elements, dynamic array elements, tuple elements, or nested aggregates, recursively. Pointers are downward-only values that are passed to callees, never stored in aggregates. Remove the pointer from the aggregate, use a dynamic array with a separate length or a pool index from franko/pool for linked data, or keep the pointer as a direct variable, parameter, or read-only global.");
+        }
     }
 
-    public boolean isValueAssignableType(SastType t) {
-        return isValueAssignableType(t, new HashSet<>());
+    public boolean isAssignableType(SastType t) {
+        return isAssignableType(t, new HashSet<>());
     }
 
-    private boolean isValueAssignableType(
+    private boolean isAssignableType(
             SastType t,
             Set<SastType> visited
     ) {
@@ -282,7 +201,18 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : t.structSymbol.fields) {
-                if (!isValueAssignableType(field.type, visited)) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    assignable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    assignable = false;
+                    break;
+                }
+
+                if (!isAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -301,7 +231,18 @@ public class TypeChecker {
             boolean assignable = true;
 
             for (FieldSymbol field : t.fields) {
-                if (!isValueAssignableType(field.type, visited)) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    assignable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    assignable = false;
+                    break;
+                }
+
+                if (!isAssignableType(field.type, visited)) {
                     assignable = false;
                     break;
                 }
@@ -315,8 +256,193 @@ public class TypeChecker {
         return false;
     }
 
+    public boolean isPassableByValueType(SastType t) {
+        return isPassableByValueType(t, new HashSet<>());
+    }
+
+    private boolean isPassableByValueType(
+            SastType t,
+            Set<SastType> visited
+    ) {
+        if (t == null) {
+            return false;
+        }
+
+        if (t.kind == SastTypeKind.PRIMITIVE
+                || t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.ENUM) {
+            return true;
+        }
+
+        if (t.kind == SastTypeKind.STRUCT) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean passable = true;
+
+            for (FieldSymbol field : t.structSymbol.fields) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    passable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    passable = false;
+                    break;
+                }
+
+                if (!isPassableByValueType(field.type, visited)) {
+                    passable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return passable;
+        }
+
+        if (t.kind == SastTypeKind.TUPLE) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean passable = true;
+
+            for (FieldSymbol field : t.fields) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    passable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    passable = false;
+                    break;
+                }
+
+                if (!isPassableByValueType(field.type, visited)) {
+                    passable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return passable;
+        }
+
+        return false;
+    }
+
+    public boolean isReturnableByValueType(SastType t) {
+        return isReturnableByValueType(t, new HashSet<>());
+    }
+
+    private boolean isReturnableByValueType(
+            SastType t,
+            Set<SastType> visited
+    ) {
+        if (t == null) {
+            return false;
+        }
+
+        if (t.kind == SastTypeKind.PRIMITIVE
+                || t.kind == SastTypeKind.ENUM) {
+            return true;
+        }
+
+        if (t.kind == SastTypeKind.PTR
+                || t.kind == SastTypeKind.DYNAMIC_ARRAY
+                || t.kind == SastTypeKind.STATIC_ARRAY) {
+            return false;
+        }
+
+        if (t.kind == SastTypeKind.STRUCT) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean returnable = true;
+
+            for (FieldSymbol field : t.structSymbol.fields) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    returnable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    returnable = false;
+                    break;
+                }
+
+                if (!isReturnableByValueType(field.type, visited)) {
+                    returnable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return returnable;
+        }
+
+        if (t.kind == SastTypeKind.TUPLE) {
+            if (!visited.add(t)) {
+                return false;
+            }
+
+            boolean returnable = true;
+
+            for (FieldSymbol field : t.fields) {
+                if (field.type.kind == SastTypeKind.PTR) {
+                    returnable = false;
+                    break;
+                }
+
+                if (field.type.kind == SastTypeKind.DYNAMIC_ARRAY
+                        || field.type.kind == SastTypeKind.STATIC_ARRAY) {
+                    returnable = false;
+                    break;
+                }
+
+                if (!isReturnableByValueType(field.type, visited)) {
+                    returnable = false;
+                    break;
+                }
+            }
+
+            visited.remove(t);
+
+            return returnable;
+        }
+
+        return false;
+    }
+
+    public boolean isWritablePointerToPointer(SastType type) {
+        if (type == null || type.kind != SastTypeKind.PTR) {
+            return false;
+        }
+
+        if (type.permission != PtrPermission.OWNER
+                && type.permission != PtrPermission.MUTABLE) {
+            return false;
+        }
+
+        return type.referencedType != null
+                && type.referencedType.kind == SastTypeKind.PTR;
+    }
+
+    public boolean isNullType(SastType t) {
+        return t.kind == SastTypeKind.NULL;
+    }
+
     public boolean isValidFunctionReturnType(SastType t) {
-        return isVoidType(t) || isValueAssignableType(t);
+        return isVoidType(t) || isReturnableByValueType(t);
     }
 
     public SemanticPrimitiveKind primitiveKindOf(SastType type) {
@@ -488,23 +614,29 @@ public class TypeChecker {
             return;
         }
 
+        if (type.kind == SastTypeKind.PTR) {
+            diagnostics.error(message
+                    + ": functions cannot return pointer type "
+                    + describeSafe(type)
+                    + ". Pointers are downward-only values passed to callees and never flow back up through returns. Return a primitive, enum, or value struct/tuple instead, or write the result through an out-parameter that points at non-pointer storage.");
+            return;
+        }
+
         if (isArrayType(type)) {
             diagnostics.error(message
                     + ": arrays cannot be returned directly. Returning an array by"
                     + " value would need to transfer or copy its storage, and Franko has"
-                    + " no array value-copy semantics. Return ptr<"
-                    + type.describe()
-                    + "> instead, or write through a ptr<...> output parameter.");
+                    + " no array value-copy semantics. Write the result through an out-parameter that points at non-pointer storage.");
             return;
         }
 
         diagnostics.error(message
                 + ": invalid function return type "
                 + describeSafe(type)
-                + ". A return type must be void or a value-assignable type: a"
-                + " primitive, pointer, enum, or struct/tuple whose fields are all"
-                + " value-assignable. Replace the return type with a supported one, or"
-                + " return the value through a pointer.");
+                + ". A return type must be void or a returnable-by-value type: a"
+                + " primitive, enum, or struct/tuple whose fields are all"
+                + " returnable by value with no pointer or array members. Replace the return type with a supported one, or"
+                + " write the result through an out-parameter that points at non-pointer storage.");
     }
 
     public void ensureAssignable(
@@ -589,28 +721,28 @@ public class TypeChecker {
         }
 
         if (targetType.kind == SastTypeKind.STRUCT
-                && !isValueAssignableType(targetType)) {
+                && !isAssignableType(targetType)) {
             diagnostics.error(message
                     + ": struct type "
                     + targetType.describe()
                     + " contains non-assignable fields and cannot be assigned"
-                    + " as a whole value. A struct is value-assignable only when every"
-                    + " field is a primitive, pointer, enum, or another"
-                    + " value-assignable struct/tuple; arrays require explicit copying."
+                    + " as a whole value. A struct is assignable only when every"
+                    + " field is a primitive, enum, pointer, or another"
+                    + " assignable struct/tuple; arrays require explicit copying."
                     + " Assign the fields individually, or copy array fields with"
                     + " memcpy.");
             return;
         }
 
         if (targetType.kind == SastTypeKind.TUPLE
-                && !isValueAssignableType(targetType)) {
+                && !isAssignableType(targetType)) {
             diagnostics.error(message
                     + ": tuple type "
                     + targetType.describe()
                     + " contains non-assignable elements and cannot be"
-                    + " assigned as a whole value. A tuple is value-assignable only"
-                    + " when every element is a primitive, pointer, enum, or another"
-                    + " value-assignable struct/tuple; arrays require explicit copying."
+                    + " assigned as a whole value. A tuple is assignable only"
+                    + " when every element is a primitive, enum, pointer, or another"
+                    + " assignable struct/tuple; arrays require explicit copying."
                     + " Assign the elements individually, or copy array elements with"
                     + " memcpy.");
             return;

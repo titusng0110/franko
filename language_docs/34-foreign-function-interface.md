@@ -111,7 +111,7 @@ Rules:
   bridge valid for standalone C++ linting and exposes the runtime types
   (`Franko_Thin_Pointer`, `Franko_Fat_Pointer`, `franko_panic`, fixed-width
   integers). The header is `#pragma once`, so a repeated include is harmless.
-- Bridge ABI: a pointer parameter or return whose pointee is not an array
+- Bridge ABI: a pointer parameter whose pointee is not an array
   (`ptr<T>`, `mview<T>`, or `view<T>`) is `Franko_Thin_Pointer<T>` in C++;
   access its raw pointer through `.data`. A pointer to an array is
   `Franko_Fat_Pointer<element(T)>`.
@@ -168,6 +168,7 @@ The compiler rejects an FFI module when:
 - the descriptor is malformed or has an unsupported version;
 - a listed function does not exist in the `.fr` file;
 - a listed function is generic;
+- a bridged function returns a pointer type;
 - a bridged function has no bridge file or no matching block;
 - a bridged function block does not contain the expected generated name.
 
@@ -175,7 +176,7 @@ The compiler rejects an FFI module when:
 compiler-emitted declaration before the bridge block; the bridge body itself
 is still supplied by C++.
 
-Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters/returns for bridged functions, and keep aggregate layouts on the Franko side.
+Bridged function signatures are limited to the C++ types the bridge author can spell directly in the prelude. Struct and tuple types are not part of the current bridge model: use primitive or pointer parameters for bridged functions, and keep aggregate layouts on the Franko side. Bridged functions cannot return pointers: pointers are downward-only values, so a bridged function returns `void` or a returnable-by-value type, or writes its result through an out-parameter that points at non-pointer storage.
 
 Named and optional arguments are resolved before emission: omitted defaults
 are copied into the semantic call site as ordinary positional arguments, so

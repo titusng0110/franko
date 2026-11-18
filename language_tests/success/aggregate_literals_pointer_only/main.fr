@@ -1,15 +1,24 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: Aggregate Field Initializers on Pointer-Only Types
+// LANGUAGE TEST: Aggregate Field Initializers on Array-Containing Types
 // ============================================================
 // The field-wise declaration form does not create a temporary
-// value and therefore works for pointer-only aggregates.
+// value and therefore works for non-passable aggregates (here a
+// struct with a dynamic array field and a tuple with a static
+// array element). A non-passable struct without pointers may
+// declare a custom OPERATOR_MOV for non-literal whole-value
+// assignment.
 // ============================================================
 
 struct Buffer {
     int32 cap
     [byte] buf
+
+    func OPERATOR_MOV(ptr<Buffer> self, view<Buffer> other) -> void {
+        $(self).cap = $(other).cap
+        return
+    }
 }
 
 func main() -> int32 {

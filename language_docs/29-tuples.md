@@ -32,7 +32,7 @@ Rules:
 - each element may carry an optional declaration-site name;
 - tuple types may appear wherever an ordinary declared type is allowed;
 - `void` is not a valid tuple element type;
-- an owning `ptr<T>` may not appear in a tuple element, recursively; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
+- no pointer type (`ptr<T>`, `mview<T>`, `view<T>`) may appear in a tuple element, recursively through nested structs, arrays, and tuples; see [Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
 
 A tuple declaration uses the tuple type followed by the variable name:
 
@@ -62,9 +62,9 @@ which fill the first N elements in order and may be partial:
 
 Positional and named entries cannot be mixed, positional entries are invalid
 for named tuple spellings, and the positional count may not exceed the tuple
-size. Order is free for named entries, partial and empty literals are legal,
-and omitted pointer elements are null. Constructing a tuple literal requires
-the tuple to be value-assignable. See
+size. Order is free for named entries, and partial and empty literals are
+legal. Tuples cannot hold pointers. Constructing a tuple literal requires
+the tuple to be passable by value (`#is_passable_by_value`). See
 [Aggregate Literals](30-aggregate-literals.md).
 
 A bare parenthesized value list such as `(1, 2)` is not a tuple expression:
@@ -138,7 +138,7 @@ pair._0 = 1
 pair._1 = 2
 ```
 
-- local tuple elements without a value are indeterminate until assigned, except pointer elements, which are null;
+- local tuple elements without a value are indeterminate until assigned;
 - global tuple storage is zero-initialized before `main` runs;
 - tuple values are produced by declarations, element writes, aggregate
   literals, whole-tuple assignment, and function returns.
@@ -220,7 +220,8 @@ b = a
 
 The ordered element types must match exactly; names are irrelevant.
 
-A tuple may be declared `const` when every element is value-assignable:
+A tuple may be declared `const` when every element is passable by value
+(`#is_passable_by_value`):
 
 ```franko
 const (int32, int32) pair = (int32, int32) { 1, 2 }
@@ -232,16 +233,16 @@ through `ptr`/`mview`, and `view` only. A tuple containing an array
 is pointer-only and cannot be `const`. See
 [Declarations](18-declarations.md#188-const-storage).
 
-A tuple is assignable as a whole only when every element is an assignable
-value type:
+A tuple is assignable as a whole (`#is_assignable`) only when every element
+is an assignable value type:
 
 - primitive integer;
 - enum;
-- pointer;
 - struct whose fields are all assignable;
 - another assignable tuple.
 
-A tuple containing a static array or dynamic array is pointer-only:
+Tuples cannot hold pointers. A tuple containing a static array or dynamic
+array is pointer-only:
 
 ```franko
 (int32, [int32, 3]) a
@@ -259,8 +260,9 @@ whole-tuple assignment always uses the built-in rule.
 
 ## 29.7 Functions, Parameters, and Returns
 
-A tuple can be passed by value or returned when every element is an
-assignable value type.
+A tuple can be passed by value (`#is_passable_by_value`) or returned by
+value (`#is_returnable_by_value`) when every element is an assignable
+value type. Tuples cannot hold pointers.
 
 ```franko
 func swap((int32 x, int32 y) pair) -> (int32 left, int32 right) {
@@ -307,10 +309,12 @@ Rules:
 - tuples may nest;
 - a tuple may contain structs;
 - a tuple may contain enums;
-- a tuple may be an array element or a pointer referent;
+- a tuple may be an array element, or a pointer referent when the tuple
+  itself contains no pointers;
 - a struct may have a tuple field;
 - a tuple element may itself be a static or dynamic array, but then the tuple
-  is pointer-only.
+  is pointer-only;
+- no tuple element may be a pointer, recursively.
 
 A struct that contains a tuple by value follows the ordinary struct
 by-value-cycle rule: a struct may not reach itself through a tuple element.
@@ -321,8 +325,11 @@ by-value-cycle rule: a struct may not reach itself through a tuple element.
 
 Tuple types participate in the normal reflection predicates. A tuple is:
 
-- assignable by value iff every element is assignable;
-- value-assignable iff every element is value-assignable;
+- assignable (`#is_assignable`) iff every element is assignable;
+- passable by value (`#is_passable_by_value`) iff every element is
+  passable by value;
+- returnable by value (`#is_returnable_by_value`) iff every element is
+  returnable by value;
 - memset-safe iff every element is memset-safe;
 - memcpy-safe iff every element is memcpy-safe;
 - a type with a default value iff at least one element's type has a default.
@@ -333,9 +340,11 @@ assignability for tuples.
 
 ```franko
 (int32, int32) pair
-stdout(#is_value_assignable(pair))      // 1
-stdout(#has_default_value(pair))        // 0
-stdout(#what_type(pair))                 // (int32,int32)
+stdout(#is_assignable(pair))               // 1
+stdout(#is_passable_by_value(pair))       // 1
+stdout(#is_returnable_by_value(pair))     // 1
+stdout(#has_default_value(pair))          // 0
+stdout(#what_type(pair))                  // (int32,int32)
 stdout(#is_same_type(pair, (int32 val, int32 err))) // 1
 ```
 
@@ -361,7 +370,7 @@ Tuples are deliberately limited to ordinary aggregate values:
   signature;
 - at least two elements are required;
 - a tuple containing a static array or dynamic array is pointer-only;
-- an owning `ptr<T>` cannot be a tuple element, recursively (see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded)).
+- no pointer type (`ptr<T>`, `mview<T>`, `view<T>`) can be a tuple element, recursively (see [Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates)).
 
 Tuple values are produced by declarations, element writes, aggregate
 literals, whole-tuple assignment, and function returns.

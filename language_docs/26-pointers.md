@@ -25,6 +25,11 @@ view<int32> v;
 ptr<[int32]> ap;
 ```
 
+Pointers are values. They can be assigned and passed down to callees, but
+they cannot be stored in aggregates, returned, or written back through
+writable pointer-to-pointer parameters. Pointer stacks are allowed, and only read-only
+pointer globals are allowed.
+
 Pointers are typed, assignable, copyable, dereferenceable, and comparable.
 
 Pointers are not arithmetic values.
@@ -86,28 +91,60 @@ $(v).field;     // struct field access
 $(v).length();  // intrinsic over the pointee
 ```
 
-## 26.3 Nested Pointers
+## 26.3 Stacked Pointers
 
-A pointer referent may contain another pointer type, but an owning
-`ptr<T>` may not appear anywhere inside a pointer referent. Ownership must
-stay at the outermost pointer level:
+A pointer referent may itself be a pointer, to unlimited depth:
 
 ```franko
-view<view<int32>> vv;      // valid: no ownership is hidden
-ptr<view<int32>> pv;       // valid: the referent contains no owning ptr
-ptr<mview<int32>> pm;      // valid
-
-ptr<ptr<int32>> pp;        // invalid: owning ptr inside a ptr
-view<ptr<int32>> vp;       // invalid: owning ptr inside a view
-mview<ptr<int32>> mp;      // invalid: owning ptr inside an mview
+ptr<ptr<int32>> a
+view<mview<ptr<int32>>> b
 ```
 
-## 26.4 Assignment and Implicit Downgrades
+Stacks are ordinary pointer values. A local `ptr<ptr<T>>` may be
+downgraded to `view<ptr<T>>` at a call. This preserves stacked-pointer
+passing without letting a callee write a pointer into caller storage.
+
+A pointer may refer to a struct, array, or tuple only when that aggregate
+contains no pointers.
+
+## 26.4 Pointers Cannot Appear in Aggregates
+
+`ptr<T>`, `mview<T>`, and `view<T>` are forbidden in all aggregate value
+storage, recursively:
+
+- struct fields;
+- static array elements;
+- dynamic array elements;
+- tuple elements;
+- nested structs, tuples, and arrays inside those positions;
+- aggregates that are the referent of a pointer.
+
+There is no owned-versus-view distinction for aggregate membership: all
+three pointer permissions are rejected.
+
+```franko
+struct Bad {
+    view<int32> link    // invalid: pointer member
+}
+
+[ptr<int32>] a          // invalid: array element is a pointer
+[int32, 4] b            // valid: no pointers
+(view<int32>, int32) p  // invalid: tuple element is a pointer
+ptr<[ptr<int32>]> q     // invalid: referent aggregate contains a pointer
+ptr<ptr<int32>> ok      // valid: pointer stack
+view<ptr<int32>> vok    // valid: read-only pointer to a pointer
+```
+
+Use a dynamic array with a separate length, or a pool index from
+`franko/pool` for linked data, when a node-like shape is needed. See
+[Pool Allocation](33-pool-allocation.md).
+
+## 26.5 Assignment and Implicit Downgrades
 
 The implicit conversions for nonconstant values are pointer
 conversions: the permission downgrades below over an identical
 referenced type, and the static-to-dynamic array pointer view decay of
-[§25.4.1](#2641-static-to-dynamic-array-pointer-views):
+[§26.5.1](#2651-static-to-dynamic-array-pointer-views):
 
 - `ptr<T>` implicitly casts to `mview<T>` and `view<T>`;
 - `mview<T>` implicitly casts to `view<T>`;
@@ -123,9 +160,10 @@ view<[byte]> v2 = m;          // implicit downgrade
 ptr<[byte]> q = v;            // invalid: raises permissions
 ```
 
-These conversions apply to assignment, return values, and function
-arguments. Every other position requires exact type equality. Raw
-integers cannot be converted to pointers.
+These conversions apply to assignment and function arguments. Every other
+position requires exact type equality. Raw integers cannot be converted
+to pointers. Pointer values never flow back up through returns or
+aggregate stores.
 
 Explicit downgrades may be written with `cast` (see [Casts](12-casts.md)):
 
@@ -133,7 +171,7 @@ Explicit downgrades may be written with `cast` (see [Casts](12-casts.md)):
 view<[byte]> v = cast<view<[byte]>>(p);
 ```
 
-### 26.4.1 Static-to-Dynamic Array Pointer Views
+### 26.5.1 Static-to-Dynamic Array Pointer Views
 
 A pointer to a **static** array implicitly converts to a pointer to a
 **dynamic** array of the same element type, in the unidirectional form:
@@ -165,24 +203,14 @@ result: `.init`, `.init_zero`, `.resize`, and `.uninit` are forbidden on
 `mview`/`view` results (and on a decayed `ptr` — which is why `ptr` never
 decays), so the storage behind the converted view is never reallocated
 or freed through it. The conversion is allowed in the same positions as
-permission downgrades: assignment, return values, and function arguments.
+permission downgrades: assignment and function arguments.
 Comparing pointers still requires identical pointer types.
 
 Decay does not copy elements or allocate storage, and it creates no
 hidden array object: the converted view continues to refer to the same
-array. In particular:
+array.
 
-- returning a decayed parameter or global view is safe;
-- a returned decayed view still refers to the original static storage;
-- returning a decayed view of **local** array storage remains an
-  ordinary frame-storage escape and is still rejected, exactly like
-  returning any other pointer to a local.
-
-Literal views refer to constant storage with static lifetime (see
-[Array Literals](22-array-literals.md)), so returning or keeping one is
-safe.
-
-## 26.5 Pointer Comparison
+## 26.6 Pointer Comparison
 
 Pointers may be compared using only the equality operators:
 
@@ -197,11 +225,11 @@ Ordering comparisons (`<`, `>`, `<=`, `>=`) are invalid for pointers.
 
 Pointer comparison produces `uint8`.
 
-## 26.6 No Pointer Arithmetic
+## 26.7 No Pointer Arithmetic
 
 Pointers are not integers and do not support arithmetic.
 
-## 26.7 Pointers of Arrays
+## 26.8 Pointers of Arrays
 
 Arrays may be pointed to:
 
@@ -210,7 +238,6 @@ Arrays may be pointed to:
 ptr<[int32]> p;
 
 p = ptr(arr);
-$(p)(10);
 ```
 
 Array literals can be copied through a dereferenced array pointer when
@@ -233,13 +260,75 @@ $(p)[1] = 2;
 $(p)[2] = 3;
 ```
 
-## 26.8 Permission Propagation (Nested Types)
+Arrays cannot hold pointers, so a pointer to an array always points at
+non-pointer element storage.
+
+## 26.9 Pointer Globals
+
+Only read-only pointer globals are allowed:
+
+- `view<T>` globals are allowed.
+- `ptr<T>` globals are rejected.
+- `mview<T>` globals are rejected.
+
+```franko
+view<[byte, 5]> greeting = "hello"   // valid: read-only global view
+view<[int32, 3]> numbers = [1, 2, 3] // valid
+
+ptr<int32> p                        // invalid as a global
+mview<[byte]> m                     // invalid as a global
+```
+
+A `view` global provides read-only access without exposing mutable
+storage. String and array literal globals are the standard examples.
+
+## 26.10 Pointer Parameters and Returns
+
+Pointers may be parameters. Pointer parameters keep compile-time
+defaults.
+
+Functions and methods cannot return any pointer type.
+
+```franko
+func read(view<[byte]> buf) -> int32 {
+    return $(buf)[0]
+}
+
+func bad() -> view<[byte]> {   // invalid: pointer return
+    return greeting
+}
+```
+
+Writable pointer-to-pointer parameters are forbidden:
+
+- `ptr<ptr<T>>`, `ptr<view<T>>`, `ptr<mview<T>>`;
+- `mview<ptr<T>>`, `mview<view<T>>`, `mview<mview<T>>`;
+- any equivalent nested form.
+
+Read-only pointer-to-pointer parameters are allowed:
+
+- `view<ptr<T>>`, `view<view<T>>`, `view<mview<T>>`.
+
+```franko
+func take(view<ptr<int32>> p) -> void {  // valid
+    return
+}
+
+func write(ptr<ptr<int32>> p) -> void {  // invalid
+    return
+}
+```
+
+Pointer values may flow into a callee and downward, but cannot flow back
+up through returns, aggregates, mutable globals, or writable pointer
+out-parameters. To produce aggregate or buffer output, write through an
+out-parameter that points at non-pointer storage.
+
+## 26.11 Permission Propagation (Nested Types)
 
 Permissions apply to the **value** being pointed to. Because arrays and
 structs are value types, permissions propagate transitively downward
 through them — and they stop at pointer boundaries.
-
-### Rule 1: Value Types Are Transitive
 
 A `view` of a nested array locks every dimension:
 
@@ -263,38 +352,13 @@ $(m).init(2);       // blocked: the same rule applies to the outer array
 
 To run lifecycle intrinsics on a nested array, reach it through a `ptr`:
 either hold the outer pointer (`ptr<[[byte]]>`) or extract an
-inner `ptr` (Rule 2).
+inner `ptr`.
 
-### Rule 2: Pointer Boundaries (Indirection)
+Pointer stacks follow each pointer's own permission. A `view<ptr<T>>`
+locks the outer pointer slot as read-only while the inner pointer keeps
+its own rights.
 
-If a container holds pointer values, the container's permission governs
-only **the pointer slots** (whether they can be overwritten). The memory
-behind those pointers follows each pointer's own type:
-
-```franko
-mview<[view<[byte]>]> v;
-$(v)[0] = view(x);        // allowed: overwrite the slot
-$($(v)[0])[0] = 5;           // blocked: the extracted view is read-only
-```
-
-```franko
-view<[mview<[byte]>]> v;
-$(v)[0] = mview(x);       // blocked: the outer view locks its slots
-$($(v)[0])[0] = 5;           // allowed: through the inner mview
-```
-
-Summary: `view` locks down the memory it directly touches. If that
-memory contains raw values (like nested arrays), those values are
-locked. If it contains pointers, the pointer *variables* are locked, but
-the memory they point to follows its own type rules.
-
-These rules hold at **every** level of nesting: through an `mview`,
-`memset`/`memcpy`/`memmove`, the byte/bit mutators, and element writes on an
-*inner* nested array are allowed (`$(m)[0].memcpy(src)` is fine), while
-`init`/`init_zero`/`resize`/`uninit` on an inner nested array are blocked
-exactly like on the outermost one (`$(m)[0].init(...)` is not).
-
-## 26.9 The null Literal
+## 26.12 The null Literal
 
 `null` is a literal of type `null`. It is valid only where a pointer of
 any permission is expected:
@@ -322,12 +386,12 @@ if (p != null) {
 
 Comparing `null` with a non-pointer value is invalid. Relational comparison (`<`, `>`) of `null` is invalid.
 
-`null` may be passed to pointer parameters and returned from pointer
-functions.
+`null` may be passed to pointer parameters. Functions cannot return
+pointers, so `null` is never a pointer return value.
 
 A bare `stdout(null)` is ambiguous between the text and `std::String` overloads; use a typed null view when a null text argument is intended.
 
-### 26.9.1 Null-Initialized Pointer Storage
+### 26.12.1 Null-Initialized Pointer Storage
 
 Pointer storage is **guaranteed null-initialized**, unlike ordinary storage, which starts indeterminate:
 
@@ -339,14 +403,13 @@ stdout(p == null);       // true
 The guarantee covers every pointer storage slot:
 
 - pointer variables (`ptr<T>`, `mview<T>`, and `view<T>`);
-- pointer-typed struct fields;
-- pointer tuple elements;
 - pointer elements of local static arrays;
 - pointer elements of initialized dynamic arrays, after `init`, `init_zero`, or a growing `resize`.
 
-Global storage is statically initialized before `main`: pointer fields and pointer tuple elements are null, and pointer elements of value-assignable aggregates are null recursively. Global arrays do not exist, so no global array element storage is allocated.
+Global storage is statically initialized before `main`. Global arrays do
+not exist, so no global array element storage is allocated.
 
-### 26.9.2 Nullness Certification
+### 26.12.2 Nullness Certification
 
 The compiler tracks whether a pointer variable is null. The only
 expressions that certify a pointer as non-null are the creation
@@ -365,19 +428,18 @@ ptr<int32> r = q;        // r copies q's state: non-null
 
 Assignment from another pointer variable copies that variable's exact state, so a null state propagates through copies and a certification propagates transitively.
 
-Assignment from values of unknown provenance (call results, parameters, struct-field or array-element reads) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
+Assignment from values of unknown provenance (call results, parameters) yields a maybe-null state: the compiler treats such a variable as possibly null, and dereferencing it is a warning, not an error.
 
 The check also follows pointers across function calls. If a callee always
 dereferences a parameter, passing a definitely-null argument is an error and
 passing a possibly-null argument is a warning. A parameter guarded with
 `p != null` on the dereferencing path does not require a non-null argument.
-A callee's return carries the null state of the value it returns. Each
-function still reports its own local maybe-null warnings.
+Each function still reports its own local maybe-null warnings.
 Dangling pointers are checked separately (see
-[Pointer Lifetime Limitations](#2611-pointer-lifetime-limitations) and
+[Pointer Lifetime Limitations](#2614-pointer-lifetime-limitations) and
 [Memory Safety Checking](32-memory-safety-checking.md)).
 
-### 26.9.3 Dereferencing and Warnings
+### 26.12.3 Dereferencing and Warnings
 
 Dereferencing a variable that is **definitely null** is an error.
 
@@ -395,78 +457,24 @@ $(p);                   // warning: possibly null
 
 Guarding with `p != null` removes the warning, because the compiler refines the variable's state inside the guard. Compound guards work the same way: `if (p == null || q == null) { return }` proves both pointers non-null on the continuation path, and `if (p != null && q != null)` proves both non-null inside the branch. A dereference that is only possibly null on some alternatives is a warning; a definite null dereference on every reaching alternative is an error.
 
-## 26.10 Capability Linter
+## 26.13 Capability Linter
 
 The capability linter warns when a `ptr` or `mview` local or parameter never
 uses the permissions it requests. The full warning rules are in
 [Capability Linting](32-memory-safety-checking.md#328-capability-linting).
 
-## 26.11 Pointer Lifetime Limitations
+## 26.14 Pointer Lifetime Limitations
 
-Dangling-pointer checking, escape rules, and their remaining limitations are
-documented in [Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
+Dangling-pointer checking covers use of a pointer after its inner block or
+loop body has ended, and passing a dangling pointer as a call argument.
+Escape rules and their remaining limitations are documented in
+[Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
-## 26.12 Prefer Pool Indices to Linked Nodes
+## 26.15 Prefer Pool Indices to Linked Nodes
 
 Pool allocation and index-based links are covered in
 [Pool Allocation](33-pool-allocation.md#331-prefer-pool-indices-to-linked-nodes).
 
-## 26.13 Owning Pointers Cannot Be Embedded
-
-An owning pointer `ptr<T>` cannot be stored inside an array, struct, or
-tuple, and it cannot appear inside another pointer's referent. The
-compiler rejects the declaration at the legality checking stage:
-
-```franko
-[ptr<int32>] a;              // invalid: array element is an owning pointer
-[ptr<int32>, 8] b;           // invalid: same for a static array
-struct Node { ptr<Node> next } // invalid: owning pointer field
-(ptr<int32>, int32) pair;    // invalid: owning pointer tuple element
-[view<ptr<int32>>] views;    // invalid: the view's referent is a ptr
-ptr<[ptr<int32>]> nested;    // invalid: pointer to an array of owning pointers
-ptr<ptr<int32>> pp;          // invalid: owning pointer behind a pointer
-view<ptr<int32>> vp;         // invalid: owning pointer behind a view
-mview<ptr<int32>> mp;        // invalid: owning pointer behind an mview
-ptr<view<ptr<int32>>> deep;  // invalid: owning pointer further down
-```
-
-These are allowed:
-
-```franko
-view<int32> v;               // views may be aggregate elements
-mview<int32> m;
-[view<int32>] views;
-struct Views { view<int32> a; mview<int32> b }
-view<view<int32>> vv;        // non-owning pointers may nest
-ptr<view<int32>> pv;
-```
-
-The distinction is ownership. An owning `ptr<T>` carries the right to
-allocate and free the storage it refers to. If it is embedded in an
-aggregate or hidden behind another pointer, that responsibility travels
-with the value into unrelated code. The compiler can no longer tell where
-the storage is released, and a same-looking value may be an owner in one
-place and an alias in another. Keeping owning pointers at the outermost
-level keeps allocation and free responsibility local and makes lifetime
-reasoning tractable.
-
-Use these alternatives:
-
-- `view<T>` or `mview<T>` inside arrays, structs, tuples, and pointer
-  referents when only access is needed;
-- direct `ptr<T>` variables, parameters, returns, and globals when
-  ownership is needed;
-- the pool allocator from `franko/pool` for linked or node-like structures.
-  Store slot indices, not owning pointers.
-
-For nested arrays, use nested dynamic arrays instead of arrays of owning
-pointers:
-
-```franko
-[[int32]] rows;        // good: the outer array owns the inner arrays
-[ptr<[int32]>] rows;   // rejected: ownership escapes through the array
-```
-
-A nested dynamic array owns its inner arrays. `init`, `resize`, and `uninit`
-manage the inner storage and lifetime as part of the outer array, so there is
-no separate allocation capability to leak or dangle.
+Because all pointers, not just owning pointers, are banned from
+aggregates, linked structures must use pool indices or dynamic arrays
+rather than embedded pointers.

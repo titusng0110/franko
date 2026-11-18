@@ -5,11 +5,10 @@ import "franko/stdio"
 // ============================================================
 // Covers: primitive integer types (signed/unsigned, fixed-width),
 // type aliases (int, uint, byte), void, pointer types, and
-// array types.
+// array types. No aggregate holds a pointer.
 // ============================================================
 
 struct Node {
-    view<Node> next
     int32 val
 }
 

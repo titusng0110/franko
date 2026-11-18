@@ -9,8 +9,8 @@ checking, and emission contracts needed to implement them.
 Do not add comments to the Java source files. All design notes belong here.
 
 - **Language**: Franko (`.fr`) — a small statically-typed language with fluid
-  integer constants, dynamic/static arrays, tuples, enums, a capability-based pointer system
-  (`ptr`/`mview`/`view`), structs with methods, namespaces, and imports.
+  integer constants, dynamic/static arrays, tuples, enums, a downward-only capability-based pointer system
+  (`ptr`/`mview`/`view` with stacked pointers, no aggregate members, no returns, read-only globals), structs with methods, namespaces, and imports.
 - **Compiler**: 98 hand-written Java files at the repo root, plus an ANTLR4
   grammar (`Franko.g4`). The compiler is a **transpiler to C++14**: it emits one
   C++ translation unit, splices it into a program template, and the resulting
@@ -202,19 +202,16 @@ flowchart TD
     Main --> InactiveDeclarationPruner
     Main --> MemoryAnalysisContext
     Main --> PointerNullStateChecker
-    PointerNullStateChecker --> MemoryShapeIndex
     PointerNullStateChecker --> MemoryCallGraph
     PointerNullStateChecker --> MemoryDataflowDriver
     PointerNullStateChecker --> MemorySummaryBfs
     PointerNullStateChecker --> PointerNullAnalysisState
     Main --> DanglingPointerChecker
-    DanglingPointerChecker --> MemoryShapeIndex
     DanglingPointerChecker --> MemoryCallGraph
     DanglingPointerChecker --> MemoryDataflowDriver
     DanglingPointerChecker --> MemorySummaryBfs
     DanglingPointerChecker --> DanglingPointerState
     Main --> DynamicArrayMemoryChecker
-    DynamicArrayMemoryChecker --> MemoryShapeIndex
     DynamicArrayMemoryChecker --> MemoryCallGraph
     DynamicArrayMemoryChecker --> MemoryDataflowDriver
     DynamicArrayMemoryChecker --> MemorySummaryBfs
@@ -275,8 +272,7 @@ flowchart TD
 | `DanglingPointerState` | `MemoryTemplateRegistry` and semantic AST value objects (no diagnostics) |
 | `DynamicArrayMemoryChecker` | `DiagnosticBag`, `MemoryAnalysisContext`, `MemoryCallGraph`, `MemoryDataflowDriver`, `MemorySummaryBfs`, `MemoryTemplate`, `DynamicArrayAnalysisState` |
 | `DynamicArrayAnalysisState` | `MemoryTemplateRegistry` and semantic AST value objects (no diagnostics) |
-| `MemoryAnalysisContext` | `MemoryCallGraph`, `MemoryShapeIndex`, `MemoryTemplateRegistry`, semantic AST/symbols |
-| `MemoryShapeIndex` | `SastType`, `StructSymbol`, `FieldSymbol` |
+| `MemoryAnalysisContext` | `MemoryCallGraph`, `MemoryTemplateRegistry`, semantic AST/symbols |
 | `MemoryCallGraph` | `Symbol`, `SastNode`, `SastNode` |
 | `MemoryDataflowDriver` | `MemoryAnalysisContext`, `DiagnosticBag`, `MemoryGuardFacts`, `MemoryDiagnosticMerge`, a `MemoryDataflowDriver.Domain` |
 | `MemoryGuardFacts` | semantic AST value objects (no diagnostics) |
@@ -1406,7 +1402,7 @@ owns all intrinsic semantics:
   `#IS_ARM64`) → `StaticValueKind.INT` `uint8`, from `TargetInfo`;
 - boolean predicates (`is_primitive`, `is_enum`, `is_memcpy_safe`, `has_default_value`,
   `is_memset_safe`, `is_same_type`, `is_matchable`, `is_comparable`,
-  `is_assignable`, `is_value_assignable`) → `StaticValueKind.INT`
+  `is_assignable`, `is_passable_by_value`, `is_returnable_by_value`) → `StaticValueKind.INT`
   0/1 with type `uint8`;
 - `what_type` → `StaticValueKind.STRING` containing the canonical UTF-8
   `mangleKey()` type spelling (no spaces after commas);
@@ -1453,22 +1449,25 @@ so no void value reaches the SAST. If a directive appears in a value position,
 declaration-level item and returns the ordinary integer fallback.
 
 Predicates use `TypeChecker` (`isMemcpySafe`, `isMemsetSafe`,
-`isValueAssignableType`, `hasDefaultValue`) and
+`isAssignableType`, `isPassableByValueType`, `isReturnableByValueType`,
+`hasDefaultValue`) and
 `StructSymbol.getMethods` for the exact
 `OPERATOR_EQ`/`OPERATOR_LT`/`OPERATOR_MOV` signature checks (§4.18).
 Tuple predicates recurse through `TypeChecker`: all-primitive tuples are
-value-assignable, assignable, memcpy/memset safe, and have no default value; a
-tuple with a static-array element is not value-assignable or assignable, and a
+assignable, passable and returnable by value, memcpy/memset safe, and have no default value; a
+tuple with a static-array element is not assignable, passable, or returnable by value, and a
 tuple with a dynamic-array element is not memcpy/memset safe but has a
 default value. Tuples have no methods, so `is_matchable`/`is_comparable`
 return `0`. Enums are `is_matchable`/`is_comparable`/`is_assignable`/
-`is_value_assignable` `1`, `is_memcpy_safe` `1` and `is_memset_safe` `0`
+`is_passable_by_value`/`is_returnable_by_value` `1`, `is_memcpy_safe` `1` and `is_memset_safe` `0`
 via `TypeChecker`, `has_default_value` `1`, and `what_type` prints the
 qualified enum name. `what_type` prints the canonical `mangleKey()` form, for
 example `(int32,int32)`.
-`is_value_assignable` is exactly `TypeChecker.isValueAssignableType`
-(the by-value parameter and built-in whole-value assignment rule); unlike
-`is_assignable` it does not consider a custom `OPERATOR_MOV`.
+`is_passable_by_value` is exactly `TypeChecker.isPassableByValueType`
+(the by-value parameter rule); `is_returnable_by_value` is exactly
+`TypeChecker.isReturnableByValueType` (the by-value return rule, false for
+pointers); unlike
+`is_assignable` neither considers a custom `OPERATOR_MOV`.
 For tuples, `is_assignable` is built-in assignment only; tuples
 cannot declare operator methods.
 
@@ -1581,11 +1580,11 @@ function must syntactically contain a return somewhere in its body (recursing
 through blocks/ifs/whiles; the desugared for-update epilogue runs inside the
 loop so returns there count). It does not prove full control-flow coverage.
 Tuple parameter and return types follow the same rules through
-`TypeChecker.isValueAssignableType`: a tuple is passable/returnable exactly
+`TypeChecker.isPassableByValueType`: a tuple is passable/returnable exactly
 when every element is. A pointer-only struct or tuple return type gets a
 dedicated diagnostic instead of the generic invalid-return-type message:
 `Function 'f() -> Buffer' cannot return pointer-only struct 'Buffer' by
-value: its fields are not all value-assignable. Return ptr<Buffer>, or
+value: its fields are not all value-assignable. Return view<Buffer>, or
 write through a ptr<Buffer> output parameter.` (tuples use the analogous
 `pointer-only tuple`/`elements` wording).
 Intercepts `SastNode.RETURN` itself and delegates other statements to
@@ -1615,7 +1614,7 @@ pointer referents, including behind `view<T>`/`mview<T>` referents.
 `checkDeclaredType` calls `ensureNoEmbeddedOwnedPointer` at the declaration
 boundary, and `validateStructType` calls
 `ensureNoOwnedPointerAggregateMember` per field.
-Const declarations require `TypeChecker.isValueAssignableType`
+Const declarations require `TypeChecker.isPassableByValueType`
 (`Const variable/global/parameter '…' has type '…'; const is only allowed for
 value-assignable types`), and an uninitialized local const whose type is not
 fully default-initialized warns (`Const variable '…' has no initializer and
@@ -1721,7 +1720,8 @@ and pointer/region rules remain in one place.
 #### `TypeChecker`
 The shared leaf utility: type predicates (`isVoidType`, `isIntegral`,
 `isPointerType`, `isDynamicArrayType`, …), classification
-(`isValueAssignableType`, `isValidFunctionReturnType`), `ensure*` helpers that
+(`isAssignableType`, `isPassableByValueType`, `isReturnableByValueType`,
+`isWritablePointerToPointer`, `isValidFunctionReturnType`), `ensure*` helpers that
 report diagnostics, assignment compatibility (`ensureAssignable`), operator
 operand rules (`ensureSameIntegralTypeOrFit`,
 `ensureMixedIntegralOperandsWithConstantFit`, `ensureValidShiftOperands`),
@@ -1749,25 +1749,31 @@ by-value cycles terminate. Enum helpers: `isEnumType`, `enumBackingKind`,
 `isValuePreservingIntegerWidening`), and `wrapBigIntegerToPrimitive`
 (unsigned modulo `2^bits`, signed modulo `2^bits` then subtract `2^bits`
 in the upper half) for implicit wrapping. `TypeChecker` also owns the
-embedded-ownership ban: `containsOwnedPointer` recursively walks arrays,
-structs, tuples, and pointer referents looking for an owning `ptr<T>`;
-`isForbiddenOwnedPointerNesting` implements the declaration rule (for a
-`PTR`, it checks the referent rather than recursing on the pointer itself);
-and `ensureNoEmbeddedOwnedPointer` /
-`ensureNoOwnedPointerAggregateMember` report the clear
-lifetime/pool/nested-array diagnostic. The ban rejects `[ptr<T>]`,
-`[ptr<T>, N]`, struct fields of `ptr<T>`, tuple elements of `ptr<T>`, any
-pointer whose referent recursively contains an owning pointer (`ptr<ptr<T>>`,
-`view<ptr<T>>`, `ptr<view<ptr<T>>>`), and `view<T>`/`mview<T>` referents that
-recursively contain an owning pointer.
+pointer-aggregate ban: `containsPointerInAggregateStorage` descends through
+arrays, struct fields, and tuple elements and treats any pointer type as a hit,
+stopping at pointer boundaries for referent inspection;
+`ensureNoPointerInAggregateStorage` reports the downward-only diagnostic.
+The ban rejects pointers in struct fields, static and dynamic array elements,
+tuple elements, nested aggregates, and aggregates that are pointer referents;
+pointer-to-pointer stacks remain legal. `isAssignableType` is true for
+primitives, enums, and pointers, and for structs/tuples with no pointer or
+array members; `isPassableByValueType` adds the array-member ban;
+`isReturnableByValueType` is true for primitives and enums and for structs/tuples
+with no pointer or array members, false for pointers and arrays;
+`isWritablePointerToPointer` is true for `ptr<P>` and `mview<P>` where `P`
+is a pointer type. `isValidFunctionReturnType` is `void` or
+`isReturnableByValueType`; `ensureValidFunctionReturnType` emits a dedicated
+pointer-return diagnostic and directs non-pointer failures to an out-parameter
+that points at non-pointer storage.
 
 `isIntegral` is `false` for
 enums, which rejects arithmetic, bitwise, shifts, logical operators,
 conditions, and compound assignment naturally.
-Tuple types participate in the same recursive rules: a tuple is a
-value-assignable type iff every element is; `isMemsetSafe`,
-`hasDefaultValue`, and `isMemcpySafe` recurse through tuple elements exactly
-as through struct fields; and `ensureAssignable` reports the dedicated
+Tuple types participate in the same recursive rules: `isAssignableType`,
+`isPassableByValueType`, and `isReturnableByValueType` recurse through tuple
+elements exactly as through struct fields; `isMemsetSafe`,
+`hasDefaultValue`, and `isMemcpySafe` recurse similarly; and `ensureAssignable`
+reports the dedicated
 "contains non-assignable elements" message for a whole-tuple assignment.
 `ensureAssignable`
 accepts the pointer conversions alongside exact matches and
@@ -1829,12 +1835,12 @@ After the walk the context flattens:
   counts/word counts across all functions; the three state classes size their
   snapshot arenas from those maxima and switch to the current function's lists
   at `beginFunction` (`setFunction`). Globals are included in every function
-  layout; assignment-site lists are the active width for `slotSource` and
-  `captureSource`. The context also records the owner function for each maximum
+  layout; assignment-site lists are the active width for `slotSource`. The
+  context also records the owner function for each maximum
   active pointer/variable-word/assignment-site/assignment-site-word width, so a
   limit diagnostic can name the function responsible for the row size.
 - `templates`/`templateSets`: a `MemoryTemplateRegistry` sized from the maximum
-  parameter count of any function, the global count, the call-site count, and
+  parameter count of any function, the global count, and
   the variable count.
 - `MAX_SNAPSHOT_ARENA_BYTES` is a hard per-checker arena budget of 1.5 GiB
   (`1_610_612_736` bytes). Each state throws
@@ -1853,24 +1859,6 @@ only until `MAX_BRANCH_DEPTH = 13` to bound the estimate walk; the estimate
 itself does not stop at the depth limit. Build time may use
 `IdentityHashMap`/`ArrayList`; all checker hot paths use the resulting flat
 arrays and dense indices.
-
-#### `MemoryShapeIndex`
-Recursive, boundary-stopped shape cache over `SastType`:
-`containsPointer`, `containsDynamicArray`, and `containsOwnerArrayPointer`.
-`SastType.PRIMITIVE`, `SastType.ENUM`, `SastType.VOID`, `SastType.NULL`, and
-`SastType.FUNCTION` have no flags (enums are leaves with no hidden memory). Any `SastType.PTR` sets
-`containsPointer` and stops descending; an owner pointer whose referenced type
-is a static or dynamic array also sets `containsOwnerArrayPointer`. A
-`SastType.DYNAMIC_ARRAY` sets `containsDynamicArray` and stops. A static array
-recurses into its element type; a struct recurses through its fields under a
-per-struct `visiting` set (re-entering a struct already on the stack contributes
-no flags, terminating recursive field cycles); a tuple recurses through its
-fields. Because owning `ptr<T>` cannot appear inside an array, struct, tuple,
-or pointer referent, `containsOwnerArrayPointer` is always false for struct
-and tuple shapes; the recursive walk still tracks `containsPointer` and
-`containsDynamicArray` for view/mview fields and dynamic-array fields.
-Results are cached by `SastType`. The cache is coarse: it classifies
-values that can carry hidden memory but creates no field-sensitive state.
 
 #### `MemoryCallGraph`
 Flat call-graph tables built by the context. `Builder` interns functions by
@@ -1912,15 +1900,15 @@ parameter:
 | 8 | `ALIAS_OF_POINTER` |
 | 9 | `WHOLE_ARRAY` |
 
-`paramBase = 7`; then `globalBase`, `callBase`, `localBase`,
+`paramBase = 7`; then `globalBase`, `localBase`,
 `localElementBase`, `globalCellBase`, and `templateCount` follow in that order.
 Helpers decode a template back to a parameter index, constraint
-(`ANY`/`NONNULL`/`NULL`), global index, call-site index, or local variable ID.
+(`ANY`/`NONNULL`/`NULL`), global index, or local variable ID.
 `newSet` allocates `words = max(1, ceil(templateCount / 64))` longs; all set
 operations are bitset work over that word count.
 
 `MemoryTemplateSetPool` interns `long[]` bitsets by content into stable integer
-IDs used inside the dangling checker's BFS bindings. It uses a custom
+IDs. It uses a custom
 open-addressed table with a mix hash and full array equality on collision,
 stores a defensive copy, and grows at 50% load. Template IDs and interned set
 IDs are stable for the lifetime of the context.
@@ -2082,17 +2070,16 @@ order) is a null guard. Feasibility uses the constant value when present;
 otherwise a symbolic set may be null/non-null if it is empty or contains a
 matching template. On the null path, `UNKNOWN` becomes `NULL`, value/pointee
 templates not constrained `NONNULL` become their `NULL` variants, and
-`NULL`/`CALL_RESULT` templates survive. On the non-null path, `UNKNOWN` becomes
+`NULL` templates survive. On the non-null path, `UNKNOWN` becomes
 `NONNULL`, value/pointee templates not constrained `NULL` become their
-`NONNULL` variants, and `NONNULL` plus call/local/global-cell templates survive.
+`NONNULL` variants, and `NONNULL` plus local/global-cell templates survive.
 Concrete refinement sets `NULL` or `POINTING` unless that would contradict a
 definite state.
 
 **Summary build.** At each exit, a parameter requirement is `MUST_DEREF` when
 every exit has its must bit and `MAY_DEREF` when any exit has its may bit; the
-same rule applies to pointee requirements and slot writes. Return alternatives
-from all explicit returns plus an `UNKNOWN` fallthrough alternative are
-unioned. Call edges store, per callee parameter, the unioned argument
+same rule applies to pointee requirements and slot writes. Call edges store,
+per callee parameter, the unioned argument
 value/pointee template sets and a cell target when the argument's cell set has
 exactly one template. Slot write sources are copied from the live per-site
 union rather than re-read from each exit snapshot.
@@ -2100,26 +2087,24 @@ union rather than re-read from each exit snapshot.
 **Check-pass calls.** Each call site builds a binding
 `(value, pointee, cell, rootArg)` per argument and runs the BFS. `rootArg` comes
 from the single value/pointee template in the edge set when there is exactly
-one, otherwise from the cell template. If the result contains TOP, the call
-result becomes `MAYBE_NULL`, every cell reachable from the actual arguments is
+one, otherwise from the cell template. If the result contains TOP, every cell
+reachable from the actual arguments is
 havocked to `MAYBE_NULL`, pointer globals become `MAYBE_NULL`, and no new
 diagnostic is emitted. Otherwise the checker unions callee parameter
 requirements mapped back to the root argument index, applies slot writes
 (strong update for a must write; a may write only degrades a differing current
-state to `MAYBE_NULL`), resolves the return state, and emits requirement
+state to `MAYBE_NULL`), and emits requirement
 diagnostics. Every call, including a TOP call, invalidates pointer globals to
 `MAYBE_NULL` and clears their cell targets.
 
-**Evaluation and dedup.** `CALL_RESULT(site)` templates are resolved
-recursively through the recorded call-site nodes with a per-site recursion
-guard; TOP, a missing node, or a missing summary yields `MAYBE_NULL`. Template
-sets combine alternatives: any unknown or a null+non-null mix gives
+**Evaluation and dedup.** Function calls never produce pointer values, so call
+expressions evaluate `UNKNOWN` symbolically and `MAYBE_NULL` concretely.
+Template sets combine alternatives: any unknown or a null+non-null mix gives
 `MAYBE_NULL`; null-only gives `NULL`; non-null-only gives `POINTING`; an empty
 set gives `MAYBE_NULL`. Incompatible constraints drop the alternative
 (`NONNULL` constrained to null, or `NULL` constrained to non-null). `LOCAL` and
 `CONST` singletons evaluate `POINTING`; a global-value template also evaluates
-`POINTING`. The per-call-site result cache and recursion-guard array are reset
-at the start of every function. Concrete deref diagnostics are produced only
+`POINTING`. Concrete deref diagnostics are produced only
 when the dereferenced expression is a variable, call, cast, or another deref;
 field and element dereferences are not diagnosed here. A possibly-null variable
 warns at most once per pointer variable per function; a non-variable dereference
@@ -2157,42 +2142,23 @@ must-bitsets, and unions may-bitsets (`slotSource` is unioned). `singleCellTarge
 returns `-1` unless exactly one variable ID is present.
 
 #### `DanglingPointerChecker`
-Two-phase, summary-aware dangling-pointer and frame-lifetime checker, run after
-the null checker. The first pass records return origins, capture sinks, and
-call-edge argument templates; the second pass tracks concrete frame/global
-origins, a definite-non-null flag, and per-path frame liveness
-(`mustDead`/`mayDead`). Both passes use the shared driver/domain callbacks.
+Single-pass, intraprocedural dangling-pointer and frame-lifetime checker, run
+after the null checker. `check` clears diagnostics, ensures the context, and
+runs one `MemoryDataflowDriver` traversal over a `DanglingDomain`; there is no
+summary pass and no `MemorySummaryBfs` traversal. The pass tracks concrete
+frame/global origins, a definite-non-null flag, and per-path frame liveness
+(`mustDead`/`mayDead`).
 
-**Seeds.** Summary pointer parameters start with `PARAM_VALUE(i)`,
-`PARAM_POINTEE_VALUE(i)`, and `PARAM_CELL(i)`. An operator method's second
-parameter (`other`) instead starts with value `{NONNULL, LOCAL(paramVariable)}`,
-pointee `{UNKNOWN}`, and cell `{LOCAL(paramVariable)}`. Pointer globals start
-`UNKNOWN`/`UNKNOWN` with an empty cell set; pointer declarations start
-`NULL`/empty/empty. The check pass seeds ordinary pointer parameters and globals
-`UNKNOWN`, declarations `EMPTY`, and the operator `other` parameter
-`FRAME(parameterVariable)`. Calls do not havoc global pointers because global
-slots are immutable.
+**Seeds.** Ordinary pointer parameters and pointer globals start `UNKNOWN`;
+an operator method's second parameter (`other`) starts `FRAME(parameterVariable)`.
+Pointer declarations start `EMPTY`. Calls do not havoc global pointers because
+global slots are immutable.
 
-**Summary stores and captures.** `checkAssign` handles only non-compound
-assignments whose target type is a pointer, after checking both target and value
-expressions. A direct variable target copies the RHS value/pointee/cell sets. A
-dereference target updates only symbolic cell templates that resolve to local
-variables. Every store whose target is a global variable, a member access, or a
-dereference also records a capture site: `SINK_GLOBAL(globalIndex)` for a global
-base, `SINK_POINTEE(param)` / `SINK_POINTEE_PATH(param, fieldPath)` when the
-base is a pointer parameter (the parameter index is the first value/pointee
-parameter found in the target's value set, otherwise the first cell parameter),
-and `SINK_UNKNOWN` when neither resolves. Member accesses accumulate a dotted
-field path. `captureMust` and `captureMay` are both set at the store, and the
-RHS value template set is unioned into the live per-site capture source; exit
-snapshots later provide the must/may certainty.
-
-**Check stores.** The check pass rejects a store when the RHS has any frame
-origin and the target storage is `UNKNOWN` (caller-owned) or `GLOBAL` (globals
-and fields reached through them), once per store site. A direct pointer variable
-is strongly updated to the RHS origin. A dereference target is strongly updated
-only when `valueOrigins(targetPointer)` resolves to exactly one tracked pointer
-cell; otherwise no tracked cell changes.
+**Stores.** `checkAssign` handles only non-compound assignments whose target
+type is a pointer, after checking both target and value expressions. A direct
+variable target is strongly updated to the RHS origin. A dereference target is
+strongly updated only when `valueOrigins(targetPointer)` resolves to exactly
+one tracked pointer cell; otherwise no tracked cell changes.
 
 **Liveness.** Declaring a local marks it alive. Leaving a block normally marks
 its direct locals dead; a terminated block (`return`/`break`/`continue`) does
@@ -2207,76 +2173,38 @@ deduplicated per dereference site. Passing a pointer argument to a function
 performs the same check with the `Cannot use pointer ...` wording, deduplicated
 per call site; parameters stay alive for the whole function.
 
-**Address-taken state.** In the check pass, a `ptr`/`mview`/`view`
+**Address-taken state.** A `ptr`/`mview`/`view`
 whose result permission is not `READ_ONLY` marks every pointer variable found in
 the target storage's frame origins as address-taken for the current function.
-Any call havocs those variables to `UNKNOWN`.
+Any call havocs those variables to `UNKNOWN`, along with pointer cells
+reachable from the actual arguments.
 
-**Returns.** The summary pass unions the symbolic value of every explicit return
-and adds `UNKNOWN` for fallthrough. In the check pass a pointer-typed return
-first checks dead-origin liveness (definite dead = error, possible dead =
-warning), then the ordinary escape rule: a definite frame escape
-(`hasFrame`, no unknown/global, non-null) is an error, and any remaining frame
-origin is a warning. Diagnostics are deduplicated per return site.
+**Returns.** `onReturn` and `onFallthrough` are no-ops: functions cannot return
+pointers, so there is no return-origin diagnosis to perform.
 
-**Guards.** A `==`/`!=` comparison against `null` refines state. Summary
-feasibility tests the symbolic value set (`mayBeNull`/`mayBeNonNull`); the null
-branch replaces the set with `{NULL}`, while the non-null branch keeps the
-current set and adds `{NONNULL}`. Concrete feasibility rejects `p == null` when
-the origin is definitely non-null and `p != null` when it is definitely null;
-the null branch stores `EMPTY` when the current origin is not non-null, and the
-non-null branch stores the same origins with the non-null flag set unless the
-origin is definitely null.
+**Guards.** A `==`/`!=` comparison against `null` refines concrete state.
+Feasibility uses the constant value when present; otherwise `p == null` is
+infeasible when the origin is definitely non-null and `p != null` is infeasible
+when it is definitely null. The null branch stores `EMPTY` when the current
+origin is not non-null, and the non-null branch stores the same origins with
+the non-null flag set unless the origin is definitely null.
 
-**Calls.** Each argument is first checked for pointer use-after-scope. The root
-binding carries, per parameter, the interned `originToTemplateSet` of the
-argument's value origins and concrete pointee origins, `rootArg = i`, and
-`cell = -1`. On TOP the call result becomes `UNKNOWN`, and globals,
-address-taken variables, and pointer cells reachable from the actual arguments
-are havocked silently. Otherwise every callee capture site is evaluated against
-the node binding: if the resolved source has any frame origin, a definite-frame
-source (no unknown/global origin) with `MUST_CAPTURE` is an error; every other
-frame source is a warning. Only one capture diagnostic is emitted per call
-site. The return origin is resolved with a per-site cache and recursion guard;
-TOP, a missing node, or a missing summary yields `UNKNOWN`. Every call, TOP or
-not, then applies the same global/address-taken/cell invalidation.
-
-**BFS edge evaluation.** `processNode` evaluates each recorded call edge with
-the current BFS result when no explicit result is passed, interns the resulting
-origin sets back into `MemoryTemplateSetPool`, and computes `rootArg` only when
-the edge value set has exactly one template that is a parameter value or
-pointee template (there is no cell-template fallback here).
-
-**Template evaluation.** `evalSet` unions the origins of every template in a
-set. `NULL` is empty; `NONNULL`/`CONST` are non-null with no origins; the bare
-`UNKNOWN`/`LOCAL` singletons are unknown; a `LOCAL(variableId)` template is
-`FRAME(variableId)`; a global-value template is `GLOBAL(variableId)`; parameter
-value/pointee templates recursively evaluate the interned binding set and apply
-their constraint (`NONNULL` on a definitely-null origin yields empty, `NULL` on
-a non-null origin yields empty); `CALL_RESULT(site)` resolves recursively; any
-other template is unknown. `originToTemplateSet` maps frame variables to
-`LOCAL(variableId)`, globals to `GLOBAL(globalIndex)`, and adds `UNKNOWN` /
-`NONNULL` flags; an empty origin becomes `NULL`.
+**Calls.** Each argument is first checked for pointer use-after-scope, then the
+call applies the address-taken/cell invalidation above. Call expressions carry
+no origin and evaluate to `UNKNOWN`.
 
 **Origin helpers.** `storageOrigins` maps a variable to `FRAME` or `GLOBAL`,
 `$(p)` to `valueOrigins(p)`, member/index access to the base storage, and a
 cast to its operand. `valueOrigins` maps `null` to empty, `ptr` to the
 target storage plus non-null, variables to their origin state, `$(p)` to the
-union of tracked pointer-cell states, casts to the operand, and calls to the
-cached call result. `concretePointeeOrigins` reads the pointer cells of a
-variable origin, returns `valueOrigins(target)` for `ptr(target)`, and
-recurses through casts. `readPointerCells` includes `UNKNOWN` when the cell
+union of tracked pointer-cell states, casts to the operand, and calls to
+`UNKNOWN`. `readPointerCells` includes `UNKNOWN` when the cell
 origin is unknown and otherwise unions the origins of all tracked pointer
-variables named by the cell bitset. `symbolicStorageOrigins` maps a global
-variable to `GLOBAL(globalIndex)`, a local to `LOCAL(variableId)`, `$(p)` to
-`symbolicValueOf(p)`, member/index access to the base, a cast to the operand,
-and anything else to `UNKNOWN`. `symbolicCellOf` maps a pointer variable to its
-`symCell`, `ptr(variable)` to `GLOBAL(index)` or `LOCAL(variableId)`,
-`ptr($p)` to `symbolicCellOf(p)`, and a cast to the operand.
+variables named by the cell bitset.
 
 `checkExprInner` recurses into every `SastNode.AGGREGATE_LITERAL` field
 value, so dereferences, calls, address-taking, and pointer uses inside literal
-fields get the normal liveness and capture treatment. The literal temporary
+fields get the normal liveness treatment. The literal temporary
 itself has no pointer-origin state.
 
 #### `DanglingPointerState`
@@ -2287,8 +2215,8 @@ Concrete state is `frameBits`, `globalBits`, `originFlags`, `mustDead`, and
 `mayDead`; summary state is `symValue`, `symPointee`, and `symCell` template
 bitsets plus capture must/may/source site bitsets. Capture sink descriptors
 (kind/parameter/global/field path) are stored per site and are not snapshotted
-because they are syntactic. BFS bindings use stride 4: value, pointee,
-root-argument index, and cell (the cell field is currently always `-1`).
+because they are syntactic. The intraprocedural pass never reads the symbolic
+or capture rows.
 
 Block-local lists come from the context and are stacked by block depth.
 `enterBlock` stores the block's direct local IDs; `leaveBlock` marks those
@@ -2400,7 +2328,7 @@ only when the receiver resolves to exactly one known array.
 
 **Calls.** Each argument's alias is checked for staleness first. The root
 binding carries, per parameter, `(arrayIndex, lifecycle, freed, aliasRoot,
-aliasEpoch, epoch, rootArg)`. On TOP the call result is `UNKNOWN`, every argument
+aliasEpoch, epoch, rootArg)`. On TOP every argument
 with a tracked array origin becomes `MAYBE_INITED`/`FREED_MAYBE`/escaped,
 global owners are invalidated, and no new diagnostic is emitted. Otherwise, for
 every BFS node and parameter with a bound array index, the checker emits
@@ -2414,12 +2342,11 @@ binding has no array index applies unknown call effects: an escape effect havocs
 all escaped arrays. Cross-parameter warnings are emitted when parameter `i` may
 invalidate array `A`, parameter `j` may use an element pointer whose bound alias
 root is `A`, and argument `j` is a real call argument; only one warning is
-emitted per call. The return alias is resolved with a per-site cache and
-recursion guard; a returned tracked array is marked escaped. Every call then
+emitted per call. Every call then
 invalidates global owner pointers and global pointer aliases.
 
 **Alias evaluation.** `processNode` evaluates each edge alias set against the
-current BFS result (or `currentBfsResult` while composing), fills the seven
+current BFS result, fills the seven
 binding fields, and computes `rootArg` only when the edge alias set has exactly
 one `ALIAS_OF_POINTER`/`WHOLE_ARRAY`/`ELEMENT_OF` template. `evalAliasSet` merges
 alternatives: differing array index, alias root, or alias epoch yields
@@ -2428,18 +2355,18 @@ alternatives: differing array index, alias root, or alias epoch yields
 maps `NULL` to `NONE`; `UNKNOWN`/`LOCAL`/`NONNULL`/`CONST` to `UNKNOWN`;
 `ALIAS_OF_POINTER(i)` and `WHOLE_ARRAY(i)` to the bound array with
 lifecycle/freed/epoch and no element alias; `ELEMENT_OF(i)` to the bound array
-with `aliasRoot = arrayIndex` and `aliasEpoch = epoch`; `CALL_RESULT(site)` to
-the recursively resolved return alias; anything else to `UNKNOWN`.
+with `aliasRoot = arrayIndex` and `aliasEpoch = epoch`;
+anything else to `UNKNOWN`.
 
 **Concrete alias value.** `concreteAliasOf` maps `null` to `NONE`, a variable
 with an element alias to that root/lifecycle/epoch, an owner variable to its
 single owner array (else unknown owner), a direct array variable to itself, a
 `ptr` of an indexed/member element to an element alias at the root array's
 current minimum epoch, a `ptr` of another lvalue to that lvalue's alias,
-`$(p)`/casts to the operand, and calls to the cached return alias.
+`$(p)`/casts to the operand, and calls to `UNKNOWN`.
 `symbolicAliasOf` maps array variables to `LOCAL(variableId)`, pointer
 variables to their `symAlias`, `ptr(element)` to `ELEMENT_OF(i)` or
-`LOCAL_ELEMENT(variableId)`, calls to `CALL_RESULT(site)`, and unknown values to
+`LOCAL_ELEMENT(variableId)`, calls to `UNKNOWN`, and unknown values to
 `UNKNOWN`. `symbolicArrayOf` is the same idea without converting an element
 reference into an element template; it is used for requirement/use/escape
 classification.
@@ -2750,7 +2677,7 @@ checking — it trusts every prior phase. Emission order is dependency-safe:
 global enum definitions → namespace enum definitions → struct forward
 declarations → struct definitions topologically sorted by
 by-value field dependency (with NSDMI initializers for folded field defaults,
-`= nullptr` for pointer fields; enum fields need no initializer since the
+`= nullptr` for pointer members; enum fields need no initializer since the
 wrapper's default constructor applies the first variant) → global forward declarations (`extern`
 per global, reopening each `NS_<segment>`) → global definitions → function
 prototypes →
@@ -2775,7 +2702,7 @@ tuple-containing structs, nested tuples, and tuples containing user structs
 in the existing topological order. The global forward declarations let a
 pointer global's static address initializer reference a global declared
 later in the source (or across namespaces); uninitialized pointer
-variables and pointer fields emit `= nullptr`, which selects the pointer
+variables and pointer members emit `= nullptr`, which selects the pointer
 wrapper's `std::nullptr_t` constructor. Pointer elements of static and
 dynamic arrays are default-constructed by the thin wrapper. All of these
 paths produce null, implementing the guaranteed null-initialization rule.
@@ -3632,6 +3559,9 @@ while the operator method runs. `-O`/`-Omax` need no special handling.
 remain well-formed C++14: an unsuffixed decimal literal whose value
 exceeds `LLONG_MAX` is emitted with a trailing `ULL` suffix, because
 decimal literals in C++14 do not fall back to unsigned integer types.
+`INT64_MIN` is emitted as `(-9223372036854775807LL - 1)` because it has no
+positive `int64` representation, and negative literals above `int32` max
+use an `LL` suffix for MSVC `C4146` compatibility.
 
 **Output.** There is no builtin output statement: output is provided by the
 `franko/stdio` library. Integer formatting and byte-view writes are bridged
@@ -3820,7 +3750,7 @@ generic `self`-shape diagnostics for the reserved names so the dedicated
 message is the only one. Invalid declarations fail even if unused.
 
 **`OPERATOR_MOV` restriction.** Only `OPERATOR_MOV` is banned on
-value-assignable structs (`TypeChecker.isValueAssignableType`); such a
+value-assignable structs (`TypeChecker.isPassableByValueType`); such a
 struct's whole-value assignment is always the built-in field copy. The
 compound assignment methods (`OPERATOR_ADDMOV` … `OPERATOR_XORMOV`) remain
 legal because they provide operations the built-in rules do not. Pointer-only
@@ -3874,13 +3804,9 @@ method's declared first parameter type.
 
 **Lifetime mitigation.** All operator methods return `uint8`/`void`, so
 they cannot return the borrowed view. `DanglingPointerChecker` seeds the
-operator `other` parameter as `FRAME` and rejects stores of frame-origin
-pointers into `UNKNOWN`/`GLOBAL` storage; local `FRAME` copies remain
-allowed. Forwarding through a callee is covered by the capture summary for
-both operator and ordinary pointer parameters. The residual gaps are storing
-the borrowed view through `$other` into a `FRAME` target (the coarse FRAME →
-FRAME allowance), and escapes hidden in aggregate stores that are not modeled
-as a direct global/out-parameter sink.
+operator `other` parameter as `FRAME`, so uses of the borrowed view through
+`other` are tracked as frame origins and diagnosed when they outlive their
+scope.
 
 ## 4.18 Compile-time reflection and `#if`
 
@@ -3950,7 +3876,8 @@ diagnostic bag and are discarded. String consumers accept raw literals,
 
 **Intrinsic set.** The type predicates are `is_primitive`,
 `is_memcpy_safe`, `has_default_value`, `is_memset_safe`, `is_matchable`,
-`is_comparable`, `is_assignable`, `is_value_assignable`, and
+`is_comparable`, `is_assignable`, `is_passable_by_value`,
+`is_returnable_by_value`, and
 `is_same_type`. Each accepts a type or a value; `#what_type` prints the
 canonical `SastType.mangleKey()` spelling (no spaces after commas,
 matching function signature hashing keys). String literals themselves have
@@ -3983,23 +3910,23 @@ Tuple representation is documented with `SemanticTypeResolver`, `SastType`, and
 `FieldSymbol` in §3.2, and its JSON form is in §3.8.
 
 ## 4.20 Memory shape analysis
-The shape cache and its flags are documented with `MemoryShapeIndex` in §3.3.
+Memory shape analysis is subsumed by the recursive pointer-aggregate ban in §4.29; no shape cache remains.
 
 ## 4.21 Interprocedural summaries and bounded BFS
 
-Every memory checker starts with the same two-phase shape:
+The null-state and dynamic-array checkers share the same two-phase shape
+(the dangling checker is a single intraprocedural pass and skips both phases):
 
 1. **Direct summary pass** — run the intraprocedural traversal with symbolic
    parameter states. Emit no diagnostics. Record requirements, direct
-   mutations/captures, return templates, and call edges. Nested call results
-   remain `CALL_RESULT(site)` templates. The pass is source-order independent:
+   mutation effects, and call edges. The pass is source-order independent:
    it never consumes a callee summary, so one traversal builds every direct
    summary.
 2. **Summary-aware check pass** — run the same traversal with concrete state.
    At each call site evaluate the arguments, build a binding, resolve the
    callee and its transitive call edges with `MemorySummaryBfs`, apply
-   preconditions/diagnostics, apply post-state (returns, pointer-cell writes,
-   captures, lifecycle, epochs), and continue with the updated caller state.
+   preconditions/diagnostics, apply post-state (pointer-cell writes,
+   lifecycle, epochs), and continue with the updated caller state.
 
 `DynamicArrayMemoryChecker` adds two more whole-program traversals after the
 normal check pass (`ASSUME_INITED` and `ASSUME_UNINITED` for owner-array
@@ -4066,9 +3993,6 @@ bugs.
 | Null non-variable dereference | error `Intraprocedural: Cannot dereference a null pointer` | warning `Intraprocedural: Deref of a possibly null pointer` |
 | Null argument to `MUST_DEREF` | error `Interprocedural: Passing null to parameter 'p' of 'f' which is dereferenced` | warning `Interprocedural: Passing a possibly null value to parameter 'p' of 'f' which may be dereferenced` |
 | Null argument to `MAY_DEREF` | warning `Interprocedural: Passing null to parameter 'p' of 'f' which may be dereferenced` | warning `Interprocedural: Passing a possibly null value to parameter 'p' of 'f' which may be dereferenced` |
-| Return frame escape | error `Intraprocedural: Returning a pointer to <origins> from function 'f' (dangling after return)` | warning `Intraprocedural: Returning a pointer that may refer to <origins> from function 'f' (possibly dangling after return)` |
-| Store frame → global/caller | error `Intraprocedural: Cannot store a view of frame or operator-borrowed storage into a global or caller-owned location` | — |
-| Forwarded capture | error `Interprocedural: Call to 'f' stores a view of frame storage into <sink>` | warning `Interprocedural: Call to 'f' may store a view of frame storage into <sink>` |
 | Use after inner block/loop body | deref error `Intraprocedural: Cannot dereference pointer to <origins> after its scope ended`; use error `Intraprocedural: Cannot use pointer to <origins> after its scope ended` | warning `Intraprocedural: Pointer may refer to <origins> after its scope ended` |
 | Dynamic use before init | error `Intraprocedural: Use of uninitialized dynamic array 'd' before init` | warning `Intraprocedural: Possible use of uninitialized dynamic array 'd'` |
 | Dynamic use after uninit | error `Intraprocedural: Use of dynamic array 'd' after uninit` | warning `Intraprocedural: Dynamic array 'd' may be uninitialized or freed` |
@@ -4082,12 +4006,11 @@ bugs.
 `<origins>` is the formatted list of parameter/local names whose frame storage
 the pointer may reference: parameters are listed before locals, names within
 each group are sorted, and singular/plural wording is chosen from the count.
-`<where>` is `end of scope` or `return from function 'f'`; `<sink>` is a global
-name/field path or a caller-owned argument index/field path. Diagnostics keep
+`<where>` is `end of scope` or `return from function 'f'`. Diagnostics keep
 span push/pop discipline, deterministic source-order emission, and dense
 site-ID dedup (no per-warning hash sets). Null variable warnings are
 deduplicated per pointer variable; null non-variable warnings, dangling
-liveness/store/return/capture diagnostics, and dynamic lifecycle/alias
+liveness diagnostics, and dynamic lifecycle/alias
 diagnostics are deduplicated per site within their error or warning category.
 Intraprocedural warnings are preserved; interprocedural diagnostics are additive.
 
@@ -4115,14 +4038,6 @@ Additional accepted trade-offs:
 - loops are analyzed once rather than to a fixed point;
 - recursion and BFS budget cutoffs are silent TOP;
 - aggregate pointers remain opaque;
-- `LOCAL(variableId)` templates embed callee variable IDs; when a caller
-  evaluates a callee capture, those IDs are still frame origins, so a
-  forwarded callee-local pointer is diagnosed at the call, while a returned
-  one is already diagnosed by the callee's own return rule;
-- the FRAME → FRAME store allowance is a coarse rule, not a general
-  local-lifetime ordering analysis;
-- an operator method's `other` parameter is seeded as FRAME, so storing a
-  frame pointer through `$other` is allowed by the coarse FRAME → FRAME rule;
 - `MemoryAnalysisContext.snapshotDemand(functionId)` returns the global maximum
   rather than the per-function estimate;
 - the dynamic checker tracks only non-global arrays/owners/pointers; global
@@ -4160,10 +4075,10 @@ assignment rules, so constants are fitted and pointer conversions are applied
 by `ExpressionChecker`.
 
 **Construction and codegen.** `ExpressionChecker.visitAggregateLiteral`
-requires `TypeChecker.isValueAssignableType` and then calls `ensureAssignable`
+requires `TypeChecker.isPassableByValueType` and then calls `ensureAssignable`
 for every entry. `Cpp14ExpressionEmitter.emitAggregateLiteral` emits an
 immediately invoked C++14 lambda that default-constructs a local of the
-resolved type (field defaults and null pointer fields apply), assigns entries
+resolved type (field defaults and null pointer members apply), assigns entries
 in source order through `emitAsType`, and returns the value. Nested literals
 become nested lambdas. Construction never invokes `OPERATOR_MOV`, and no
 runtime header support is required. The language-facing rules are in
@@ -4238,7 +4153,7 @@ constant-value fast path: integer-to-enum emits
 `franko_integer_unsafe_cast<T>((expr).value)`, and safe enum-to-backing casts
 emit `static_cast<T>((expr).value)`.
 
-**Predicates and literals.** `isValueAssignableType`/`hasDefaultValue` are
+**Predicates and literals.** `isPassableByValueType`/`hasDefaultValue` are
 `true` for enums, `isMemcpySafe` is `true`, `isMemsetSafe` is `false`,
 `isIntegral` stays `false` (so arithmetic/bitwise/shift/logical/conditions
 reject enums naturally), and `is_matchable`/`is_comparable`/`is_assignable`
@@ -4264,7 +4179,7 @@ compatibility. The grammar accepts `CONST?` on `varDecl`,
 the Desugarer can report the field error and continue recovery.
 
 **Checks.** `DeclarationChecker.checkVarDecl` validates the declared type with
-`TypeChecker.isValueAssignableType` and emits the local-only
+`TypeChecker.isPassableByValueType` and emits the local-only
 `isFullyDefaultInitialized` warning. Globals additionally run the
 global-specific value-assignability check and reject arrays and pointer-only
 aggregates; generated literal globals are exempt. `StatementChecker` rejects
@@ -4291,44 +4206,30 @@ same declaration plus initializer statements as a non-const twin, so `const`
 has no C++ or runtime effect. `include/FrankoRuntime.hpp` and both program
 templates are unchanged.
 
-## 4.29 Owned pointer embedding (legality ban)
+## 4.29 Pointer aggregate and return restrictions
 
-Franko forbids an owning `ptr<T>` anywhere except as the outermost pointer
-type of a variable, parameter, return, or global. The check is implemented in
-`TypeChecker.containsOwnedPointer` and
-`TypeChecker.isForbiddenOwnedPointerNesting`; reporting is centralized in
-`TypeChecker.reportEmbeddedOwnedPointer`.
+Franko forbids pointers in aggregate storage and as return values. The check is
+implemented in `TypeChecker.containsPointerInAggregateStorage` and
+`TypeChecker.ensureNoPointerInAggregateStorage`, plus
+`TypeChecker.isWritablePointerToPointer`, `isAssignableType`,
+`isPassableByValueType`, and `isReturnableByValueType`.
 
-The recursion follows array element types, struct fields, tuple elements, and
-all pointer referents. It therefore rejects:
-
-- `[ptr<T>]`, `[ptr<T>, N]`, and any nested array whose elements reach a ptr;
-- `struct S { ptr<T> field }`, and fields or tuple elements whose type is a
-  `view<T>`/`mview<T>` over a type that recursively contains a ptr;
-- tuple elements of owning pointer type;
-- `ptr<[...]>` and `ptr<Struct>` when the referent aggregate contains a ptr;
-- any pointer whose referent contains an owning ptr: `ptr<ptr<T>>`,
-  `view<ptr<T>>`, `mview<ptr<T>>`, `ptr<view<ptr<T>>>`, and so on.
-
-It still allows a standalone `ptr<T>` and non-owning pointer nesting such as
-`view<view<T>>`, `ptr<view<T>>`, and `ptr<mview<T>>`. A direct `ptr<T>` field
-of an aggregate is rejected because the field is inside the aggregate; a
-standalone `ptr<T>` is not.
-
-`DeclarationChecker.checkDeclaredType` invokes
-`ensureNoEmbeddedOwnedPointer` for every declared variable, parameter, and
-return type; `DeclarationChecker.validateStructType` invokes
-`ensureNoOwnedPointerAggregateMember` per field. Tuple types are validated at
-their real declaration/use sites because synthetic tuple struct declarations
-are skipped. `ExpressionChecker.visitCast` also runs the same check on cast
-target types. The diagnostic explains the lifetime/allocation philosophy,
-suggests `view<T>`/`mview<T>` or `franko/pool`, and points out that an array of
-arrays should use `[[T]]` rather than `[ptr<[T]>]` because a nested dynamic
-array owns and manages its inner arrays.
-
-`MemoryShapeIndex` relies on this invariant: `containsOwnerArrayPointer` is
-always false for struct and tuple shapes, so those shapes no longer OR that
-flag from their fields.
+The aggregate walk descends through array element types, struct fields, and
+tuple elements, treating any pointer type as a hit and stopping at pointer
+boundaries for referent inspection. It therefore rejects pointers in struct
+fields, static and dynamic array elements, tuple elements, nested aggregates,
+and aggregates that are pointer referents; pointer-to-pointer stacks remain
+legal. `DeclarationChecker.checkDeclaredType` validates declarations with a
+pointers-allowed context (top-level pointers allowed, members not), and
+`validateStructType` checks each member with pointers disallowed. Tuple types
+are validated at their real declaration and use sites. `ExpressionChecker`
+validates cast targets the same way, allowing `view<ptr<T>>` stacks while
+rejecting `view<[ptr<T>]>` and tuple aggregate targets. `FunctionChecker`
+rejects pointer return types, rejects writable pointer-to-pointer parameters,
+and enforces passable-by-value parameters and returnable-by-value returns.
+`ModuleValidator` adds an FFI-specific check for descriptor-listed functions
+that return pointers. The diagnostic directs callers to pool indices,
+dynamic arrays, and out-parameters that point at non-pointer storage.
 
 ## 4.30 Inlining modifiers (`#inline` / `#noinline`)
 
@@ -4489,10 +4390,45 @@ language_tests/failure/dyn_array_buffer/
 language_tests/success/dyn_array_buffer/
 ```
 
-Owned-pointer aggregate fixtures:
+Pointer aggregate fixtures:
 
 ```text
-language_tests/failure/owned_pointer_aggregates/
+language_tests/failure/pointer_aggregates/
+```
+
+Pointer return fixtures:
+
+```text
+language_tests/failure/pointer_returns/
+```
+
+Pointer out-parameter fixtures:
+
+```text
+language_tests/failure/pointer_out_params/
+```
+
+Pointer global fixtures:
+
+```text
+language_tests/failure/pointer_globals/
+```
+
+Predicate removal fixtures:
+
+```text
+language_tests/failure/predicates/
+```
+
+Pointer stack success fixtures:
+
+```text
+language_tests/success/pointer_stacks/
+language_tests/success/pointer_readonly_globals/
+language_tests/success/pointer_predicates/
+language_tests/success/pointer_params/
+language_tests/success/pointer_memory_stacks/
+language_tests/success/pointer_stacked_codegen/
 ```
 
 Enum fixtures:
@@ -4610,17 +4546,17 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Prune unreachable generated generic declarations before legality | `UselessGenericPruner` (§3.5), invoked by `Main` after semantic analysis |
 | Resolve a new kind of name | `ExpressionAnalyzer` + `SymbolTable` |
 | Change normal/return type resolution | `SemanticTypeResolver` + `SemanticAnalyzer` + `ExpressionLowering` |
-| Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `AstNode.java` (`AstKind.ENUM_DECL`/`AstKind.ENUM_VARIANT`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SastType.java` (`SastType.ENUM`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SastSerializer` + `InactiveDeclarationPruner`/`MemoryShapeIndex`/`PrivateIdentifierLinter` + §4.27 |
+| Add or change an enum | `Franko.g4` (`enumDecl`/`enumVariant`) + `FrankoASTVisitor` + `AstNode.java` (`AstKind.ENUM_DECL`/`AstKind.ENUM_VARIANT`) + `ASTSerializer` + `Desugarer` (`desugarEnumDecl`) + `Symbol.java` (`EnumSymbol`/`EnumVariant`) + `SastType.java` (`SastType.ENUM`) + `SymbolTable`/`NamespaceSymbol` (enum tables, shared type-name namespace) + `SemanticTypeResolver.analyzeEnumDecl` + `DeclarationSelector` (quiet pre-registration) + `SemanticAnalyzer` (registration/lowering) + `ExpressionAnalyzer` (variant access, enum casts) + `TypeChecker`/`ExpressionChecker` (assignment, comparison, cast matrix) + `ArrayLiteralLowerer`/`OverloadResolution` (enum literals) + `CompileTimeIntrinsics` (`#is_enum`) + `Cpp14Codegen`/`Cpp14ExpressionEmitter` (wrapper emission, `from_integer_checked`, casts, enum literals) + `SastSerializer` + `InactiveDeclarationPruner`/`PrivateIdentifierLinter` + §4.27 |
 | Change overload applicability/cost rules | `OverloadResolution` + `SymbolTable` |
 | Change typeless-constant inference or defaults | `SastNode.untypedConstant` + `ExpressionAnalyzer.adoptExpectedConstant`/`inferBinaryResultType` + `TypeChecker.defaultConstantPrimitive`/`primitiveFitCost` + `OverloadResolution` fit costs + §4.2 |
 | Change generic template identity or overload groups | `GenericsResolver` signature canonicalizers/candidate filtering + `AstNode.genericGroup` + `Symbol.genericGroup`/`SymbolTable` + §4.31 |
 | Change `GEN_` generic mangling | `GenericsResolver.genericArgsKey`/`instantiate` + `Symbol.mangledName` + `StructSymbol.genericHash`/`Cpp14Codegen.emittedStructTypeName` + §4.3 |
 | Add a type rule shared by checks | `TypeChecker` |
-| Change the owned-pointer-embedding ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerNesting` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
+| Change the pointer-embedding ban | `TypeChecker.containsOwnedPointer`/`isForbiddenOwnedPointerNesting` + `DeclarationChecker.checkDeclaredType`/`validateStructType` + §4.29 |
 | Add a language-level legality error | the relevant checker under `LegalityChecker` |
 | Track new dataflow facts | `PointerNullStateChecker`/`DanglingPointerChecker`/`DynamicArrayMemoryChecker` (or a new standalone checker invoked from `Main`) |
 | Add or change a guard fact | `MemoryGuardFacts` + the domain `guardCaseFeasible`/`applyGuardCase` hooks + `MemoryDataflowDriver` case analysis |
-| Detect returned pointers to frame storage / decayed views | `DanglingPointerChecker`; origin algebra/formatting in `DanglingPointerState` |
+| Detect use-after-scope for inner-block and loop locals | `DanglingPointerChecker`; origin algebra/formatting in `DanglingPointerState` |
 | Detect dynamic-array lifecycle misuse | `DynamicArrayMemoryChecker`; symbol/state/snapshot substrate in `DynamicArrayAnalysisState` |
 | Detect private-member / namespace-internal access | `PrivateIdentifierLinter` (§3.3, §4.16), invoked by `Main` after pruning |
 | Emit new C++ constructs | `Cpp14Codegen` for statements/declarations, `Cpp14ExpressionEmitter` for expressions/lvalues (+ `SastNode`/`SastType` as needed) |
@@ -4631,7 +4567,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Change how array literals are represented | `ArrayLiteralLowerer` (§4.13) + `SemanticAnalyzer.hoistArrayLiteralGlobal` + `Symbol.literalValues` + `CallArg`/`OverloadResolution.isArrayLiteralShapeApplicable` + `Cpp14Codegen.emitStaticArrayLiteralInitializer` |
 | Change summary fields | the relevant checker + `MemoryTemplate` (§4.21) |
 | Change BFS budget or memoization | `MemorySummaryBfs` (§4.21) |
-| Change shape flags | `MemoryShapeIndex` (§3.3) |
+| Change memory shape handling | pointer-aggregate ban in `TypeChecker` + §4.29 |
 | Add a new memory effect | the domain summary + its check pass + §4.21–§4.24 |
 | Change buffer invalidation | `DynamicArrayAnalysisState` + `DynamicArrayMemoryChecker` (§3.3) |
 | Change frame liveness | `DanglingPointerState` + `DanglingPointerChecker` (§3.3) |
@@ -4642,7 +4578,7 @@ language_tests/failure/compile_time_if/warning_value_context.fr
 | Add or change named/optional arguments | `Franko.g4` (`parameterDefault`/`argument`) + `FrankoASTVisitor` + `AstNode` (`defaultValue`/`argumentNames`) + `ASTSerializer` + `AstRewriter` + `Desugarer` + `GenericsResolver` + `Symbol.parameterDefault` + `SemanticAnalyzer.resolveParameterDefaults`/`canonicalizeStaticDefault` + §4.32 |
 | Change argument binding or the no-default preference | `OverloadResolution.bindArguments`/`describeBindingProblem`/`preferFewestDefaultFills` + `SymbolTable` resolution + `CallArg.name` |
 | Insert defaults into semantic calls | `ExpressionAnalyzer.lowerCallArgs`/`finalizeCallArgs` + `SastNode.copyStaticDefault` + §4.32 |
-| Change static default filtering | `SemanticAnalyzer.canonicalStaticValue` + `TypeChecker.isValueAssignableType` |
+| Change static default filtering | `SemanticAnalyzer.canonicalStaticValue` + `TypeChecker.isPassableByValueType` |
 | Change raw AST default/name serialization | `ASTSerializer` (`parameter.default`, `call.argumentNames`) + §3.8 |
 
 

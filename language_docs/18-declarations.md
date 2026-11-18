@@ -59,27 +59,29 @@ Global rules:
 - **Every global is implicitly `const`.** The `const` keyword is accepted
   but redundant. A global cannot be assigned, compound-assigned,
   incremented, or written through a field or element access.
-- **The type must be value-assignable:** a primitive integer, an enum, a
-  pointer (`ptr<T>`, `mview<T>`, `view<T>`), or a struct/tuple whose parts
-  are all value-assignable. Arrays, dynamic arrays, and pointer-only
-  aggregates cannot be globals.
+- **The type must be passable by value:** a primitive integer, an enum, a
+  pointer (`ptr<T>`, `mview<T>`, `view<T>`), or a struct/tuple with no
+  pointer or array members. Arrays, dynamic arrays, and aggregates with
+  pointer or array members cannot be globals.
+- **Only read-only pointer globals are allowed:** `view<T>` globals are
+  allowed; `ptr<T>` and `mview<T>` globals are rejected.
 - A global is initialized once before `main` and never mutated after that.
 - `ptr(global)` and `mview(global)` are rejected; `view(global)`
   is allowed. A global `view` therefore provides read-only access without
   exposing mutable storage.
 
 **Default initialization.** A global without an initializer starts with its
-type's default value: primitives `0`, pointers `null`, enums their first
-variant, and structs/tuples recursively zero/default-initialized. Declared
-primitive field defaults are applied on top of that zero state.
+type's default value: primitives `0`, `view` pointers `null`, enums their
+first variant, and structs/tuples recursively zero/default-initialized.
+Declared primitive field defaults are applied on top of that zero state.
 
 **Allowed initializers.** A global may be initialized with a static value:
 
 - an integer constant expression for a primitive global;
 - an enum variant reference for an enum global;
-- `null` for a pointer global;
-- a compile-time string expression for a pointer global;
-- an array literal for a pointer global (a `view<[T, N]>` value over
+- `null` for a `view<T>` pointer global;
+- a compile-time string expression for a `view` global;
+- an array literal for a `view` global (a `view<[T, N]>` value over
   immutable constant storage);
 - `view` over another global (a read-only static address);
 - a struct or tuple aggregate literal whose entries are recursively static
@@ -94,15 +96,14 @@ the same zero/default state as an uninitialized global.
 struct Point {
     int32 x
     int32 y = 5
-    view<int32> link
 }
 
 enum<uint8> Mode { idle = 5, active = 9 }
 
 int32 G = 7
 Mode mode = Mode::active
-Point origin = Point { x = 1 }          // y = 5, link = null
-Point blank                             // x = 0, y = 5, link = null
+Point origin = Point { x = 1 }          // y = 5
+Point blank                             // x = 0, y = 5
 (int32, int32) pair = (int32, int32) { 4 }   // _0 = 4, _1 = 0
 view<int32> g_view = view(G)
 view<[byte, 5]> greeting = "hello"
@@ -135,7 +136,8 @@ A **local** declaration without an initializer default-initializes the variable:
 - primitive integer variables start with an indeterminate value; reading one before its first assignment is undefined behavior;
 - static array elements start with indeterminate values, except pointer elements, which are null;
 - dynamic arrays start empty (length 0, no element storage) and must be initialized with `init` or `init_zero` before indexed use;
-- **pointer storage is guaranteed null-initialized**: pointer variables, pointer struct fields, pointer tuple elements, pointer static-array elements, and pointer elements of initialized dynamic arrays are all null (see [Pointers](26-pointers.md));
+- **pointer storage is guaranteed null-initialized**: pointer variables
+  are null (see [Pointers](26-pointers.md));
 - **enum storage is default-initialized to the first variant**: enum variables, enum struct fields, enum tuple elements, enum static-array elements, and enum elements of initialized dynamic arrays all start as the enum's first declared variant, even when its backing value is not `0` (see [Enums](31-enums.md)).
 
 There is no implicit zero-initialization for locals other than pointer storage. Use `init_zero` for zeroed dynamic array storage.
@@ -145,7 +147,8 @@ There is no implicit zero-initialization for locals other than pointer storage. 
 start at zero, pointer storage starts null, enums start at their first
 variant, and struct/tuple storage is zero/default-initialized recursively.
 Declared field defaults and global initializers are applied on top of that.
-Globals cannot be arrays or dynamic arrays; those types must be local.
+Globals cannot be arrays, dynamic arrays, or aggregates with pointer or
+array members; those types must be local.
 
 ## 18.6 Struct Fields
 
@@ -176,20 +179,20 @@ const T G = globalInit    // global
 func f(const T p) -> ...  // parameter, including const self
 ```
 
-`const` is legal only when the declared type is value-assignable:
+`const` is legal only when the declared type is passable by value:
 
 - a primitive integer;
 - an enum;
 - a pointer (`ptr<T>`, `mview<T>`, `view<T>`);
-- a struct all of whose fields are value-assignable, recursively;
-- a tuple all of whose elements are value-assignable, recursively.
+- a struct with no pointer or array members, recursively;
+- a tuple with no pointer or array members, recursively.
 
 It is illegal on static arrays, dynamic arrays, structs or tuples containing
-an array or another non-value-assignable part, `void`, and struct fields.
+a pointer, an array, or another non-passable part, `void`, and struct fields.
 Using `const` on an invalid type is an error, for example:
 
 ```text
-Const variable 'xs' has type '[int32]'; const is only allowed for value-assignable types
+Const variable 'xs' has type '[int32]'; const is only allowed for passable-by-value types
 ```
 
 The rules:
@@ -212,7 +215,7 @@ The rules:
    never receive this warning: parameters are initialized by the caller and
    globals are zero/default-initialized before `main`.
 5. **No const fields.** `const int32 f` inside a struct is rejected:
-   `Struct fields cannot be const`. A value-assignable struct may itself be
+   `Struct fields cannot be const`. A passable-by-value struct may itself be
    const.
 6. **Const struct receivers allow only `view<X> self` methods.** The hidden
    receiver argument uses `ptr`, `mview`, or `view` matching the
@@ -220,8 +223,8 @@ The rules:
    value are rejected and `view<X> self` is allowed. Direct field reads are
    allowed; field writes are rejected.
 7. **Const parameters are allowed.** `const int32 a`, `const Point p`, and
-   `const self` are legal when the parameter type is value-assignable.
-   `const` is not part of overload identity or mangling: `f(const int32)` and
+   `const self` are legal when the parameter type is passable by value.
+   `const` is not part of overload identity: `f(const int32)` and
    `f(int32)` are duplicate declarations. A method's `self` slot is always
    implicitly const; writing `const self` is allowed but redundant.
 8. **Every global is implicitly const.** The `const` keyword is optional
@@ -230,4 +233,4 @@ The rules:
    cannot be assigned from any function. Namespace variables follow the
    same rule.
 
-`#is_value_assignable` is exactly the type predicate `const` requires.
+`#is_passable_by_value` is exactly the type predicate `const` requires.

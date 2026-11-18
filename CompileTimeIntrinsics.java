@@ -14,7 +14,8 @@ final class CompileTimeIntrinsics {
         IS_MATCHABLE,
         IS_COMPARABLE,
         IS_ASSIGNABLE,
-        IS_VALUE_ASSIGNABLE
+        IS_PASSABLE_BY_VALUE,
+        IS_RETURNABLE_BY_VALUE
     }
 
     private enum StaticValueKind {
@@ -145,8 +146,12 @@ final class CompileTimeIntrinsics {
             return evaluateTypePredicate(name, args, PredicateKind.IS_ASSIGNABLE);
         }
 
-        if ("is_value_assignable".equals(name)) {
-            return evaluateTypePredicate(name, args, PredicateKind.IS_VALUE_ASSIGNABLE);
+        if ("is_passable_by_value".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_PASSABLE_BY_VALUE);
+        }
+
+        if ("is_returnable_by_value".equals(name)) {
+            return evaluateTypePredicate(name, args, PredicateKind.IS_RETURNABLE_BY_VALUE);
         }
 
         if ("strcat".equals(name)) {
@@ -244,7 +249,11 @@ final class CompileTimeIntrinsics {
             return isAssignable(type);
         }
 
-        return typeChecker.isValueAssignableType(type);
+        if (kind == PredicateKind.IS_PASSABLE_BY_VALUE) {
+            return typeChecker.isPassableByValueType(type);
+        }
+
+        return typeChecker.isReturnableByValueType(type);
     }
 
     private StaticValue evaluateTypePredicate(
@@ -822,11 +831,15 @@ final class CompileTimeIntrinsics {
         }
 
         if (type.kind == SastTypeKind.TUPLE) {
-            return typeChecker.isValueAssignableType(type);
+            return typeChecker.isAssignableType(type);
         }
 
         if (type.kind == SastTypeKind.STRUCT) {
-            return typeChecker.isValueAssignableType(type)
+            if (typeChecker.containsPointerInAggregateStorage(type)) {
+                return false;
+            }
+
+            return typeChecker.isAssignableType(type)
                     || hasSameTypeMoveMethod(type.structSymbol);
         }
 

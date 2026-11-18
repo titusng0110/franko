@@ -2,7 +2,7 @@ import "franko/stdio"
 
 #generic struct Node<typename T> {
     T value
-    view<Node<T>> next
+    [Node<T>] next
 }
 
 #generic struct List<typename T> {
@@ -13,8 +13,10 @@ import "franko/stdio"
 func main() -> int32 {
     Node<int32> n
     n.value = 5
-    n.next = view(n)
-    stdout($(n.next).value)
+    n.next.init(1)
+    n.next[0].value = 6
+    stdout(n.value)
+    stdout(n.next[0].value)
 
     List<int32> l
     l.head = 3
@@ -25,5 +27,6 @@ func main() -> int32 {
     stdout(l.tail[0].head)
     stdout(l.tail[1].head)
     l.tail.uninit()
+    n.next.uninit()
     return 0
 }

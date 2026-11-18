@@ -19,8 +19,9 @@ final class ModuleValidator {
 
         Map<String, List<SourceSpan>> functions = new LinkedHashMap<>();
         Map<String, SourceSpan> genericFunctions = new LinkedHashMap<>();
+        Map<String, AstNode> functionNodes = new LinkedHashMap<>();
 
-        collectItems(root.items, null, functions, genericFunctions);
+        collectItems(root.items, null, functions, genericFunctions, functionNodes);
 
         Set<String> seenFunctions = new LinkedHashSet<>();
 
@@ -45,6 +46,19 @@ final class ModuleValidator {
 
             if (declarations == null || declarations.isEmpty()) {
                 requireDeclared(module, "function", name, functions, diagnostics);
+                continue;
+            }
+
+            AstNode decl = functionNodes.get(name);
+
+            if (decl != null && decl.type != null && decl.type.kind == AstKind.PTR_TYPE) {
+                diagnostics.add(Diagnostic.error(
+                        decl.span,
+                        "Module '" + module.id + "': bridged function '" + name
+                                + "' cannot return a pointer type."
+                                + " Pointers are downward-only values and cannot flow back up through returns."
+                                + " Change the return type to a primitive, enum, or value struct/tuple, or write the result through an out-parameter that points at non-pointer storage."
+                ));
             }
         }
 
@@ -55,20 +69,21 @@ final class ModuleValidator {
             List<AstNode> items,
             String parentNamespace,
             Map<String, List<SourceSpan>> functions,
-            Map<String, SourceSpan> genericFunctions
+            Map<String, SourceSpan> genericFunctions,
+            Map<String, AstNode> functionNodes
     ) {
         for (AstNode item : items) {
             if (item.kind == AstKind.NAMESPACE) {
                 String fullName = parentNamespace == null
                         ? item.name
                         : parentNamespace + "::" + item.name;
-                collectItems(item.items, fullName, functions, genericFunctions);
+                collectItems(item.items, fullName, functions, genericFunctions, functionNodes);
                 continue;
             }
 
             if (item.kind == AstKind.DECL_IF) {
-                collectItems(item.thenItems, parentNamespace, functions, genericFunctions);
-                collectItems(item.elseItems, parentNamespace, functions, genericFunctions);
+                collectItems(item.thenItems, parentNamespace, functions, genericFunctions, functionNodes);
+                collectItems(item.elseItems, parentNamespace, functions, genericFunctions, functionNodes);
                 continue;
             }
 
@@ -82,6 +97,7 @@ final class ModuleValidator {
                             name,
                             ignored -> new ArrayList<>()
                     ).add(item.span);
+                    functionNodes.putIfAbsent(name, item);
                 }
             }
         }

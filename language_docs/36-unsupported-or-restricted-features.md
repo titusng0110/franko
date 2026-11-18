@@ -12,6 +12,7 @@ The current Franko implementation intentionally leaves several areas restricted 
 - parameter names are not used in overload resolution;
 - return type is not used in overload resolution;
 - arrays cannot be returned by value;
+- pointers cannot be returned by value; functions and methods return `void` or a returnable-by-value type;
 - arrays cannot be passed as parameters by value; use a pointer parameter (`ptr<[...]>`, `mview<[...]>`, or `view<[...]>`, see [Functions](19-functions.md));
 - `void` calls cannot be used in value-producing contexts;
 - a full all-paths-return proof is not currently performed.
@@ -29,9 +30,9 @@ x.something(1);     // unsupported member call: unknown method
 
 Structs are supported as user-defined aggregate types with named fields, subject to these restrictions:
 
-- struct field initializers must be constant expressions, and only primitive fields can have them (struct, array, and ptr fields reject `= constExpr` as a type mismatch);
-- a struct may not reach itself by value through struct fields or static array elements; `ptr<Node>` fields and `[Node]` (dynamic array) fields break the cycle and are allowed;
-- a struct is assignable as a whole value (assignment, by-value parameter, by-value return) only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](29-tuples.md));
+- struct field initializers must be constant expressions, and only primitive fields can have them (struct and array fields reject `= constExpr` as a type mismatch; pointer members are not allowed at all);
+- a struct may not reach itself by value through struct fields or static array elements; `[Node]` (dynamic array) fields break the cycle and are allowed (pointer members are banned, so the cycle must be broken with a dynamic array edge or a pool index from `franko/pool`);
+- a struct is assignable as a whole value only if all of its fields are assignable, recursively: assignable = primitive | enum | pointer | struct-with-all-assignable-fields with no pointer or array members. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is neither assignable nor passable nor returnable by value: access it through a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` to provide custom whole-value assignment. A passable-by-value struct cannot declare `OPERATOR_MOV`; its whole-value assignment is always the built-in field copy. Tuple elements follow the same assignability rule, but tuples cannot declare `OPERATOR_MOV` (see [Tuples](29-tuples.md));
 - structs have methods with explicit `self` receivers of type `ptr<X>`, `mview<X>`, or `view<X>` (see [Methods](28-methods.md)); the `self` slot is implicitly const and cannot be reassigned; general member calls beyond struct methods and array intrinsics, such as `s.foo()` for an unknown `foo`, are rejected;
 - comparison and assignment operators on structs are only those with `OPERATOR_*` methods; arithmetic, bitwise, shift, and logical operators are not overloadable (see [Operators](13-operators.md#1310-struct-operator-overloading)).
 
@@ -90,18 +91,16 @@ properties. Globals cannot be dynamic arrays. See
 
 ## 36.10 Pointer Lifetime Is Not Fully Tracked
 
-The compiler does not fully track dangling pointers or ownership. It detects
-returning a pointer to the current function's own frame storage, storing a
-pointer to frame or operator-borrowed storage into a global or caller-owned
-location, using a pointer after an inner block or loop body has ended, and
-forwarding a frame pointer through called functions that store it. Owning
-`ptr<T>` cannot be stored in aggregates, but `view<T>`/`mview<T>` pointers
-hidden inside returned structs or tuples and view/mview fields inside
-aggregates remain untracked. Decayed static-array views refer to their
-original array, so they
-are safe to return when that storage is a parameter or global; a decayed view
-of local array storage is still caught as a normal frame-storage escape.
-Escapes through very deep or recursive call chains may be missed. See
+The compiler does not fully track dangling pointers. It detects using a
+pointer after its inner block or loop body has ended and passing such a
+pointer as a call argument. Pointer returns, aggregate stores, mutable
+global stores, and writable pointer-to-pointer parameters are rejected
+by the type rules, so there is no return/store path left to track.
+Decayed static-array views refer to their original array, so a decayed
+view of local array storage dangles exactly like any other pointer to
+that local once the block ends. Stacked-pointer chains, loop-carried
+lifetimes, and escapes through very deep or recursive call chains may be
+missed. See
 [Dangling-Pointer Checking](32-memory-safety-checking.md#329-dangling-pointer-checking).
 
 ## 36.11 Output Is a Library Function
@@ -118,7 +117,7 @@ The unary plus operator does not exist in the language:
 
 Shift compound assignments (`<<=`, `>>=`) also do not exist: assignment has plain `=` plus the arithmetic (`+=`, `-=`, `*=`, `/=`, `%=`) and bitwise (`&=`, `|=`, `^=`) compound forms (see [Assignment](16-assignment.md)).
 
-Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A value-assignable struct cannot declare `OPERATOR_MOV`; only pointer-only structs may opt into custom whole-value assignment. Compound assignment methods remain available on value-assignable structs. `const` is limited to value-assignable locals, parameters, and globals; it cannot be used on arrays, pointer-only aggregates, `void`, or struct fields. Global variables are always implicitly const. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
+Struct comparison and assignment operators are overloadable through `OPERATOR_*` methods. Arithmetic, bitwise, shift, logical, and unary operators are not overloadable; a struct operand is still rejected for those operators. A passable-by-value struct cannot declare `OPERATOR_MOV`; only non-passable structs without pointers may opt into custom whole-value assignment. Compound assignment methods remain available on passable-by-value structs. `const` is limited to passable-by-value locals, parameters, and globals; it cannot be used on arrays, aggregates with pointer or array members, `void`, or struct fields. Global variables are always implicitly const. See [Operators](13-operators.md#1310-struct-operator-overloading) and [Declarations](18-declarations.md#188-const-storage).
 
 ## 36.13 String Literals Cannot Initialize Arrays
 
@@ -160,7 +159,7 @@ Only `if`, `while`, `for`, `break`, and `continue` control flow is implemented. 
 
 Only struct declarations, global variable declarations, function declarations, namespace declarations, imports, and `#if` declaration conditionals are valid at global scope.
 
-Executable statements are invalid at global scope. Global variables are implicitly const and must be value-assignable, so arrays and pointer-only aggregates cannot be global. Static struct/tuple aggregate literals may initialize globals; field-wise declaration initializers remain local-only. See [Aggregate Literals](30-aggregate-literals.md) and [Declarations](18-declarations.md#184-global-variable-declarations).
+Executable statements are invalid at global scope. Global variables are implicitly const and must be passable by value, so arrays and aggregates with pointer or array members cannot be global. Static struct/tuple aggregate literals may initialize globals; field-wise declaration initializers remain local-only. See [Aggregate Literals](30-aggregate-literals.md) and [Declarations](18-declarations.md#184-global-variable-declarations).
 
 ## 36.16 No C-Style Casts, Ternary, or Multiple Declarators
 
@@ -177,13 +176,12 @@ duration of the full expression. The operator method must not retain the
 borrowed `other` view beyond the call.
 
 The direct escape is closed by the operator signatures (`uint8`/`void`
-returns) and by the dangling-pointer store rule: storing the borrowed
-view into caller-owned or global storage is rejected. Storing it in a
-local `view<T>` is allowed because the local dies before the operator
-call returns. Forwarding the borrowed view to a callee that stores it is
-also rejected. Ordinary non-operator methods with `view<T>` parameters are
-checked the same way when their arguments are forwarded to a function that
-stores them. See
+returns): operator methods cannot return pointers, and pointers cannot be
+stored in aggregates or written through writable pointer-to-pointer parameters,
+so the borrowed view cannot be retained beyond the call. Using it after
+the full expression ends is a use-after-scope error. Ordinary
+non-operator methods with `view<T>` parameters are checked the same way.
+See
 [Memory Safety Checking](32-memory-safety-checking.md#329-dangling-pointer-checking)
 and [Operators](13-operators.md#1310-struct-operator-overloading).
 
@@ -206,23 +204,26 @@ Tuple restrictions are documented in
 
 The complete enum reference is in [Enums](31-enums.md).
 
-## 36.20 Owning Pointers Cannot Be Embedded
+## 36.20 Pointers Cannot Appear in Aggregates
 
-An owning `ptr<T>` cannot be stored inside an array, struct, or tuple, and it
-cannot appear anywhere inside another pointer's referent. This includes
-`[ptr<T>]`, `[ptr<T>, N]`, struct fields of type `ptr<T>`, tuple elements of
-type `ptr<T>`, `ptr<ptr<T>>`, `view<ptr<T>>`, `mview<ptr<T>>`, and
-`view<T>`/`mview<T>` types whose referents recursively contain an owning
-pointer. The declaration is rejected by type checking.
+No pointer (`ptr<T>`, `mview<T>`, or `view<T>`) can be stored inside an
+array, struct, or tuple, and no pointer referent may be an aggregate that
+contains a pointer. This includes `[ptr<T>]`, `[ptr<T>, N]`, struct fields
+of type `ptr<T>` or `view<T>`, tuple elements of type `ptr<T>` or
+`view<T>`, and `ptr<[ptr<T>]>` or `view<[view<T>]>` whose referent
+aggregate contains a pointer. Pointer stacks such as `ptr<ptr<T>>` and
+read-only `view<ptr<T>>` remain allowed. The declaration is rejected by
+type checking.
 
-The restriction keeps allocation and free responsibility from escaping into
-unrelated code. Use `view<T>`/`mview<T>` inside aggregates and pointer
-referents, keep owning pointers at the outermost level of variables,
-parameters, returns, and globals, or use the pool allocator in `franko/pool`
-for linked or node-like data. For an array of arrays, use a nested array such
-as `[[T]]`; the outer array owns the inner arrays and manages their lifetime.
-See
-[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
+The restriction keeps downward-only pointers from escaping into
+unrelated storage. Keep pointers as direct variables, parameters, or
+read-only globals, pass them into callees, and write aggregate or buffer
+output through an out-parameter that points at non-pointer storage. For
+linked or node-like data, use the pool allocator in `franko/pool` and
+store slot indices, not pointers. For an array of arrays, use a nested
+array such as `[[T]]`; the outer array owns the inner arrays and manages
+their lifetime. See
+[Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
 
 ## 36.21 Generic Restrictions
 
@@ -236,6 +237,10 @@ are not supported in this version:
 - generic FFI-bridged functions;
 - type-argument inference;
 - generic operator methods;
+- generic structs with pointer members (pointers are banned from all
+  aggregates, so a generic struct cannot carry a pointer member or element);
+- generic functions or methods that return pointers (pointer returns are
+  banned for all functions);
 - runtime generic representation, type erasure, vtables, or generic function
   values.
 
@@ -256,7 +261,7 @@ functions and struct methods, with these restrictions:
 - default values must be compile-time forms; runtime expressions such as
   variables, parameters, globals, calls, casts, dereferences, indexing, and
   member accesses are rejected;
-- aggregate literal defaults are limited to value-assignable struct literals
+- aggregate literal defaults are limited to passable-by-value struct literals
   whose field values use the same static forms;
 - tuple aggregate-literal defaults are not part of the current default model;
 - optional arguments must be passed by name, and positional arguments must
@@ -268,6 +273,6 @@ functions and struct methods, with these restrictions:
 - array intrinsics and compile-time `#` intrinsics do not accept named
   arguments;
 - defaults are not runtime values: they are resolved once at the declaration
-  and copied into each call site before C++ emission.
+  and copied into each call site as ordinary positional arguments.
 
 See [Functions](19-functions.md#1915-named-and-optional-arguments).

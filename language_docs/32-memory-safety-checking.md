@@ -7,9 +7,9 @@ lifecycle and buffer reuse of function-local dynamic arrays (see
 [Dynamic-Array Lifecycle Checking](#3210-dynamic-array-lifecycle-checking)).
 
 The checks also follow values across function calls. Passing a null pointer to
-a function that uses it, forwarding a pointer to local storage into global or
-caller-owned storage through a callee, or changing a caller's dynamic array
-through a callee are diagnosed at the relevant call site. Messages are prefixed
+a function that uses it, passing a dangling pointer as a call argument,
+or changing a caller's dynamic array through a callee are diagnosed at
+the relevant call site. Messages are prefixed
 with `Intraprocedural:` when the problem is inside the function being checked
 and with `Interprocedural:` when it is discovered at a call.
 
@@ -20,9 +20,8 @@ The null-state check covers:
 - that `null` is only used for pointer types (see [Types](09-types.md)).
 
 The null-state check also covers values crossing function boundaries: a
-callee's parameter use becomes a requirement on the caller's argument, and a
-callee's return carries the null state of the value it returns. A function
-still reports its own local maybe-null warnings as well.
+callee's parameter use becomes a requirement on the caller's argument.
+A function still reports its own local maybe-null warnings as well.
 
 ## 32.1 Pointer States
 
@@ -40,8 +39,8 @@ For each pointer variable the compiler tracks one of:
 - assigning the `null` literal makes the target null;
 - assigning `ptr(...)`, `mview(...)`, or `view(...)` makes the target pointing; these are the **only** certifications of a non-null pointer;
 - assigning another pointer variable copies that variable's exact state, so a null state propagates through copies and certification propagates transitively;
-- assigning a value of unknown provenance (a call result, a parameter, a struct-field or array-element read) yields a maybe-null state;
-- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global pointer's state is known from its declaration: a global without a static initializer is null, and a global initialized from `view`/a literal view is pointing. Calls do not change a global pointer's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
+- assigning a value of unknown provenance (a call result or a parameter) yields a maybe-null state;
+- at function entry, a pointer parameter starts as maybe-null because the compiler cannot see the value it receives. A global view's state is known from its declaration: a global without a static initializer is null, and a global initialized from `view`/a literal view is pointing. Calls do not change a global view's state because globals are immutable. Exceptions for parameters: a method's `self` parameter starts pointing, because the receiver is a storage-backed lvalue; and the args-form `main` parameter starts pointing, because it always receives a live view.
 
 ## 32.3 Dereference Checking
 
@@ -123,17 +122,19 @@ The same refinement runs for loop conditions, so `while (p != null) { ... }` see
 
 Current limitations of the pointer null-state check:
 
-- values of unknown provenance (parameters, field and element reads, and unresolved call results) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
-- only plain pointer **variables** are tracked. Owning `ptr<T>` values cannot
-  be stored in struct fields, arrays, tuples, or pointer referents, but
-  `view<T>`/`mview<T>` values can, and a pointer held in a struct field, an
-  array element, or behind a `$(...)` chain is not tracked;
-- view/mview pointers hidden inside returned structs or tuples are not tracked (owning ptrs cannot be stored in aggregates);
-- global pointer slots are immutable, so there is no global null-state write to track;
+- values of unknown provenance (parameters and unresolved call results) are treated as maybe-null: dereferencing one is a warning, not an error, and a null value may still flow through them;
+- only plain pointer **variables** are tracked. Pointers cannot be stored in
+  aggregates, so there is no field or element state to track; a pointer
+  reached only through a stacked-pointer dereference chain (for example
+  `$($(pp))`) is tracked with reduced precision and some null flows
+  through stacked pointers may be missed;
+- functions cannot return pointers, so there is no returned-pointer null
+  state to track;
+- global view slots are immutable, so there is no global null-state write to track;
 - deeply nested conditions may reduce precision;
 - recursive or very deep call chains are handled conservatively, so some
   nullness problems may be missed;
-- a non-variable dereference such as `$(f())` is an error when the resolved return state is definitely null and a warning when it is possibly null.
+- a non-variable dereference such as `$(f())` is an error when the resolved state is definitely null and a warning when it is possibly null.
 
 ## 32.8 Capability Linting
 
@@ -144,38 +145,36 @@ to the tightest pointer that fits. See the "Capability Linter" section of
 
 ## 32.9 Dangling-Pointer Checking
 
-The compiler checks `return` values for pointers that outlive the storage
-they refer to, rejects pointer stores that move frame-scoped storage into
-global or caller-owned storage, and detects use of a pointer after its
-inner block or loop body has ended. The check follows pointers through
-function calls: a frame pointer forwarded through one or more functions into
-global or caller-owned storage is diagnosed at the call. Each function still
-reports its own return/store/lifetime diagnostics, and code removed as
-unreachable produces no diagnostics.
+Pointers are downward-only values: they may be passed into callees but
+never flow back up through returns, aggregates, mutable globals, or
+writable pointer-to-pointer parameters. Those escapes are rejected by the type
+rules (see [Pointers](26-pointers.md)). The dangling-pointer check covers
+what remains: use of a pointer after its inner block or loop body has
+ended, and passing such a pointer as a call argument. Each function
+reports its own lifetime diagnostics, and code removed as unreachable
+produces no diagnostics.
 
 ### 32.9.1 What Is Tracked
 
-Taking a pointer to a local or parameter and returning it is rejected:
+Taking `ptr`/`mview`/`view` of a local or parameter records a
+frame origin for the resulting pointer. Copying that pointer, assigning
+it to another pointer variable, or aliasing it through `$(...)` carries
+the same origin. Globals never produce a frame origin, and pointer
+parameters stay alive for the whole function body, so they are never
+treated as dangling within their own function.
 
 ```franko
-int32 x
-ptr<int32> p = ptr(x)
-ptr<int32> q = p
-return q                        // error: x dies with the frame
-```
-
-Taking a pointer to a pointer parameter, or dereferencing one, is
-caller-owned and safe to return:
-
-```franko
-func ok(ptr<int32> p) -> ptr<int32> {
-    return ptr($(p));       // points at the caller's storage
+func use(ptr<int32> p) -> void {
+    int32 x
+    ptr<int32> q = ptr(x)
+    $(q) = $(p)      // valid: both pointees are alive here
+    return
 }
 ```
 
-The check follows assignments, pointer copies, `$(...)` aliases, and
-`ptr`/`mview`/`view` of lvalues. Pointer parameters and globals
-are never assumed to point into the current function's frame.
+An operator method's borrowed `other` parameter is call-scoped borrowed
+storage: it is alive for the duration of the call expression and must
+not be used after that expression ends.
 
 ### 32.9.2 Path and Loop Handling
 
@@ -187,109 +186,86 @@ receive the same treatment as their equivalent block and `while` loop.
 
 Null guards refine what is known about the storage too:
 
-- in an `if (p == null)` path, `p` is null, so returning it on that path is
-  safe;
+- in an `if (p == null)` path, `p` is null, so there is no dangling
+  storage to use on that path;
 - in an `if (p != null)` path, the surviving value is marked definitely
-  non-null, so a later return can be classified as definitely dangling
-  rather than only possibly dangling;
+  non-null, so a later dangling use can be classified as definitely
+  dangling rather than only possibly dangling;
 - `if (p != null)` over a pointer that is definitely null is infeasible;
 - `if (p == null)` over a pointer that is definitely non-null is
   infeasible; every `ptr`/`mview`/`view` result is definitely
   non-null, even when the storage it points at is caller-owned;
-- a return inside an infeasible path is not diagnosed, because that path
+- a use inside an infeasible path is not diagnosed, because that path
   never executes.
 
 On the condition-false exit of `while (p != null)`, `p` is null, so
-returning `p` is safe on that path even though the loop body saw a
+using `p` there is safe on that path even though the loop body saw a
 non-null pointer. Paths that leave the loop through `break` are handled
-separately and may still return a non-null `p`.
+separately and may still see a non-null `p`.
 
-### 32.9.3 The Return Rule
+### 32.9.3 Inner-Block and Loop Use After Scope
 
-At a pointer-typed `return`:
-
-- a value that definitely refers to the current frame → **error**;
-- a value that may refer to the current frame after a branch, or
-  may refer elsewhere → **warning**.
-
-The diagnostic names the local variable or parameter:
+A dereference or use whose frame origins are dead on every reaching
+path is an **error**; a use that is dead on only some paths is a
+**warning**. Diagnostics are deduplicated per site:
 
 ```text
-Intraprocedural: Returning a pointer to local variable 'x' from function 'bad' (dangling after return)
-Intraprocedural: Returning a pointer to parameter 'x' from function 'bad' (dangling after return)
-Intraprocedural: Returning a pointer that may refer to local variable 'x' from function 'maybe' (possibly dangling after return)
+Intraprocedural: Cannot dereference pointer to 'x' after its scope ended
+Intraprocedural: Cannot use pointer to 'x' after its scope ended
+Intraprocedural: Pointer may refer to 'x' after its scope ended
 ```
-
-### 32.9.4 Decayed Views
-
-Static-to-dynamic array view decay does not create a new storage object:
-the converted view refers to the same array. Therefore:
-
-- returning a decayed parameter or global view is **safe** and is not
-  diagnosed;
-- a returned decayed view still refers to the original static storage;
-- returning a decayed view of **local** array storage is still a normal
-  frame-storage escape and is rejected by the same return rule as any
-  other pointer to a local.
-
-Literal views refer to constant storage with static lifetime, so
-returning or keeping one is safe. Global initializers are never checked
-as function bodies.
-
-### 32.9.5 The Store Rule
-
-A pointer store is rejected when the stored value refers to current-frame
-storage and the target storage is caller-owned:
 
 ```franko
-func bad(ptr<view<int32>> out) -> void {
+ptr<int32> p;
+if (cond != 0) {
     int32 x
-    $(out) = ptr(x)        // error: caller storage outlives x
-    return
+    p = ptr(x)
 }
+$(p)    // error or warning: x died with the inner block
 ```
 
-Globals are immutable, so a direct global store is rejected earlier by the
-const-storage rule. The dangling store rule remains relevant for caller-owned
-out-parameters.
+### 32.9.4 Pointer Arguments
 
-The diagnostic is:
+Each call argument is checked for pointer liveness before the call is
+analyzed. Passing a pointer whose storage has already ended is diagnosed
+at the call site with the same `Cannot use pointer ... after its scope
+ended` wording, deduplicated per call site. Parameters stay alive for
+the whole function, so forwarding a live parameter is always safe.
 
-```text
-Intraprocedural: Cannot store a view of frame or operator-borrowed storage into a global or caller-owned location
-```
+### 32.9.5 Decayed Views
 
-A local target is intentionally allowed. For an operator method's borrowed
-`other` parameter this is safe because the local dies before the operator call
-returns. Storing a view of an inner local into a longer-lived local is still
-allowed and can still dangle; that is the pre-existing local-view hazard.
-Forwarding the pointer through a callee that stores it is also caught.
+Static-to-dynamic array view decay does not create a new storage object:
+the converted view refers to the same array. A decayed view of
+**local** array storage therefore dangles exactly like any other pointer
+to that local once the block ends. Decayed views of parameter or global
+storage stay alive with that storage.
+
+Literal views refer to constant storage with static lifetime, so keeping
+one is safe. Global initializers are never checked as function bodies.
 
 ### 32.9.6 Limitations
 
 The check intentionally does not detect:
 
-- view/mview pointers hidden inside returned structs or tuples (owning ptrs cannot be stored in aggregates);
-- pointer fields inside structs or other aggregates when the escape does not
-  go through a direct global or out-parameter store;
+- stacked-pointer chains beyond plain-variable precision: a pointer
+  reached only through several layers of `$($(pp))` dereferences may be
+  missed, and loop-carried stacked-pointer facts are conservative;
 - every loop-carried lifetime fact: loops are checked conservatively, so a
   pointer that becomes dangling only on a later iteration may be missed;
 - every escape through a recursive or very deep call chain.
 
-The store rule closes the direct global/out-parameter store. An operator
-method's `other` parameter is treated as call-scoped borrowed storage, so
-storing it into caller-owned or global storage is rejected. Forwarding a
-borrowed or ordinary argument through a callee that stores it is also caught.
-Later checks do not assume that a call left a global pointer untouched.
+Pointers cannot be stored in aggregates and cannot be returned, so there
+are no hidden aggregate or return paths to track. A view of an inner
+local stored into a longer-lived local is still allowed and can still
+dangle; that is the pre-existing local-view hazard.
 
 ## 32.10 Dynamic-Array Lifecycle Checking
 
 The compiler also tracks whether a function-local dynamic array has
 allocated element storage, whether element pointers still refer to its current
 buffer, and what a called function does to the array. A callee can require an
-initialized array, initialize or free the caller's array, or return an element
-pointer into it. Each function or method still starts with a fresh local
-lifecycle state.
+initialized array, or initialize or free the caller's array. Each function
+or method still starts with a fresh local lifecycle state.
 
 ### 32.10.1 Array States
 
@@ -334,7 +310,7 @@ It does not yet track:
 - individual elements of nested dynamic arrays below the outermost tracked
   array.
 
-Global variables cannot be dynamic arrays (they must be value-assignable), so
+Global variables cannot be dynamic arrays (they must be passable by value), so
 there is no global dynamic-array lifecycle to track.
 
 Element pointers/views (`ptr`/`mview`/`view(d[i])`) refer to the
@@ -435,12 +411,11 @@ freed is an **error**; using one whose buffer may have been replaced is a
 **warning**.
 
 The check applies at dereference, indexing, assignment through the alias, call
-argument, return, and creation intrinsics over the alias. An owner `ptr<[T]>`
+argument, and creation intrinsics over the alias. An owner `ptr<[T]>`
 or a whole-array `view<[T]>`/`mview<[T]>` refers to the stable array object
 and is **not** invalidated by `init`/`resize`/`uninit`; only
-element pointers/views into the element buffer are invalidated. A returned
-element alias keeps its association with the caller's array, so resizing after
-the call is diagnosed. When a callee may invalidate array parameter `i` and
+element pointers/views into the element buffer are invalidated. When a
+callee may invalidate array parameter `i` and
 may use element-pointer parameter `j`, and the caller passes an element alias
 of `i` as `j`, the compiler emits a possible cross-parameter invalidation
 warning.

@@ -39,12 +39,12 @@ Rules:
 - unknown field names are errors;
 - omitted fields use the same default construction as a local declaration:
   - fields with defaults receive their default value;
-  - pointer fields are null;
   - omitted fields without defaults remain indeterminate;
 - `Literal {}` is legal and default-constructs the temporary;
 - field initializer expressions are evaluated in source order;
 - construction itself never calls `OPERATOR_MOV`;
-- the temporary is created only if `Literal` is value-assignable.
+- the temporary is created only if `Literal` is passable by value
+  (`#is_passable_by_value`). No struct member may be a pointer.
 
 Examples:
 
@@ -84,11 +84,10 @@ Rules:
   spellings;
 - tuple names are not part of tuple identity, so the resulting value assigns
   to any structurally identical tuple type;
-- the tuple must be value-assignable; a tuple containing an array cannot be
+- the tuple must be passable by value (`#is_passable_by_value`); a tuple containing an array cannot be
   constructed as a literal;
 - partial initialization is legal:
-  - omitted pointer elements are null;
-  - omitted non-pointer elements are indeterminate;
+  - omitted elements are indeterminate;
 - `(int32, int32) {}` is legal and default-constructs the temporary tuple;
 - a bare `(1, 2)` is not a tuple expression: the type must be spelled;
 - `(uint32, int32) { 20, -1 }` is a legal all-unnamed positional literal;
@@ -192,14 +191,12 @@ Struct literal temporary construction is exactly local declaration
 construction:
 
 - fields with defaults receive their default value;
-- pointer fields are null;
-- omitted no-default non-pointer fields are indeterminate;
+- omitted no-default fields are indeterminate;
 - named field initializer expressions are evaluated in source order.
 
 Tuple literals have no field defaults:
 
-- omitted pointer elements are null;
-- omitted non-pointer elements are indeterminate;
+- omitted elements are indeterminate;
 - named element initializer expressions are evaluated in source order.
 
 The field-wise declaration form also evaluates its named field expressions in
@@ -209,22 +206,27 @@ the aggregate.
 Reading an omitted indeterminate field or element before assigning it is
 undefined behavior, exactly like reading any other uninitialized local.
 
-## 30.5 Value Assignability
+## 30.5 Passability by Value
 
-A type is **value-assignable** when:
+A type is **passable by value** (`#is_passable_by_value`) when:
 
 - it is a primitive integer;
 - it is an enum;
 - it is a pointer;
-- it is a struct whose fields are all value-assignable, recursively;
-- it is a tuple whose elements are all value-assignable, recursively.
+- it is a struct whose fields are all passable by value, recursively;
+- it is a tuple whose elements are all passable by value, recursively.
+
+No aggregate member may be a pointer: a struct field, array element,
+tuple element, or pointer referent aggregate that would hold a pointer
+is rejected, for every permission. In practice the non-passable
+aggregates are the array-containing ones.
 
 Rules:
 
-- struct literal construction requires the struct to be value-assignable;
-- tuple literal construction requires the tuple to be value-assignable;
+- struct literal construction requires the struct to be passable by value;
+- tuple literal construction requires the tuple to be passable by value;
 - field-wise declaration initialization does not require the aggregate
-  itself to be value-assignable; each named field only needs to be
+  itself to be passable by value; each named field only needs to be
   assignable under ordinary assignment rules.
 
 Consequences:
@@ -236,14 +238,14 @@ struct Buffer {
 }
 
 Buffer b { cap = 20 }                 // legal: field-wise
-Buffer b = Buffer { cap = 20 }        // illegal: Buffer is not value-assignable
+Buffer b = Buffer { cap = 20 }        // illegal: Buffer is not passable by value
 Buffer b { cap = 20, buf = arr }      // illegal: arrays are not assignable
 Buffer b = existing_buffer            // may use OPERATOR_MOV if declared
 ```
 
-`#is_value_assignable` is exactly the predicate aggregate literal
+`#is_passable_by_value` is exactly the predicate aggregate literal
 construction uses. It reports `0` for arrays and for structs or tuples with a
-non-value-assignable part.
+non-passable part. See also `#is_assignable` and `#is_returnable_by_value`.
 
 ## 30.6 Allowed Expression Contexts
 
@@ -299,9 +301,9 @@ point where the enclosing field value is evaluated.
 
 ## 30.8 `OPERATOR_MOV` Interaction
 
-A struct that is value-assignable cannot declare `OPERATOR_MOV`; its
+A struct that is passable by value cannot declare `OPERATOR_MOV`; its
 whole-value assignment is always the built-in field copy. Because aggregate
-literal construction requires the aggregate to be value-assignable, this is
+literal construction requires the aggregate to be passable by value, this is
 exactly the set of structs that can appear as a literal. The declaration
 
 ```franko
@@ -311,7 +313,7 @@ Literal lit = Literal { x = 0, def = 1 }
 therefore means:
 
 ```franko
-Literal lit                 // default-construct lit: defaults applied, pointers null
+Literal lit                 // default-construct lit: defaults applied
 
 Literal temp                // temporary literal
 temp.x = 0                  // explicit fields, source order
@@ -338,14 +340,14 @@ struct Buffer {
 Buffer b { cap = 20 }                 // field-wise, no temporary
 Buffer source { cap = 10 }            // field-wise, no temporary
 Buffer copy = source                  // ordinary assignment: calls OPERATOR_MOV
-Buffer bad = Buffer { cap = 20 }      // error: Buffer is not value-assignable
+Buffer bad = Buffer { cap = 20 }      // error: Buffer is not passable by value
 ```
 
 Truth table:
 
-| Construct | Temporary aggregate? | Requires aggregate value-assignable? | Uses `OPERATOR_MOV`? |
+| Construct | Temporary aggregate? | Requires aggregate passable by value? | Uses `OPERATOR_MOV`? |
 |---|---|---|---|
-| `Literal lit = Literal { x = 0 }` | yes | yes | no — value-assignable structs cannot declare it; built-in field copy |
+| `Literal lit = Literal { x = 0 }` | yes | yes | no — passable-by-value structs cannot declare it; built-in field copy |
 | `Literal lit { x = 0 }` | no | no | no — direct field assignments |
 | `Buffer b { cap = 20 }` | no | no | no |
 | `Buffer b = Buffer { cap = 20 }` | yes | yes → **error** | irrelevant; the literal is already illegal |
@@ -376,8 +378,8 @@ Buffer b { cap = 20 }                 // legal: direct per-field initialization
 ```
 
 A pointer-only aggregate also cannot be a return type. A function that would
-return one is rejected with guidance to return a pointer or use an
-out-parameter:
+return one is rejected with guidance to use an out-parameter that points
+at non-pointer storage (functions cannot return pointers):
 
 ```franko
 func foo() -> Buffer { ... }          // error at declaration
@@ -402,13 +404,14 @@ A struct or tuple aggregate literal may initialize a global:
 Literal global_lit = Literal { x = 1 }     // valid: static aggregate initializer
 ```
 
-The declared global type must be value-assignable. Every aggregate entry must
-be a static value: an integer constant expression, an enum variant, `null`, a
+The declared global type must be passable by value (`#is_passable_by_value`).
+Every aggregate entry must
+be a static value: an integer constant expression, an enum variant, a
 compile-time string expression, an array literal, a `view` of another
 global, or a nested aggregate literal. Calls, casts, dereferences, indexing,
 member reads, and reads of other variables are rejected. Omitted fields
-receive their declared default or type default (`0`, `null`, first enum
-variant, recursively).
+receive their declared default or type default (`0`, first enum
+variant, recursively). No member may be a pointer.
 
 Field-wise declaration initializers remain local-only:
 
@@ -418,7 +421,7 @@ Literal global_lit { x = 1 }               // invalid: global field-wise form
 ```
 
 A pointer-only aggregate cannot be a global, because globals must be
-value-assignable.
+passable by value.
 
 ## 30.11 Diagnostics and Invalid Examples
 
@@ -431,14 +434,14 @@ Required diagnostics include:
 - positional entries on a struct literal or a named/mixed tuple spelling;
 - positional entries exceeding the tuple element count;
 - positional and named tuple entries mixed in one initializer;
-- aggregate literal of non-value-assignable type;
+- aggregate literal of non-passable-by-value type;
 - aggregate literal used outside an allowed context;
-- non-value-assignable return type with pointer/out-parameter guidance;
+- non-passable-by-value return type with out-parameter guidance;
 - field-wise initializer on a non-struct/non-tuple declaration;
 - field-wise assignment of an array field;
 - runtime entry in a global aggregate initializer;
 - global field-wise initializer rejection;
-- non-value-assignable global aggregate type rejection.
+- non-passable-by-value global aggregate type rejection.
 
 Examples:
 
@@ -447,7 +450,7 @@ Literal { x = 1 }.x                         // aggregate literal outside an allo
 Literal { x = 1 }                           // aggregate literal outside an allowed context
 1 + Literal { x = 1 }                       // aggregate literal outside an allowed context
 
-Buffer b = Buffer { cap = 20 }              // non-value-assignable literal
+Buffer b = Buffer { cap = 20 }              // non-passable-by-value literal
 
 (int32, int32 y) t = (int32, int32 y) {
     _0 = 1,

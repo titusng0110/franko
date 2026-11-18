@@ -1,0 +1,7 @@
+func bad(ptr<view<int32>> p) -> void {
+    return
+}
+
+func main() -> int32 {
+    return 0
+}

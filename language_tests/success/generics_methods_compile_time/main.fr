@@ -21,8 +21,8 @@ struct Tools {
         }
     }
 
-    #generic func spelling<typename T>(ptr<Tools> self) -> view<[byte]> {
-        return #what_type(T)
+    #generic func spelling<typename T>(ptr<Tools> self) -> void {
+        stdout(#what_type(T))
     }
 
     #generic func matches<typename T>(ptr<Tools> self) -> uint8 {
@@ -48,7 +48,7 @@ func main() -> int32 {
     Tools t
     stdout(t.kind<int32>())
     stdout(t.kind<Point>())
-    stdout(t.spelling<int32>())
+    t.spelling<int32>()
     stdout(t.matches<int32>())
     stdout(t.sized<4>())
     stdout(t.platform<7>())

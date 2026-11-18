@@ -30,7 +30,6 @@ final class MemoryAnalysisContext {
 
     final SastNode root;
     final MemoryCallGraph callGraph;
-    final MemoryShapeIndex shapes;
     final MemoryTemplateRegistry templates;
     final MemoryTemplateSetPool templateSets;
 
@@ -75,7 +74,6 @@ final class MemoryAnalysisContext {
     private MemoryAnalysisContext(
             SastNode root,
             MemoryCallGraph callGraph,
-            MemoryShapeIndex shapes,
             MemoryTemplateRegistry templates,
             MemoryTemplateSetPool templateSets,
             Symbol[] variables,
@@ -110,7 +108,6 @@ final class MemoryAnalysisContext {
     ) {
         this.root = root;
         this.callGraph = callGraph;
-        this.shapes = shapes;
         this.templates = templates;
         this.templateSets = templateSets;
         this.variables = variables;
@@ -390,7 +387,6 @@ final class MemoryAnalysisContext {
         MemoryTemplateRegistry templates = new MemoryTemplateRegistry(
                 maxParameters,
                 globalVariableIds.length,
-                callGraph.callSiteCount(),
                 variableCount
         );
 
@@ -408,7 +404,6 @@ final class MemoryAnalysisContext {
         return new MemoryAnalysisContext(
                 root,
                 callGraph,
-                new MemoryShapeIndex(),
                 templates,
                 new MemoryTemplateSetPool(templates),
                 variables.toArray(new Symbol[0]),

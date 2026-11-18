@@ -1,23 +1,29 @@
 import "franko/stdio"
 
-func choose(ptr<int32> p, ptr<int32> q) -> ptr<int32> {
-    if (p == null || q == null) {
-        return null
-    }
-    if (p == null) {
-        return p
-    }
-    return q
-}
+// ============================================================
+// LANGUAGE TEST: Compound Null Guards over Locals
+// ============================================================
+// Covers the same compound-guard refinement the old choose() helper
+// exercised, without returning pointers: `p == null || q == null`
+// proves both non-null on the continuation path, and a later
+// `p == null` check is infeasible. All pointers are locals.
+// ============================================================
 
 func main() -> int32 {
     int32 a = 1
     int32 b = 2
-    ptr<int32> r = choose(ptr(a), ptr(b))
-    ptr<int32> n = choose(null, ptr(b))
-    if (r == null || n != null) {
+    ptr<int32> p = ptr(a)
+    ptr<int32> q = ptr(b)
+    ptr<int32> n = null
+    if (p == null || q == null) {
         return 1
     }
-    stdout($(r))
+    if (p == null) {
+        return 1
+    }
+    if (n != null) {
+        return 1
+    }
+    stdout($(q))
     return 0
 }

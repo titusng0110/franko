@@ -16,10 +16,10 @@ struct Outer {
 
 struct Holder {
     int32 n
-    view<[byte, 3]> text
-    view<[int32, 2]> nums
+    int32 ch
+    int32 num
     Status state
-    view<int32> maybe
+    int32 flag
 }
 
 enum<uint8> Status { spawning, alive }
@@ -39,17 +39,17 @@ func nested_default(Outer o = Outer { inner = Inner { value = 42 }, ok = 2 }) ->
 }
 func holder_default(Holder h = Holder {
     n = 1 + 2,
-    text = "abc",
-    nums = [4, 5],
+    ch = 97,
+    num = 5,
     state = Status::alive,
-    maybe = null
+    flag = 1
 }) -> int32 {
     return (
             h.n +
-            cast<int32>($(h.text)[0]) +
-            $(h.nums)[1] +
+            h.ch +
+            h.num +
             cast<int32>(h.state == Status::alive) +
-            cast<int32>(h.maybe == null)
+            h.flag
     )
 }
 

@@ -1,5 +1,0 @@
-func main() -> int32 {
-    [view<ptr<int32>>] a
-    ptr<[view<ptr<int32>>]> b
-    return 0
-}

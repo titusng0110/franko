@@ -1,0 +1,47 @@
+import "franko/stdio"
+
+func use_ptr(ptr<int32> p) -> int32 {
+    if (p == null) {
+        return -1
+    }
+    return $(p)
+}
+
+func main() -> int32 {
+    int32 a = 10
+    int32 b = 20
+
+    ptr<int32> p = ptr(a)
+    stdout($(p))
+
+    ptr<ptr<int32>> pp = ptr(p)
+    ptr<int32> q = $(pp)
+    stdout($(q))
+
+    view<ptr<int32>> rp = pp
+    ptr<int32> r = $(rp)
+    stdout($(r))
+
+    {
+        int32 inner = 30
+        ptr<int32> ip = ptr(inner)
+        stdout($(ip))
+        stdout(use_ptr(ip))
+    }
+
+    stdout(use_ptr(p))
+
+    [int32] d
+    d.init(2)
+    d[0] = 100
+    d[1] = 200
+    ptr<int32> e = ptr(d[0])
+    stdout($(e))
+    d.uninit()
+
+    stdout(p == null)
+    p = null
+    stdout(p == null)
+
+    return 0
+}

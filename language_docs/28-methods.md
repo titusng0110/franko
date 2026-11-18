@@ -38,7 +38,7 @@ struct X {
 Rules:
 
 - Methods are `func` declarations inside a struct body; separators between members are optional, matching field syntax.
-- A method may declare any return type valid for free functions, including `void` (see [Functions](19-functions.md)).
+- A method may declare any return type valid for free functions, including `void`, except pointers: like free functions, methods cannot return pointers (see [Pointers](26-pointers.md#2610-pointer-parameters-and-returns)).
 - A method may declare additional parameters after `self`; they follow ordinary parameter rules.
 - A method body follows ordinary function body rules, including return checking (see [Functions](19-functions.md)).
 - Method names are ordinary identifiers; a method may not share its name with a field of the same struct, and duplicate method signatures are rejected (see [Declaration Type Validity](11-declaration-type-validity.md)).
@@ -103,9 +103,10 @@ The creation intrinsic enforces the receiver's permission: calling a
 a `view<X> self` method is callable through any receiver. When the
 receiver is an lvalue reached through an inner pointer (for example
 `$($(v)[0]).increment()` where the element is an `mview<X>`), that inner
-pointer's own permission applies. Owning `ptr<X>` cannot be stored in an
-array, struct, tuple, or pointer referent; see
-[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
+pointer's own permission applies. Pointers cannot be stored in an
+array, struct, tuple, or pointer referent aggregate, for any permission;
+see
+[Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
 
 Rules:
 
@@ -241,6 +242,8 @@ A method body scopes exactly like a free-function body, plus the `self` paramete
 - Every method must have `ptr<X> self`, `mview<X> self`, or `view<X> self` as its first parameter; only the first parameter may be named `self`.
 - `self` is a reserved keyword; `self.y` is invalid (write `$(self).y`).
 - The `self` slot is implicitly const; reassigning it is an error.
+- `self` remains a pointer parameter (`ptr<X>`, `mview<X>`, or `view<X>`); pointers may be parameters.
+- Methods cannot return pointers.
 - Receivers must be struct-valued storage-backed lvalues; `ptr<X>` receivers require explicit `$(p).method(...)`.
 - Methods are never callable as free functions; there is no implicit `this` field access.
 - A method name may coincide with an array intrinsic name; struct receivers dispatch to the method while array receivers dispatch to the intrinsic.

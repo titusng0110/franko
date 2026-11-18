@@ -8,10 +8,6 @@ func take(view<[byte, 5]> s) -> uint32 {
     return $(s).length()
 }
 
-func give() -> view<[byte, 5]> {
-    return "hello"
-}
-
 func with_default(view<[byte, 4]> s = "a" + "bcd") -> uint32 {
     return $(s).length()
 }
@@ -22,12 +18,13 @@ func main() -> int32 {
 
     view<[byte, 5]> local = "hello"
     stdout($(local).length())
-    stdout($(give()).length())
+
+    view<[byte, 5]> gave = "hello"
+    stdout($(gave).length())
     stdout(with_default())
 
-    [view<[byte, 5]>, 1] slots
-    slots[0] = "hello"
-    stdout($(slots[0]).length())
+    view<[byte, 5]> slot = "hello"
+    stdout($(slot).length())
 
     return 0
 }

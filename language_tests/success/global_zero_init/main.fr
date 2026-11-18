@@ -3,7 +3,7 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Global zero-initialization
 // ============================================================
-// Covers: uninitialized value-assignable globals are statically
+// Covers: uninitialized passable-by-value globals are statically
 // allocated and zero/default-initialized before main runs.
 // ============================================================
 
@@ -12,7 +12,7 @@ struct Zero {
     int32 b
     int32 c
     int32 d
-    view<int32> link
+    int32 extra
 }
 
 int32 gz
@@ -25,6 +25,6 @@ func main() -> int32 {
     stdout(gz_struct.b)
     stdout(gz_struct.c)
     stdout(gz_struct.d)
-    stdout(gz_struct.link == null)
+    stdout(gz_struct.extra == 0)
     return 0
 }

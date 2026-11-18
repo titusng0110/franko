@@ -1,0 +1,4 @@
+func main() -> int32 {
+    ptr<[ptr<int32>]> nested
+    return 0
+}

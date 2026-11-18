@@ -1,0 +1,29 @@
+import "franko/stdio"
+
+func main() -> int32 {
+    int32 x = 5
+    ptr<int32> p = ptr(x)
+    ptr<ptr<int32>> pp = ptr(p)
+    view<ptr<int32>> vp = pp
+    view<ptr<int32>> vp2 = cast<view<ptr<int32>>>(pp)
+    mview<ptr<int32>> mp = mview(p)
+    view<ptr<int32>> vp3 = mp
+
+    stdout($($(pp)))
+    stdout($($(vp)))
+    stdout($($(vp2)))
+    stdout($($(vp3)))
+
+    [int32, 2] arr
+    arr[0] = 7
+    arr[1] = 8
+    mview<[int32, 2]> m = mview(arr)
+    mview<[int32]> d = cast<mview<[int32]>>(m)
+    stdout($(d)[1])
+
+    view<[int32, 2]> v = view(arr)
+    view<[int32]> vd = v
+    stdout($(vd)[0])
+
+    return 0
+}

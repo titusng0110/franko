@@ -17,7 +17,8 @@ func main() -> int32 {
     stdout(#is_matchable(Status));
     stdout(#is_comparable(Status));
     stdout(#is_assignable(Status));
-    stdout(#is_value_assignable(Status));
+    stdout(#is_passable_by_value(Status));
+    stdout(#is_returnable_by_value(Status));
     stdout(#what_type(Status));
     stdout(#what_type(Status::alive));
     stdout(#is_same_type(Status::alive, Status::spawning));

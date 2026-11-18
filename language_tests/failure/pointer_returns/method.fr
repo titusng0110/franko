@@ -1,0 +1,11 @@
+struct X {
+    int32 v = 0
+
+    func get(ptr<X> self) -> view<int32> {
+        return view($(self).v)
+    }
+}
+
+func main() -> int32 {
+    return 0
+}

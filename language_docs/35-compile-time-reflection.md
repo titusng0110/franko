@@ -337,8 +337,9 @@ All introspection calls use `#name(...)`.
 | `#warning(message)` | one compile-time string | `void` | emits a compiler warning and continues |
 | `#is_matchable(x)` | one type or value | `uint8` | `1` for primitive integers, enums, and pointers; for structs, `1` iff a valid `OPERATOR_EQ(view<X> self, view<X> other) -> uint8` exists; tuples and arrays are `0` |
 | `#is_comparable(x)` | one type or value | `uint8` | `1` for primitive integers and enums; for structs, `1` iff a valid `OPERATOR_LT(view<X> self, view<X> other) -> uint8` exists; tuples, pointers, and arrays are `0` |
-| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists (only pointer-only structs may declare it); for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
-| `#is_value_assignable(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, enums, pointers, structs whose fields are all value-assignable, and tuples whose elements are all value-assignable. Static arrays and dynamic arrays are not. |
+| `#is_assignable(x)` | one type or value | `uint8` | `1` for primitives, enums, and pointers; for structs, `1` iff built-in whole-value assignment is allowed or a valid `OPERATOR_MOV(ptr<X> self, view<X> other) -> void` exists. Structs that contain a pointer anywhere in aggregate storage are invalid and always `0`. Non-passable structs without pointers (for example with an array field) may declare `OPERATOR_MOV`; for tuples, `1` iff every element is assignable (tuples cannot declare `OPERATOR_MOV`); arrays are `0` |
+| `#is_passable_by_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be passed as a by-value function parameter: primitives, enums, pointers, structs whose fields are all passable by value with no pointer or array members, and tuples whose elements are all passable by value with no pointer or array members. Static arrays and dynamic arrays are not. This is also the exact predicate `const`, globals, and aggregate literal construction require. |
+| `#is_returnable_by_value(x)` | one type or value | `uint8` | `1` iff a value of the type can be returned by value: primitives and enums, structs whose fields are all returnable by value with no pointer or array members, and tuples whose elements are all returnable by value with no pointer or array members. Pointers, static arrays, and dynamic arrays are not returnable. |
 
 The predicates are built-in compile-time functions. They cannot be stored
 in variables, passed as callbacks, or referred to without a call.
@@ -448,8 +449,7 @@ and they never produce runtime code:
 }
 ```
 
-The selected directive runs during compilation, before the main legality
-checks. In a dead `#if` branch it is ignored.
+The selected directive runs during compilation. In a dead `#if` branch it is ignored.
 
 ### Compilation Report
 
@@ -495,7 +495,8 @@ They cannot be used as runtime values.
 | Can I compare two values for equality? | `#is_matchable(x)` |
 | Can I order two values with `<`? | `#is_comparable(x)` |
 | Can I assign one value of this type to another? | `#is_assignable(x)` |
-| Can I assign or pass a value of this type by value? | `#is_value_assignable(x)` |
+| Can I pass a value of this type by value? | `#is_passable_by_value(x)` |
+| Can I return a value of this type by value? | `#is_returnable_by_value(x)` |
 
 `#is_memcpy_safe` covers primitives, pointers, static arrays of memcpy-safe
 elements, structs whose fields are all memcpy-safe, and tuples whose
@@ -511,10 +512,10 @@ types are all memset-safe. Field defaults do not affect it because
 defined default. Pointers default to null and dynamic arrays to empty.
 A static array follows its element type. A struct or tuple returns `1`
 when any field or element has a default or its type has one; it does not
-claim that every part is initialized. A struct with a pointer field and a
-primitive field therefore returns `1` even though the primitive field
-remains indeterminate. Primitive integers and static arrays of primitives
-return `0`.
+claim that every part is initialized. A struct with a dynamic-array
+field and a primitive field therefore returns `1` even though the
+primitive field remains indeterminate. Primitive integers and static
+arrays of primitives return `0`.
 
 ```franko
 struct WithDefault {
@@ -535,20 +536,33 @@ stdout(#has_default_value(b));        // 1: dynamic array field
 stdout(#is_assignable(b));            // 0: no built-in assignment
 ```
 
-A pointer-only struct that is not assignable by default can opt in with an
-applicable `OPERATOR_MOV`; `#is_assignable` then returns `1`. A value-assignable
+A non-passable struct without pointers (for example with an array field)
+that is not assignable by default can opt in with an applicable
+`OPERATOR_MOV`; `#is_assignable` then returns `1`. Structs that contain
+a pointer anywhere in aggregate storage are invalid and `#is_assignable`
+returns `0` for them even with `OPERATOR_MOV`. A passable-by-value
 struct cannot declare `OPERATOR_MOV` — its whole-value assignment is always
 the built-in field copy — so for it `#is_assignable` and
-`#is_value_assignable` are both `1` for the same reason. Tuples cannot declare
+`#is_passable_by_value` are both `1` for the same reason. Tuples cannot declare
 operator methods, so for a tuple `#is_assignable` is exactly built-in element
 assignability.
 
-`#is_value_assignable` covers primitives, pointers, structs whose fields
-are all value-assignable, and tuples whose elements are all
-value-assignable. This is the same rule as built-in whole-value assignment
+`#is_passable_by_value` covers primitives, enums, pointers, structs whose
+fields are all passable by value with no pointer or array members, and
+tuples whose elements are all passable by value with no pointer or array
+members. This is the same rule as built-in whole-value assignment
 and by-value parameters; it does not consider a custom `OPERATOR_MOV`.
-It is also the exact predicate aggregate literal construction uses: a
-struct or tuple literal is legal only when this predicate returns `1`.
+It is also the exact predicate aggregate literal construction, `const`,
+and globals use: a struct or tuple literal is legal only when this
+predicate returns `1`.
+
+`#is_returnable_by_value` covers primitives and enums, structs whose
+fields are all returnable by value with no pointer or array members, and
+tuples whose elements are all returnable by value with no pointer or
+array members. Pointers are passable but never returnable: functions and
+methods cannot return any pointer type, so `#is_returnable_by_value` is
+`0` for every pointer type. Static arrays and dynamic arrays are neither
+passable nor returnable.
 
 ```franko
 struct WithArray {
@@ -556,7 +570,8 @@ struct WithArray {
 }
 
 WithArray w;
-stdout(#is_value_assignable(w)); // 0: static array field
+stdout(#is_passable_by_value(w)); // 0: static array field
+stdout(#is_returnable_by_value(w)); // 0: static array field
 ```
 
 `#is_same_type` compares exact types. Aliases normalize first, so `int` and

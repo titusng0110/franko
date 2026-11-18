@@ -1,0 +1,10 @@
+{
+  "format": "franko-module",
+  "version": 1,
+  "id": "tests/ffi_return",
+  "source": "ffi_return.fr",
+  "bridge": "ffi_return.ffi.cpp",
+  "functions": [
+    {"namespace": null, "name": "bridged"}
+  ]
+}

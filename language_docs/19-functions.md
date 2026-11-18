@@ -32,7 +32,7 @@ A parameter may be declared `const`: `func sum(const int32 a, const int32 b)`
 or `func f(const Point p)`. Const parameters have the same assignment
 restrictions as const locals: the parameter cannot be reassigned, and only
 `view` may take a mutable pointer to it. A const parameter's type must be
-value-assignable. `const self` is allowed in methods and only makes the
+passable by value. `const self` is allowed in methods and only makes the
 pointer slot itself immutable; the declared `ptr`/`mview`/`view` permission
 still governs the pointee.
 
@@ -41,13 +41,13 @@ identity: `f(const int32)` and `f(int32)` are duplicate declarations.
 
 Duplicate parameter names inside the same function are invalid.
 
-A parameter type must be a **passable type**:
+A parameter type must be **passable by value**:
 
 - a primitive integer type;
 - a declared enum type (see [Enums](31-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Arrays and non-owning pointer referents are allowed, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<view<int32>>` are all passable; an owning `ptr<T>` may not appear anywhere inside a pointer referent or inside an array, struct, or tuple, so `ptr<ptr<int32>>`, `view<ptr<int32>>`, and `ptr<[ptr<int32>]>` are rejected (see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded)); or
-- a struct type whose fields are all assignable value types, recursively. Assignable = primitive | pointer | struct-with-all-assignable-fields. Static arrays and dynamic arrays are not assignable, so a struct containing one of them is pointer-only: pass a pointer to it (for example `ptr<X>` with `ptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
-- a tuple type whose elements are all assignable value types, recursively. A tuple containing a static array or dynamic array is pointer-only, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
+- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`), where `T` is any valid declared type. Pointer stacks such as `ptr<ptr<int32>>` are allowed as values, and a pointer may refer to a struct, array, or tuple only when that aggregate contains no pointers, so `ptr<[int32]>`, `mview<[int32, 8]>`, and `view<ptr<int32>>` are all passable while `ptr<[ptr<int32>]>` is rejected (see [Stacked Pointers](26-pointers.md#263-stacked-pointers) and [Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates)). Writable pointer-to-pointer parameters (`ptr<ptr<T>>`, `ptr<view<T>>`, `ptr<mview<T>>`, `mview<ptr<T>>`, `mview<view<T>>`, `mview<mview<T>>`) are forbidden; read-only `view<ptr<T>>`, `view<view<T>>`, and `view<mview<T>>` are allowed (see [Pointer Parameters and Returns](26-pointers.md#2610-pointer-parameters-and-returns)); or
+- a struct type with no pointer or array members, recursively. A struct containing a static array or dynamic array is not passable: pass a pointer to it that points at non-pointer storage (for example `ptr<X>` with `ptr(s)` when ownership or lifecycle operations are needed, or `view<X>`/`mview<X>` for read/write access). See [Structs](27-structs.md); or
+- a tuple type with no pointer or array members, recursively. A tuple containing a static array or dynamic array is not passable, exactly like a struct with such a field. `void` cannot be a tuple element. See [Tuples](29-tuples.md).
 
 Bare array types are not passable. To pass an array to a function, declare a pointer parameter (`ptr<[T]>`, `mview<[T]>`, or `view<[T]>`, and the corresponding static-size forms) and pass the matching `ptr`/`mview`/`view` expression at the call site.
 
@@ -167,13 +167,12 @@ A function return type must be either:
 - `void`;
 - a primitive integer type;
 - a declared enum type (see [Enums](31-enums.md));
-- a pointer type (`ptr<T>`, `mview<T>`, or `view<T>`); or
-- a struct type whose fields are all assignable value types, recursively (see [Structs](27-structs.md)); or
-- a tuple type whose elements are all assignable value types, recursively (see [Tuples](29-tuples.md)).
+- a struct type with no pointer or array members, recursively (see [Structs](27-structs.md)); or
+- a tuple type with no pointer or array members, recursively (see [Tuples](29-tuples.md)).
 
-Arrays cannot currently be returned directly. A tuple containing an array or another non-assignable element cannot be returned by value; use a pointer to the tuple instead.
+Array and pointer return types are invalid. A tuple containing a pointer, a static array, or a dynamic array cannot be returned by value; write the result through an out-parameter that points at non-pointer storage instead.
 
-A struct containing an array is pointer-only and cannot be returned by value either. The compiler rejects such a declaration with guidance to return a pointer or write through an out-parameter:
+A struct containing a pointer, a static array, or a dynamic array cannot be returned by value either. The compiler rejects such a declaration with guidance to write through an out-parameter that points at non-pointer storage:
 
 ```franko
 struct Buffer {
@@ -189,7 +188,7 @@ func foo(ptr<Buffer> outbuf) -> int32 {
 }
 ```
 
-The correct pattern for pointer-only output is the `ptr<Buffer>` out-parameter form. See [Aggregate Literals](30-aggregate-literals.md).
+The correct pattern for aggregate output that cannot be returned by value is the `ptr<Buffer>` out-parameter form. See [Aggregate Literals](30-aggregate-literals.md).
 
 ## 19.11 Forward References and Recursion
 
@@ -220,7 +219,7 @@ A function declaration may carry exactly one inlining modifier before
 ```
 
 `#inline` asks the compiler to always inline the function. `#noinline`
-asks it never to inline the function. With no modifier, the backend decides
+asks it never to inline the function. With no modifier, the compiler decides
 using its normal heuristics. The modifiers apply to free functions,
 namespace functions, and struct methods, including declarations selected
 by `#if`.
@@ -248,10 +247,10 @@ the cycle `#noinline` does not exempt an `#inline` function from the rule.
 `#noinline` functions may be recursive normally.
 
 The modifiers apply to ordinary Franko functions and to FFI-bridged
-declarations. For a bridged function, the compiler emits a C++ declaration
-carrying `FRANKO_INLINE` or `FRANKO_NOINLINE` before the bridge block, so the
-bridge definition inherits the requested inlining hint. The bridge body
-remains opaque to Franko, so the `#inline` recursion check cannot inspect it.
+declarations. For a bridged function, the inlining hint is carried on the
+bridge declaration, so the bridge definition inherits the requested hint.
+The bridge body remains opaque to Franko, so the `#inline` recursion check
+cannot inspect it.
 
 ## 19.14 Generic Functions
 
@@ -313,11 +312,14 @@ Allowed default forms are:
   `#what_type(T) + "!"`);
 - array literals;
 - enum variant references;
-- aggregate struct literals whose struct is value-assignable.
+- aggregate struct literals whose struct is passable by value.
+
+Pointer parameters may declare defaults using the same static forms
+(`null`, compile-time strings, and array literals for `view` parameters).
 
 An aggregate literal default restricts each field initializer to the same
 static forms: constant expressions, `null`, compile-time string expressions, array literals,
-enum variants, folded `#` expressions, and nested value-assignable struct
+enum variants, folded `#` expressions, and nested passable-by-value struct
 literals.
 
 ```franko
@@ -335,7 +337,7 @@ func literal(Literal lit = Literal { x = 1 }) -> int32 { return lit.x + lit.def 
 ```
 
 Defaults are resolved at the declaration and copied into each omitted argument
-at the semantic call site. C++ emission sees an ordinary full-arity call.
+at the call site.
 
 Overload resolution prefers an overload that needs no defaults over an
 otherwise equal overload that does:

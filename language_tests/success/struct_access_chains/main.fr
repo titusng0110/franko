@@ -4,15 +4,10 @@ import "franko/stdio"
 // LANGUAGE TEST: Struct Member Access Chains
 // ============================================================
 // Covers: s.field on a local, $(p).field (assigned through),
-// $(a.next).field (an mview-typed field dereferenced then a
-// field accessed), xs[i].field on a static array of structs, and
-// ptr(s.field) used to write a field through its pointer.
+// xs[i].field on a static array of structs, dynamic array of
+// structs, and ptr(s.field) used to write a field through its
+// pointer. No aggregate holds a pointer.
 // ============================================================
-
-struct Link {
-    mview<Link> next
-    int32 val
-}
 
 struct Cell {
     int32 v = 0
@@ -30,15 +25,14 @@ func main() -> int32 {
     $(p).v = 10;
     stdout($(p).v);
 
-    // $(a.next).field: dereference an mview-typed field, then
-    // access a field of the struct it points to.
-    Link l1;
-    Link l2;
-    l1.val = 100;
-    l2.val = 200;
-    l1.next = mview(l2);
-    $(l1.next).val = 222;
-    stdout(l1.val, end = " "); stdout($(l1.next).val);
+    // Dynamic array of structs: element field access.
+    [Cell] chain;
+    chain.init(2);
+    chain[0].v = 100;
+    chain[1].v = 200;
+    chain[1].v = 222;
+    stdout(chain[0].v, end = " "); stdout(chain[1].v);
+    chain.uninit();
 
     // xs[i].field on a static array of structs.
     [Cell, 3] xs;

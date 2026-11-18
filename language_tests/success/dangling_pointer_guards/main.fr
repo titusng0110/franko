@@ -1,120 +1,111 @@
-func null_branch_is_safe(uint32 pick, ptr<int32> q) -> ptr<int32> {
+// ============================================================
+// LANGUAGE TEST: Null and Loop Guards over Locals
+// ============================================================
+// Covers the guard-refinement cases the old pointer-returning helpers
+// exercised, rewritten to use only locals with no pointer returns:
+// null-branch safety via overwrite, infeasible null branches, loop
+// exits that prove null, break handling, and caller-owned guards.
+// No output is expected and no dangling diagnostics are expected.
+// ============================================================
+
+func main() -> int32 {
     int32 x = 0
+    int32 z = 0
+    ptr<int32> q = ptr(z)
+
+    // null_branch_is_safe: maybe-null overwritten by live pointer.
     ptr<int32> p
-    if (pick != 0) {
+    if (z != 0) {
         p = ptr(x)
     } else {
         p = null
     }
     if (p == null) {
-        return p
+        p = q
     }
-    p = q
-    return p
-}
+    $(p) = 1
 
-func infeasible_branch_is_ignored() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr(x)
-    if (p == null) {
-        return p
+    // infeasible_branch_is_ignored: definitely non-null, null branch dead.
+    ptr<int32> p2 = ptr(x)
+    if (p2 == null) {
+        return 1
     }
-    p = null
-    return p
-}
-
-func null_guard_is_infeasible() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p
-    ptr<int32> q = p
-    if (q != null) {
-        if (x != 0) {
-            x = 1
-        }
-        return ptr(x)
+    p2 = null
+    if (p2 != null) {
+        return 1
     }
-    return q
-}
 
-func loop_exit_is_null() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr(x)
-    while (p != null) {
-        p = null
+    // null_guard_is_infeasible analogue: null stays null, guarded use safe.
+    ptr<int32> p3 = null
+    ptr<int32> q3 = p3
+    if (q3 != null) {
+        return 1
     }
-    return p
-}
 
-func null_loop_is_infeasible() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p
-    while (p != null) {
-        if (x != 0) {
-            x = 1
-        }
-        return ptr(x)
+    // loop_exit_is_null: loop drains to null, exit proves null.
+    ptr<int32> p4 = ptr(x)
+    while (p4 != null) {
+        p4 = null
     }
-    return p
-}
-
-func caller_owned_pointer_is_nonnull(ptr<int32> q) -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr($(q))
-    if (p == null) {
-        return ptr(x)
+    if (p4 != null) {
+        return 1
     }
-    return null
-}
 
-func infeasible_else_drops_frame() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr(x)
-    if (p != null) {
-        p = null
+    // null_loop_is_infeasible: loop over null never enters.
+    ptr<int32> p5 = null
+    while (p5 != null) {
+        return 1
+    }
+
+    // caller_owned_pointer_is_nonnull analogue: live pointee stays live.
+    ptr<int32> p6 = ptr($(q))
+    if (p6 == null) {
+        return 1
+    }
+    $(p6) = 2
+
+    // infeasible_else_drops_frame analogue.
+    ptr<int32> p7 = ptr(x)
+    if (p7 != null) {
+        p7 = null
     } else {
         x = 1
     }
-    return p
-}
-
-func caller_owned_guard(ptr<int32> q) -> ptr<int32> {
-    if (q != null) {
-        return q
+    if (p7 != null) {
+        return 1
     }
-    return null
-}
 
-func infeasible_break_is_ignored() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr(x)
-    while (p != null) {
-        if (p == null) {
+    // caller_owned_guard analogue.
+    if (q != null) {
+        $(q) = 3
+    } else {
+        return 1
+    }
+
+    // infeasible_break_is_ignored analogue.
+    ptr<int32> p8 = ptr(x)
+    while (p8 != null) {
+        if (p8 == null) {
             break
         }
-        p = null
+        p8 = null
     }
-    return p
-}
-
-func loop_tail_is_ignored() -> ptr<int32> {
-    int32 x = 0
-    ptr<int32> p = ptr(x)
-    while (p != null) {
-        return null
+    if (p8 != null) {
+        return 1
     }
-    return p
-}
 
-func main() -> int32 {
-    int32 z = 0
-    ptr<int32> a = null_branch_is_safe(0, ptr(z))
-    ptr<int32> b = infeasible_branch_is_ignored()
-    ptr<int32> c = loop_exit_is_null()
-    ptr<int32> d = null_guard_is_infeasible()
-    ptr<int32> e = null_loop_is_infeasible()
-    ptr<int32> f = caller_owned_pointer_is_nonnull(ptr(z))
-    ptr<int32> g = infeasible_else_drops_frame()
-    ptr<int32> h = caller_owned_guard(ptr(z))
-    ptr<int32> i = infeasible_break_is_ignored()
+    // loop_tail_is_ignored analogue: non-falling-through loop tail.
+    ptr<int32> p9 = ptr(x)
+    while (p9 != null) {
+        p9 = null
+        if (p9 == null) {
+            break
+        }
+        return 1
+    }
+    if (p9 != null) {
+        return 1
+    }
+
     return 0
 }

@@ -216,22 +216,20 @@ aggregates; each entry must still obey ordinary assignment rules. See
 
 ## 25.10 Named Arguments and Defaults
 
-Named arguments and omitted optional arguments are resolved during semantic
-analysis. A call is rewritten to a fully positional call in parameter order;
-each omitted optional argument is inserted as a copy of the declaration's
-compiled default:
+Named arguments are passed in parameter order, and each omitted optional
+argument uses a copy of the declaration's default:
 
 ```franko
 func f(int32 a, int32 b = 5) -> int32 { return a + b }
 
-f(1)          // semantic call: f(1, 5)
-f(b = 7, a = 1)   // semantic call: f(1, 7)
+f(1)            // behaves as f(1, 5)
+f(b = 7, a = 1)   // behaves as f(1, 7)
 ```
 
 The default expression is resolved once at its declaration, using the
 parameter type as the expected type. Only compile-time forms are allowed
 (integer constant expressions, `null`, strings, array literals, enum variants,
-folded `#` expressions, and value-assignable struct literals). The inserted
-argument is an ordinary semantic value; C++ code generation sees the same
-full-arity call it would see if the argument had been written explicitly.
+folded `#` expressions, and struct literals for types that are passable by
+value). An omitted argument behaves exactly as if the caller had written
+the default explicitly.
 See [Functions](19-functions.md#1915-named-and-optional-arguments).

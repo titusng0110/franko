@@ -7,14 +7,14 @@ import "franko/stdio"
 // program, including structs declared later in the file (doc 25.4);
 // the backend forward-declares every struct and orders definitions
 // topologically over by-value field dependencies (doc 25.11), so both
-// a by-value field of a later struct and an mview field of a later
-// struct compile and work.
+// a by-value field of a later struct and a dynamic-array field of a
+// later struct compile and work. No aggregate holds a pointer.
 // ============================================================
 
 struct Outer {
     Inner inner
     int32 v
-    mview<Later> link
+    [Later] links
 }
 
 struct Inner {
@@ -30,13 +30,13 @@ func main() -> int32 {
     o.v = 3
     o.inner.x = 5
 
-    Later l
-    o.link = mview(l)
-    $(o.link).tag = 8
+    o.links.init(1)
+    o.links[0].tag = 8
 
     stdout(o.inner.x)
     stdout(o.v)
-    stdout($(o.link).tag)
+    stdout(o.links[0].tag)
 
+    o.links.uninit()
     return 0
 }

@@ -78,7 +78,9 @@ Pointer assignment accepts an exactly matching pointer type, or one of
 the implicit pointer conversions:
 
 - a permission downgrade over an identical referenced type
-  (`ptr<T>` to `mview<T>`/`view<T>`, `mview<T>` to `view<T>`);
+  (`ptr<T>` to `mview<T>`/`view<T>`, `mview<T>` to `view<T>`; stacked
+  pointers downgrade at the outermost level only, such as
+  `ptr<ptr<T>>` to `view<ptr<T>>`);
 - the outermost static-to-dynamic array view decay
   (`mview<[T, N]>`/`view<[T, N]>` to `mview<[T]>`/`view<[T]>`, optionally
   combined with a downgrade from `ptr<[T, N]>` to `mview<[T]>`/`view<[T]>`).
@@ -119,16 +121,16 @@ See [Array Literals](22-array-literals.md) for literal-source rules.
 
 ## 16.4 Struct Assignment
 
-A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | pointer | struct-with-all-assignable-fields. Tuple assignment follows the same recursive rule; see [Tuple Assignment](29-tuples.md#296-assignment).
+A struct may be assigned as a whole value if and only if all of its fields are assignable, recursively: assignable = primitive | enum | pointer | struct-with-all-assignable-fields. Pointers themselves are assignable values, but they cannot appear as struct fields, tuple elements, or array elements. Tuple assignment follows the same recursive rule; see [Tuple Assignment](29-tuples.md#296-assignment).
 
-A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be value-assignable, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](30-aggregate-literals.md).
+A struct or tuple value can be constructed directly on the right-hand side with an aggregate literal. The literal creates a temporary value, which is then assigned by the built-in whole-value rules; the constructed type must be passable by value, so no custom `OPERATOR_MOV` exists for it. See [Aggregate Literals](30-aggregate-literals.md).
 
 Valid:
 
 ```franko
 struct X {
     int32 n
-    view<X> next
+    int32 m
 }
 
 X a;
@@ -273,10 +275,10 @@ rules described in [Struct Assignment](#164-struct-assignment). Compound
 assignment has no built-in struct fallback: if no overload applies, the
 assignment is rejected.
 
-A value-assignable struct cannot declare `OPERATOR_MOV`; its whole-value
-assignment is always the built-in field copy. A pointer-only struct can opt
-into whole-value assignment with `OPERATOR_MOV` even though built-in
-assignment refuses it:
+A passable-by-value struct cannot declare `OPERATOR_MOV`; its whole-value
+assignment is always the built-in field copy. A struct with array members
+can opt into whole-value assignment with `OPERATOR_MOV` even though
+built-in assignment refuses it:
 
 ```franko
 struct Blob {

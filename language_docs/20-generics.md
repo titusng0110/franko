@@ -221,12 +221,14 @@ most 1024 generic instances per compilation and an instantiation depth of 64.
 
 Inside a generic struct body, every use of the generic struct name must spell
 its type and value arguments explicitly. There is no injected-class-name
-shorthand and no inference:
+shorthand and no inference. Pointers cannot appear in struct fields, so a
+self reference uses a dynamic array of the current instance (or a pool
+index from `franko/pool` for linked shapes); a `view`/`mview`/`ptr` field
+is rejected when the template is instantiated:
 
 ```franko
 #generic struct Node<typename T> {
     T value
-    view<Node<T>> next          // the current instance
     [Node<T>] children          // dynamic array of the same instance
 }
 ```
@@ -237,7 +239,7 @@ of a non-generic method:
 ```franko
 #generic struct Node<typename T> {
     T value
-    view<Node> next                 // error: generic Node needs arguments
+    [Node] children                 // error: generic Node needs arguments
     func get(view<Node> self) -> T { return $(self).value }   // error
 }
 ```
@@ -247,7 +249,7 @@ A self reference with different arguments means a different instance:
 ```franko
 #generic struct Link<typename T> {
     T value
-    view<Link<uint8>> other
+    [Link<uint8>] others
 }
 ```
 
@@ -274,7 +276,12 @@ means a non-generic `Box`, while `ptr<Box<T>>` means a generic instance.
 
 ## 20.6 Nested Generic Types
 
-Generic arguments compose with the ordinary type constructors:
+Generic arguments compose with the ordinary type constructors. A generic
+argument may itself be a stacked pointer such as `ptr<int32>` when the
+resulting type is a pointer stack used as a local, parameter, or
+`view<ptr<T>>` out-parameter shape; it is rejected when instantiation
+would place a pointer inside an aggregate (struct field, array element,
+tuple element, or pointer referent aggregate) or in a return type:
 
 ```franko
 #generic struct Pair<typename A, typename B> {
@@ -296,7 +303,12 @@ A generic struct literal spells the instance type, for example
 `Box<int32> { value = 7 }`. Literal construction and field-wise declaration
 initialization follow the ordinary rules in
 [Aggregate Literals](30-aggregate-literals.md); the instance must be
-value-assignable, so pointer-only generic structs use the field-wise form.
+passable by value (`#is_passable_by_value`), so array-containing generic
+instances use the field-wise form. A generic instance whose field would be
+a pointer (`Box<ptr<int32>>`, `Box<view<int32>>`, and the same through
+nested arrays, tuples, or referent aggregates) is rejected when
+instantiated: pointers are forbidden in aggregates recursively, for every
+permission.
 
 ## 20.8 Namespaces and Imports
 
@@ -341,8 +353,8 @@ The same applies to `#what_type`, `#is_same_type`, string `+` folding, string
 comparisons, and the `#IS_*` target constants:
 
 ```franko
-#generic func spelling<typename T>() -> view<[byte]> {
-    return #what_type(T)
+#generic func spelling<typename T>() -> void {
+    stdout(#what_type(T))
 }
 ```
 
@@ -382,7 +394,17 @@ directive in an unselected `#if` branch.
 
 A type parameter is unconstrained: `T` may be any valid type. The template
 body is checked only after substitution, so an operation must be valid for
-each concrete argument:
+each concrete argument. A generic function or method cannot return a
+pointer, and a generic struct cannot hold a pointer: instantiating `T` (or
+any nested combination such as `[T]`, `(T, int32)`, or a referent
+aggregate) in a field or return position with a pointer type is rejected.
+Stacked pointers such as `ptr<ptr<int32>>` remain ordinary pointer values
+and are allowed as locals and parameters; read-only stacked shapes such as
+`view<ptr<int32>>` are allowed as parameters, while writable
+pointer-to-pointer parameters are forbidden (see
+[Pointers](26-pointers.md#2610-pointer-parameters-and-returns)). Use
+`#is_assignable`, `#is_passable_by_value`, and `#is_returnable_by_value`
+to test what an instantiated argument supports:
 
 ```franko
 #generic func add<typename T>(T a, T b) -> T {
@@ -515,6 +537,13 @@ The following are not supported in this version:
 - generic FFI-bridged functions;
 - type-argument inference;
 - generic operator methods;
+- generic functions or methods returning pointers (functions and methods
+  cannot return pointers; instantiating a `-> T` return with a pointer
+  type is rejected);
+- generic structs with pointer members, array elements, tuple elements, or
+  referent aggregates that would hold a pointer when instantiated
+  (pointers are forbidden in aggregates recursively, for every
+  permission);
 - runtime generic representation, type erasure, vtables, or generic function
   values.
 

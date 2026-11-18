@@ -8,8 +8,8 @@ import "franko/stdio"
 // assignment construction with aggregate literals therefore copy
 // fields directly.
 //
-// A pointer-only struct keeps custom OPERATOR_MOV for non-literal
-// whole-value assignment.
+// A non-passable struct (it has an array field) keeps custom
+// OPERATOR_MOV for non-literal whole-value assignment.
 // ============================================================
 
 struct Literal {

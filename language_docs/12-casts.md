@@ -143,6 +143,14 @@ uint8 bad = unsafe_cast<uint8>(300);   // invalid: 300 does not fit uint8
 identical and the permission may only weaken
 (`ptr -> mview -> view`).
 
+Stacked pointers downgrade at the outermost level only: `ptr<ptr<T>>`
+may cast to `view<ptr<T>>`, keeping the inner pointer type identical.
+Casting *upwards* (`view` to `mview`/`ptr`) or across different pointee
+types is invalid. A cast whose referent is a struct, array, or tuple
+containing a pointer is rejected: a pointer may refer to an aggregate
+only when that aggregate contains no pointers. Pointer stacks are not
+aggregates for this rule.
+
 ```franko
 [byte] buf;
 buf.init(16);

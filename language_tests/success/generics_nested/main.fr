@@ -6,7 +6,6 @@ import "franko/stdio"
 
 #generic struct Outer<typename T> {
     Inner<T> inner
-    view<[Inner<T>, 2]> items
 }
 
 func main() -> int32 {

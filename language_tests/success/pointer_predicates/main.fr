@@ -1,0 +1,62 @@
+import "franko/stdio"
+
+struct Value {
+    int32 x = 0
+    int32 y = 0
+}
+
+struct WithArray {
+    int32 cap = 0
+    [int32] buf
+}
+
+struct Movable {
+    int32 cap = 0
+    [int32] buf
+
+    func OPERATOR_MOV(ptr<Movable> self, view<Movable> other) -> void {
+        $(self).cap = $(other).cap
+        return
+    }
+}
+
+func main() -> int32 {
+    int32 i = 0
+    Value v
+    WithArray w
+    [int32] arr
+    ptr<int32> p = null
+    view<int32> q = null
+
+    stdout(#is_assignable(i))
+    stdout(#is_passable_by_value(i))
+    stdout(#is_returnable_by_value(i))
+
+    stdout(#is_assignable(p))
+    stdout(#is_passable_by_value(p))
+    stdout(#is_returnable_by_value(p))
+
+    stdout(#is_assignable(v))
+    stdout(#is_passable_by_value(v))
+    stdout(#is_returnable_by_value(v))
+
+    stdout(#is_assignable(w))
+    stdout(#is_passable_by_value(w))
+    stdout(#is_returnable_by_value(w))
+
+    stdout(#is_assignable(arr))
+    stdout(#is_passable_by_value(arr))
+    stdout(#is_returnable_by_value(arr))
+
+    (int32, int32) t
+    stdout(#is_assignable(t))
+    stdout(#is_passable_by_value(t))
+    stdout(#is_returnable_by_value(t))
+
+    Movable m
+    stdout(#is_assignable(m))
+    stdout(#is_passable_by_value(m))
+    stdout(#is_returnable_by_value(m))
+
+    return 0
+}

@@ -1,9 +1,0 @@
-func bad() -> ptr<int32> {
-    int32 x = 0
-    return ptr(x)
-}
-
-func main() -> int32 {
-    ptr<int32> p = bad()
-    return 0
-}

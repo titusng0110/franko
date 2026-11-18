@@ -1,0 +1,49 @@
+import "franko/stdio"
+
+func use_ptr(ptr<int32> q) -> void {
+    stdout($(q))
+    return
+}
+
+func take_stack(view<ptr<int32>> p) -> void {
+    if (p == null) {
+        return
+    }
+    ptr<int32> inner = $(p)
+    if (inner == null) {
+        return
+    }
+    stdout($(inner))
+    return
+}
+
+func main() -> int32 {
+    int32 x = 41
+    ptr<int32> inner = ptr(x)
+    ptr<ptr<int32>> outer = ptr(inner)
+
+    stdout($($(outer)))
+
+    ptr<ptr<ptr<int32>>> triple = ptr(outer)
+    stdout($($($(triple))))
+
+    view<ptr<int32>> downgraded = outer
+    take_stack(downgraded)
+
+    mview<ptr<int32>> mouter = mview(inner)
+    $(mouter) = inner
+    view<ptr<int32>> vdowngraded = mouter
+    take_stack(vdowngraded)
+
+    view<int32> v = view(x)
+    view<view<int32>> vv = view(v)
+    stdout($($(vv)))
+
+    ptr<int32> p2 = cast<ptr<int32>>(inner)
+    use_ptr(p2)
+
+    stdout(#what_type(outer))
+    stdout(#what_type(downgraded))
+
+    return 0
+}

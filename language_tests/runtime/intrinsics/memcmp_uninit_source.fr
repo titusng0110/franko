@@ -1,7 +1,7 @@
 import "franko/stdio"
 
 // Runtime fixture: intrinsics/memcmp_uninit_source
-// Both arrays are passed as caller-owned pointers, so the checker cannot
+// Both arrays are passed as caller pointers, so the checker cannot
 // prove the source is uninitialized; the runtime aborts.
 func compare(
     ptr<[int32, 4]> a,

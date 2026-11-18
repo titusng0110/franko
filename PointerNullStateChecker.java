@@ -18,7 +18,6 @@ public final class PointerNullStateChecker {
         final byte[] slotCertainty;
         final long[] slotSource;
         final int slotCount;
-        final long[] returnSet;
         final int edgeCount;
         final int[] edgeCallSiteIds;
         final long[] edgeValueSets;
@@ -34,7 +33,6 @@ public final class PointerNullStateChecker {
                 byte[] slotCertainty,
                 long[] slotSource,
                 int slotCount,
-                long[] returnSet,
                 int edgeCount,
                 int[] edgeCallSiteIds,
                 long[] edgeValueSets,
@@ -49,7 +47,6 @@ public final class PointerNullStateChecker {
             this.slotCertainty = slotCertainty;
             this.slotSource = slotSource;
             this.slotCount = slotCount;
-            this.returnSet = returnSet;
             this.edgeCount = edgeCount;
             this.edgeCallSiteIds = edgeCallSiteIds;
             this.edgeValueSets = edgeValueSets;
@@ -94,11 +91,6 @@ public final class PointerNullStateChecker {
     private boolean summaryMode;
     private int currentFunctionId = -1;
     private NullSummaryBuilder builder;
-    private final List<long[]> exitReturnSets = new ArrayList<>();
-
-    private byte[] callResultStates;
-    private boolean[] callResultResolving;
-    private MemoryBfsResult currentBfsResult;
 
     private long[] warnedVariables;
     private long[] warnedSites;
@@ -159,8 +151,6 @@ public final class PointerNullStateChecker {
             state = null;
             bfs = null;
             summaries = null;
-            callResultStates = null;
-            callResultResolving = null;
             warnedVariables = null;
             warnedSites = null;
             globalInitialStates = null;
@@ -170,8 +160,6 @@ public final class PointerNullStateChecker {
             state = new PointerNullAnalysisState(context);
             bfs = new MemorySummaryBfs(context);
             summaries = new NullSummary[context.callGraph.functionCount()];
-            callResultStates = new byte[context.callSiteCount];
-            callResultResolving = new boolean[context.callSiteCount];
             warnedVariables = new long[Math.max(1, (context.variables.length + 63) >>> 6)];
             warnedSites = new long[Math.max(1, (context.siteCount + 63) >>> 6)];
             globalInitialStates = new byte[context.variables.length];
@@ -235,12 +223,8 @@ public final class PointerNullStateChecker {
             currentFunctionId = functionId;
             state.setFunction(functionId);
             state.reset();
-            exitReturnSets.clear();
-            Arrays.fill(callResultStates, (byte) -1);
-            Arrays.fill(callResultResolving, false);
             Arrays.fill(warnedVariables, 0L);
             Arrays.fill(warnedSites, 0L);
-            currentBfsResult = null;
             suppressed = false;
 
             SastNode decl = context.functionDecl(functionId);
@@ -440,7 +424,6 @@ public final class PointerNullStateChecker {
 
             currentFunctionId = -1;
             builder = null;
-            currentBfsResult = null;
         }
 
         private NullSummary buildSummary(int exitCount) {
@@ -533,12 +516,6 @@ public final class PointerNullStateChecker {
                 );
             }
 
-            long[] returnSet = context.templates.newSet();
-
-            for (long[] exitSet : exitReturnSets) {
-                context.templates.union(returnSet, exitSet);
-            }
-
             int edgeCount = builder == null ? 0 : builder.edgeCount;
             int[] edgeCallSiteIds = new int[edgeCount];
 
@@ -559,7 +536,6 @@ public final class PointerNullStateChecker {
                     slotCertainty,
                     slotSource,
                     slotTargets.length,
-                    returnSet,
                     edgeCount,
                     edgeCallSiteIds,
                     builder == null
@@ -1000,20 +976,9 @@ public final class PointerNullStateChecker {
         }
 
         public void onReturn(SastNode node) {
-            if (summaryMode) {
-                long[] set = node.value == null
-                        ? context.templates.newSet()
-                        : symbolicValueOf(node.value);
-                exitReturnSets.add(set);
-            }
         }
 
         public void onFallthrough() {
-            if (summaryMode) {
-                long[] set = context.templates.newSet();
-                context.templates.set(set, MemoryTemplate.UNKNOWN);
-                exitReturnSets.add(set);
-            }
         }
 
         public boolean guardPathFeasible(
@@ -1120,8 +1085,7 @@ public final class PointerNullStateChecker {
                     int pointeeParam = context.templates.paramOfPointee(template);
 
                     if (assertedNull) {
-                        if (template == MemoryTemplate.NULL
-                                || context.templates.callSiteIndexOf(template) >= 0) {
+                        if (template == MemoryTemplate.NULL) {
                             context.templates.set(refined, template);
                         } else if (template == MemoryTemplate.UNKNOWN) {
                             context.templates.set(refined, MemoryTemplate.NULL);
@@ -1173,8 +1137,6 @@ public final class PointerNullStateChecker {
                                         context.templates.pointeeNonNull(pointeeParam)
                                 );
                             }
-                        } else if (template >= context.templates.callBase) {
-                            context.templates.set(refined, template);
                         }
                     }
 
@@ -1442,12 +1404,8 @@ public final class PointerNullStateChecker {
                     new MemorySummaryBfs.NodeProcessor(this)
             );
 
-            currentBfsResult = result;
-
             if (result.containsTop()) {
-                callResultStates[callSiteId] = PointerNullAnalysisState.MAYBE_NULL;
                 havocRootCells(call);
-                currentBfsResult = null;
                 return;
             }
 
@@ -1557,14 +1515,11 @@ public final class PointerNullStateChecker {
                 }
             }
 
-            byte returnState = resolveCallReturn(result, callSiteId);
-            callResultStates[callSiteId] = returnState;
             emitCallRequirements(
                     call,
                     rootRequirements,
                     rootPointeeRequirements
             );
-            currentBfsResult = null;
         }
 
         void processNode(int node) {
@@ -1796,20 +1751,6 @@ public final class PointerNullStateChecker {
                 return applyConstraint(value, constraint);
             }
 
-            int callSite = context.templates.callSiteIndexOf(template);
-
-            if (callSite >= 0) {
-                MemoryBfsResult effective = result == null
-                        ? currentBfsResult
-                        : result;
-
-                if (effective == null) {
-                    return PointerNullAnalysisState.MAYBE_NULL;
-                }
-
-                return resolveCallReturn(effective, callSite);
-            }
-
             int global = context.templates.globalIndexOf(template);
 
             if (global >= 0) {
@@ -1851,54 +1792,6 @@ public final class PointerNullStateChecker {
             }
 
             return value;
-        }
-
-        private byte resolveCallReturn(
-                MemoryBfsResult result,
-                int callSiteId
-        ) {
-            if (callSiteId < 0 || callSiteId >= callResultStates.length) {
-                return PointerNullAnalysisState.MAYBE_NULL;
-            }
-
-            if (callResultStates[callSiteId] >= 0) {
-                return callResultStates[callSiteId];
-            }
-
-            if (result.isCallSiteTop(callSiteId)) {
-                callResultStates[callSiteId] = PointerNullAnalysisState.MAYBE_NULL;
-                return PointerNullAnalysisState.MAYBE_NULL;
-            }
-
-            int node = result.callSiteNodeIndex(callSiteId);
-
-            if (node < 0) {
-                callResultStates[callSiteId] = PointerNullAnalysisState.MAYBE_NULL;
-                return PointerNullAnalysisState.MAYBE_NULL;
-            }
-
-            if (callResultResolving[callSiteId]) {
-                return PointerNullAnalysisState.MAYBE_NULL;
-            }
-
-            int functionId = result.functionId(node);
-            NullSummary summary = summaries[functionId];
-
-            if (summary == null) {
-                callResultStates[callSiteId] = PointerNullAnalysisState.MAYBE_NULL;
-                return PointerNullAnalysisState.MAYBE_NULL;
-            }
-
-            callResultResolving[callSiteId] = true;
-            byte stateValue = evalValueSet(
-                    summary.returnSet,
-                    0,
-                    result,
-                    node
-            );
-            callResultResolving[callSiteId] = false;
-            callResultStates[callSiteId] = stateValue;
-            return stateValue;
         }
 
         private void emitCallRequirements(
@@ -2053,12 +1946,7 @@ public final class PointerNullStateChecker {
             }
 
             if (expression.kind == SastKind.FUNCTION_CALL) {
-                int callSiteId = context.callSiteId(expression);
-                byte value = callResultStates[callSiteId];
-
-                return value < 0
-                        ? PointerNullAnalysisState.MAYBE_NULL
-                        : value;
+                return PointerNullAnalysisState.MAYBE_NULL;
             }
 
             return PointerNullAnalysisState.MAYBE_NULL;
@@ -2232,11 +2120,7 @@ public final class PointerNullStateChecker {
             }
 
             if (expression.kind == SastKind.FUNCTION_CALL) {
-                int callSiteId = context.callSiteId(expression);
-                context.templates.set(
-                        set,
-                        context.templates.callResult(callSiteId)
-                );
+                context.templates.set(set, MemoryTemplate.UNKNOWN);
                 return set;
             }
 
@@ -2397,10 +2281,6 @@ public final class PointerNullStateChecker {
                         return true;
                     }
 
-                    if (context.templates.callSiteIndexOf(template) >= 0) {
-                        return true;
-                    }
-
                     bits &= bits - 1;
                 }
             }
@@ -2440,10 +2320,6 @@ public final class PointerNullStateChecker {
                     if (pointeeParam >= 0
                             && context.templates.constraintOfPointee(template)
                                     != MemoryTemplate.CONSTRAINT_NULL) {
-                        return true;
-                    }
-
-                    if (context.templates.callSiteIndexOf(template) >= 0) {
                         return true;
                     }
 

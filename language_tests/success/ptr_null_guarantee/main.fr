@@ -5,28 +5,23 @@ import "franko/stdio"
 // ============================================================
 // Covers:
 //   - a local ptr<T> declaration is guaranteed null-initialized
-//   - a global ptr<T> variable is null-initialized
-//   - a view-typed struct field is null-initialized
+//   - a read-only view global is null-initialized
+//   - a stacked pointer local is null-initialized
 // ============================================================
 
-struct Box {
-    int32 v
-    view<int32> link
-}
-
-ptr<int32> g
+view<int32> g
 
 func main() -> int32 {
     // Local pointer declaration: null, guaranteed.
     ptr<int32> local
     stdout(local == null)
 
-    // Global pointer variable: null before any assignment.
+    // Read-only global view: null before any assignment.
     stdout(g == null)
 
-    // Pointer-typed struct field: null.
-    Box b
-    stdout(b.link == null)
+    // Stacked pointer local: null.
+    ptr<view<int32>> pp
+    stdout(pp == null)
 
     return 0
 }

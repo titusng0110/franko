@@ -1,18 +1,14 @@
 // ============================================================
 // LANGUAGE TEST: pointer storage is null-initialized
 // ============================================================
-// Covers: ptr/mview/view variables, pointer struct fields, pointer
-// tuple elements, pointer static-array elements, pointer dynamic-array
-// elements after init and growing resize, and nested pointers.
+// Covers: ptr/mview/view locals, read-only view globals, array
+// pointer locals, and stacked pointers. Aggregates cannot hold
+// pointers, so only direct pointer values and stacks are tested.
 // ============================================================
 
 import "franko/stdio"
 
-struct Holder {
-    view<int32> p
-    mview<int32> m
-    view<int32> v
-}
+view<int32> g_view
 
 func main() -> int32 {
     ptr<int32> p
@@ -22,30 +18,20 @@ func main() -> int32 {
     stdout(m == null)
     stdout(v == null)
 
-    Holder h
-    stdout(h.p == null)
-    stdout(h.m == null)
-    stdout(h.v == null)
+    stdout(g_view == null)
 
-    (view<int32> link, int32 value) t
-    stdout(t.link == null)
-
-    [view<int32>, 3] ps
-    stdout(ps[0] == null)
-    stdout(ps[1] == null)
-    stdout(ps[2] == null)
-
-    [view<int32>] dps
-    dps.init(2)
-    dps.resize(4)
-    stdout(dps[0] == null)
-    stdout(dps[1] == null)
-    stdout(dps[2] == null)
-    stdout(dps[3] == null)
-    dps.uninit()
+    ptr<[int32]> ap
+    mview<[int32]> am
+    view<[int32]> av
+    stdout(ap == null)
+    stdout(am == null)
+    stdout(av == null)
 
     ptr<view<int32>> pp
     stdout(pp == null)
+
+    view<ptr<int32>> vp
+    stdout(vp == null)
 
     return 0
 }

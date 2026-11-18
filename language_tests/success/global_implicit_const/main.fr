@@ -4,13 +4,13 @@ import "franko/stdio"
 // LANGUAGE TEST: Implicitly Const Globals
 // ============================================================
 // Covers: globals without the const keyword are still read-only,
-// value-assignable enum/struct/pointer defaults, namespace globals
-// with the same rules, and read-only view access.
+// passable-by-value enum/struct defaults, namespace globals
+// with the same rules, and read-only view access over a global.
 // ============================================================
 
 struct Config {
     int32 a
-    view<int32> link
+    int32 tag = 0
 }
 
 enum<uint8> Mode {
@@ -31,7 +31,7 @@ func main() -> int32 {
     stdout(G)
     stdout(mode == Mode::active)
     stdout(cfg.a)
-    stdout(cfg.link == null)
+    stdout(cfg.tag == 0)
     stdout(n::X)
     stdout(n::C.a)
 

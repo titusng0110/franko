@@ -1076,10 +1076,10 @@ public final class SemanticAnalyzer {
                 && value.kind == SastKind.AGGREGATE_LITERAL
                 && (value.type == null
                     || value.type.kind != SastTypeKind.STRUCT
-                    || !typeChecker.isValueAssignableType(value.type))) {
+                    || !typeChecker.isPassableByValueType(value.type))) {
             symbolTable.error("Default aggregate literal for parameter '"
                     + parameter.name
-                    + "' must be a value-assignable struct literal. Parameter defaults are stored as static compile-time values, so the literal's struct cannot contain owning pointers or other non-copyable state. Use a literal of a value-assignable struct or pass the value explicitly at the call site.");
+                    + "' must be a passable-by-value struct literal. Parameter defaults are stored as static compile-time values, so the literal's struct cannot contain pointers, arrays, or other non-copyable state. Use a literal of a passable-by-value struct or pass the value explicitly at the call site.");
             return fallbackStaticDefault(parameter, span);
         }
 
@@ -1227,11 +1227,11 @@ public final class SemanticAnalyzer {
                     && (value.type.kind == SastTypeKind.STRUCT
                         || (globalContext
                             && value.type.kind == SastTypeKind.TUPLE))
-                    && typeChecker.isValueAssignableType(value.type);
+                    && typeChecker.isPassableByValueType(value.type);
 
             if (!aggregateAllowed) {
                 symbolTable.error(where
-                        + " must be a value-assignable struct or tuple literal. Static defaults and global initializers are stored by value, so the literal's aggregate cannot contain arrays or other non-copyable fields. Use a literal of a value-assignable aggregate or initialize the value at runtime.");
+                        + " must be a passable-by-value struct or tuple literal. Static defaults and global initializers are stored by value, so the literal's aggregate cannot contain pointers, arrays, or other non-copyable fields. Use a literal of a passable-by-value aggregate or initialize the value at runtime.");
                 return null;
             }
 
@@ -1319,7 +1319,7 @@ public final class SemanticAnalyzer {
                         + field.name
                         + "' has type '"
                         + typeChecker.describeSafe(field.type)
-                        + "', which has no static default value. Global aggregate literals can only contain value-assignable fields. Initialize the field explicitly or move the aggregate into a function.");
+                        + "', which has no static default value. Global aggregate literals can only contain passable-by-value fields. Initialize the field explicitly or move the aggregate into a function.");
                 return out;
             }
 

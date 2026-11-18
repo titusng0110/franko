@@ -1,1 +1,1 @@
-Default aggregate literal for parameter 'b' must be a value-assignable struct literal
+must be a passable-by-value struct literal

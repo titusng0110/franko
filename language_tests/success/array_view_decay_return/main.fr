@@ -1,37 +1,19 @@
 import "franko/stdio"
 
 // ============================================================
-// LANGUAGE TEST: Returning Decayed Array Views
+// LANGUAGE TEST: Decayed Array Views via Assignment
 // ============================================================
 // Covers: static-to-dynamic view decay is representation-preserving,
-// so a decayed view<[T,N]>/mview<[T,N]> value can be returned as
-// view<[T]>/mview<[T]> without a hidden stack descriptor:
-//   - returning a decayed view parameter;
-//   - returning a view of a global static array;
-//   - returning a copied decayed view;
-//   - returning a decayed view through cast<T>(...).
-// Element access and length through the returned fat pointer keep the
+// so a decayed view<[T,N]>/mview<[T,N]> value can be assigned and passed
+// as view<[T]>/mview<[T]> without a hidden stack descriptor.
+// Element access and length through the decayed fat pointer keep the
 // original mode 2 / count N, so indexing the static storage works.
 // ============================================================
 
 view<[int32, 4]> global_value = [1, 2, 3, 4]
 
-func return_parameter(view<[int32, 4]> v) -> view<[int32]> {
-    return v
-}
-
-func return_global() -> view<[int32]> {
-    return global_value
-}
-
-func return_copied(view<[int32, 4]> v) -> view<[int32]> {
-    view<[int32]> d = v
-    view<[int32]> e = d
-    return e
-}
-
-func return_cast(view<[int32, 4]> v) -> view<[int32]> {
-    return cast<view<[int32]>>(v)
+func take_dynamic(view<[int32]> v) -> int32 {
+    return $(v)[0]
 }
 
 func main() -> int32 {
@@ -41,19 +23,22 @@ func main() -> int32 {
     xs[2] = 30
     xs[3] = 40
 
-    view<[int32]> a = return_parameter(view(xs))
+    view<[int32]> a = view(xs)
     stdout($(a).length())
     stdout($(a)[2])
 
-    view<[int32]> b = return_global()
+    view<[int32]> b = global_value
     stdout($(b).length())
     stdout($(b)[3])
 
-    view<[int32]> c = return_copied(view(xs))
-    stdout($(c)[1])
+    view<[int32]> c = view(xs)
+    view<[int32]> d = c
+    view<[int32]> e = d
+    stdout($(e)[1])
 
-    view<[int32]> d = return_cast(view(xs))
-    stdout($(d)[0])
+    view<[int32]> f = cast<view<[int32]>>(view(xs))
+    stdout($(f)[0])
+    stdout(take_dynamic(view(xs)))
 
     return 0
 }

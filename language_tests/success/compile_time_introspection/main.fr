@@ -3,11 +3,12 @@
 // ============================================================
 // Covers: #is_primitive, is_memcpy_safe, has_default_value, is_memset_safe,
 // is_same_type, what_type, string comparison folding, panic, is_matchable, is_comparable,
-// is_assignable, and is_value_assignable.
+// is_assignable, is_passable_by_value, and is_returnable_by_value.
 //
 // Point declares OPERATOR_EQ and OPERATOR_LT and relies on built-in
 // whole-value assignment; Plain has only primitive fields; WithDefault
-// has a field default; HasDyn holds a dynamic array. Pointers, dynamic
+// has a field default; HasDyn holds a dynamic array. Mixed is a
+// value-only struct with a defaulted field. Pointers, dynamic
 // arrays, and static arrays cover the remaining type shapes.
 // ============================================================
 
@@ -44,7 +45,7 @@ struct HasStaticArray {
 }
 
 struct Mixed {
-    view<int32> link
+    int32 tag = 3
     int32 value
 }
 
@@ -104,11 +105,11 @@ func main() -> int32 {
     stdout(#is_assignable(d));
     stdout(#is_assignable(h));
 
-    stdout(#is_value_assignable(i));
-    stdout(#is_value_assignable(ip));
-    stdout(#is_value_assignable(q));
-    stdout(#is_value_assignable(hsa));
-    stdout(#is_value_assignable(da));
+    stdout(#is_passable_by_value(i));
+    stdout(#is_passable_by_value(ip));
+    stdout(#is_returnable_by_value(q));
+    stdout(#is_returnable_by_value(hsa));
+    stdout(#is_passable_by_value(da));
 
     #if (0) {
         #panic("unreachable");

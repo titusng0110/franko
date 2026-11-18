@@ -9,19 +9,20 @@ import "franko/stdio"
 // read-only. v is declared ptr but only ever read from (the
 // writes happen through the extracted inner mview), so the
 // linter tells it to become a view (see main.warnings).
+// Stacked pointers are used: no aggregate holds a pointer.
 // ============================================================
 
 func main() -> int32 {
     [byte] d;
     d.init(2);
-    [mview<[byte]>] store;
-    store.init(1);
-    store[0] = mview(d);
+    mview<[byte]> slot = mview(d);
+    $(slot)[1] = 8;
 
-    ptr<[mview<[byte]>]> v = ptr(store);
-    $($(v)[0])[0] = 9;
-    stdout($(store[0]).length());
-    stdout($(store[0])[0]);
+    ptr<mview<[byte]>> v = ptr(slot);
+    $($(v))[0] = 9;
+    stdout($(slot).length());
+    stdout($(slot)[0]);
 
+    d.uninit();
     return 0;
 }

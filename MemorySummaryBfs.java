@@ -4,42 +4,29 @@ final class MemorySummaryBfs {
     static final int MAX_BFS_VISITED = 2048;
 
     enum ProcessorKind {
-        DANGLING,
         DYNAMIC_ARRAY,
         NULL_STATE
     }
 
     static final class NodeProcessor {
         final ProcessorKind kind;
-        final DanglingPointerChecker.DanglingDomain dangling;
         final DynamicArrayMemoryChecker.DynamicDomain dynamicArray;
         final PointerNullStateChecker.NullDomain nullState;
 
-        NodeProcessor(DanglingPointerChecker.DanglingDomain domain) {
-            this.kind = ProcessorKind.DANGLING;
-            this.dangling = domain;
-            this.dynamicArray = null;
-            this.nullState = null;
-        }
-
         NodeProcessor(DynamicArrayMemoryChecker.DynamicDomain domain) {
             this.kind = ProcessorKind.DYNAMIC_ARRAY;
-            this.dangling = null;
             this.dynamicArray = domain;
             this.nullState = null;
         }
 
         NodeProcessor(PointerNullStateChecker.NullDomain domain) {
             this.kind = ProcessorKind.NULL_STATE;
-            this.dangling = null;
             this.dynamicArray = null;
             this.nullState = domain;
         }
 
         void processNode(int nodeIndex) {
-            if (kind == ProcessorKind.DANGLING) {
-                dangling.processNode(nodeIndex);
-            } else if (kind == ProcessorKind.DYNAMIC_ARRAY) {
+            if (kind == ProcessorKind.DYNAMIC_ARRAY) {
                 dynamicArray.processNode(nodeIndex);
             } else {
                 nullState.processNode(nodeIndex);

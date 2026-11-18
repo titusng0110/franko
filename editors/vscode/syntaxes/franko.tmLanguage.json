@@ -133,7 +133,7 @@
           "name": "keyword.control.directive.compile-time.franko"
         },
         {
-          "match": "#(is_primitive|is_enum|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|is_matchable|is_comparable|is_assignable|is_value_assignable|what_type)\\b",
+          "match": "#(is_primitive|is_enum|is_memcpy_safe|has_default_value|is_memset_safe|is_same_type|is_matchable|is_comparable|is_assignable|is_passable_by_value|is_returnable_by_value|what_type)\\b",
           "name": "support.function.builtin.compile-time.franko"
         },
         {

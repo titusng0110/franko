@@ -5,8 +5,9 @@ import "franko/stdio"
 // ============================================================
 // Covers struct and tuple literal expressions, shuffled field
 // order, defaults, partial and empty literals, nested literals,
-// view fields initialized from array literals, and view fields
-// initialized with view(...).
+// and local views initialized from array literals or view(...).
+// Aggregates never store pointers: views live only in locals,
+// parameters, and read-only globals.
 // ============================================================
 
 struct Literal {
@@ -21,15 +22,6 @@ struct Inner {
 struct Outer {
     Inner inner
     int32 ok = 1
-}
-
-struct ViewHolder {
-    view<[int32, 3]> values
-    int32 ok
-}
-
-struct PtrHolder {
-    view<int32> value
 }
 
 func main() -> int32 {
@@ -82,12 +74,13 @@ func main() -> int32 {
     }
     stdout(multiline.x + multiline.def)
 
-    ViewHolder h = ViewHolder { values = [1, 2, 3], ok = 1 }
-    stdout($(h.values)[2] + h.ok)
+    view<[int32, 3]> h_values = [1, 2, 3]
+    int32 h_ok = 1
+    stdout($(h_values)[2] + h_ok)
 
     int32 n = 9
-    PtrHolder ph = PtrHolder { value = view(n) }
-    stdout(ph.value != null)
+    view<int32> ph_value = view(n)
+    stdout(ph_value != null)
 
     return 0
 }

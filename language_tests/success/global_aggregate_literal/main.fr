@@ -3,26 +3,27 @@ import "franko/stdio"
 // ============================================================
 // LANGUAGE TEST: Global Aggregate Literals
 // ============================================================
-// Covers: value-assignable struct/tuple globals, partial aggregate
-// literals, recursive zero/default filling, string/array view fields,
-// enum defaults, and namespaced globals.
+// Covers: passable-by-value struct/tuple globals, partial aggregate
+// literals, recursive zero/default filling, enum defaults, and
+// namespaced globals. Globals and their aggregates hold only
+// value storage: no pointers or arrays.
 // ============================================================
 
 struct Inner {
     int32 a = 5
-    view<int32> link
+    int32 tag = 0
 }
 
 struct Outer {
     int32 x
     Inner inner
     int32 y = 7
-    view<[byte, 5]> name
+    int32 marker = 0
 }
 
 int32 G = 3
 
-Outer O = Outer { x = 1, name = "hello" }
+Outer O = Outer { x = 1, marker = 104 }
 Outer P = Outer { x = 2, inner = Inner { a = 9 } }
 (int32, int32) T = (int32, int32) { 4 }
 
@@ -34,12 +35,12 @@ func main() -> int32 {
     stdout(O.x)                  // 1
     stdout(O.inner.a)            // 5
     stdout(O.y)                  // 7
-    stdout($(O.name)[0])         // 104
-    stdout(O.inner.link == null) // 1
+    stdout(O.marker)             // 104
+    stdout(O.inner.tag == 0)     // 1
 
     stdout(P.inner.a)            // 9
     stdout(P.y)                  // 7
-    stdout(P.name == null)       // 1
+    stdout(P.marker == 0)        // 1
 
     stdout(T._0)                 // 4
     stdout(T._1)                 // 0

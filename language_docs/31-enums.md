@@ -72,7 +72,7 @@ States::state2
 The first declared variant is the enum's absolute default value. Enums
 never start as uninitialized or indeterminate memory. An enum variable may be
 `const` (`const Status s = Status::alive` or `const Status s`), because enum
-types are value-assignable; the const rules then forbid later assignment and
+types are passable by value; the const rules then forbid later assignment and
 mutable pointer creation. See
 [Declarations](18-declarations.md#188-const-storage).
 
@@ -216,7 +216,8 @@ are enum variant references (see [Array Literals](22-array-literals.md)).
 | `#is_memset_safe` | `0` | Banned to prevent invalid state-machine tags. |
 | `#is_memcpy_safe` | `1` | Safe to copy valid types. |
 | `#is_assignable` | `1` | `=` is fully supported. |
-| `#is_value_assignable` | `1` | Enums can be passed and returned by value. |
+| `#is_passable_by_value` | `1` | Enums can be passed by value. |
+| `#is_returnable_by_value` | `1` | Enums can be returned by value. |
 | `#is_matchable` | `1` | Built-in `==` and `!=` are supported. |
 | `#is_comparable` | `1` | Built-in `<`, `>`, `<=`, `>=` are supported. |
 | `#what_type` | string | The enum's nominal spelling, e.g. `"Status"`. |

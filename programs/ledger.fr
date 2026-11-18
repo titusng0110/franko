@@ -195,7 +195,6 @@ struct Money {
 
 struct Account {
     uint32 id = 0
-    view<[byte]> name
     Money balance
 }
 
@@ -213,16 +212,29 @@ func setup_accounts(mview<[Account, 3]> accounts) -> void {
         return
     }
     $(accounts)[0].id = 1
-    $(accounts)[0].name = "checking"
     $(accounts)[0].balance = Money { amount = 0 }
 
     $(accounts)[1].id = 2
-    $(accounts)[1].name = "savings"
     $(accounts)[1].balance = Money { amount = 0 }
 
     $(accounts)[2].id = 3
-    $(accounts)[2].name = "reserve"
     $(accounts)[2].balance = Money { amount = 0 }
+    return
+}
+
+func print_account_name(const uint32 id) -> void {
+    if (id == 1) {
+        stdout("checking", end = null)
+        return
+    }
+    if (id == 2) {
+        stdout("savings", end = null)
+        return
+    }
+    if (id == 3) {
+        stdout("reserve", end = null)
+        return
+    }
     return
 }
 
@@ -621,7 +633,7 @@ func main() -> int32 {
     for (uint32 i = 0; i < accounts.length(); i++) {
         stdout("  account ", end = null)
         stdout(accounts[i].id, end = " ")
-        stdout(accounts[i].name, end = null)
+        print_account_name(accounts[i].id)
         stdout(": ", end = null)
         stdout(accounts[i].balance.amount)
     }

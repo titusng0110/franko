@@ -262,17 +262,21 @@ func print_hex_u32(const uint32 value) -> void {
     return
 }
 
-func kind_name(const PacketKind kind) -> view<[byte]> {
+func print_kind_name(const PacketKind kind) -> void {
     if (kind == PacketKind::data) {
-        return "data"
+        stdout("data", end = null)
+        return
     }
     if (kind == PacketKind::ack) {
-        return "ack"
+        stdout("ack", end = null)
+        return
     }
     if (kind == PacketKind::ping) {
-        return "ping"
+        stdout("ping", end = null)
+        return
     }
-    return "error"
+    stdout("error", end = null)
+    return
 }
 
 func print_header(const PacketHeader header) -> void {
@@ -285,7 +289,7 @@ func print_header(const PacketHeader header) -> void {
     stdout()
 
     stdout("kind: ", end = null)
-    stdout(kind_name(header.kind), end = null)
+    print_kind_name(header.kind)
     stdout(" (", end = null)
     stdout(cast<uint8>(header.kind), end = null)
     stdout(")")

@@ -1,0 +1,10 @@
+#generic func id<typename T>(T value) -> ptr<int32> {
+    int32 x = 0
+    return ptr(x)
+}
+
+func main() -> int32 {
+    int32 r = 0
+    ptr<int32> p = id<int32>(1)
+    return 0
+}

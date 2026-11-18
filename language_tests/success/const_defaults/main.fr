@@ -6,9 +6,9 @@ struct Inner {
 
 struct AllDefault {
     int32 a = 2
-    view<int32> link
+    int32 tag = 0
     Inner inner
-    (Inner item, view<int32> link) pair
+    (Inner item, Inner other) pair
 }
 
 enum<uint8> Status {
@@ -25,9 +25,9 @@ func main() -> int32 {
     const AllDefault value
 
     stdout(value.a + value.inner.n)
-    stdout(value.link == null)
+    stdout(value.tag == 0)
     stdout(value.pair.item.n)
-    stdout(value.pair.link == null)
+    stdout(value.pair.other.n == 1)
 
     const WithEnum stateful
     stdout(stateful.state == Status::idle)

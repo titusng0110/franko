@@ -51,7 +51,7 @@ struct Buffer {
 
 Rules:
 
-- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, pointer types (`mview<T>`, `view<T>`), tuple types, and other declared struct types. An owning `ptr<T>` field is not allowed, recursively; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
+- Field types may be: primitive integer types, enum types, static arrays (nested static arrays included), dynamic arrays, tuple types, and other declared struct types. Pointer types (`ptr<T>`, `mview<T>`, `view<T>`) are forbidden in fields, recursively through nested arrays, tuples, and structs; see [Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
 - `void` is not a valid field type, and a field type naming an undeclared struct is rejected.
 - Dynamic array fields are allocated explicitly with `field.init(n)` (see [Array Intrinsics](23-array-intrinsics.md)).
 - Duplicate field names within a struct are rejected.
@@ -110,19 +110,20 @@ struct S {
 }
 ```
 
-Indirection breaks the cycle and is allowed:
+Indirection through a dynamic array breaks the cycle and is allowed;
+pool indices from `franko/pool` are the linked-shape alternative:
 
 ```franko
 struct Node {
     int32 v
-    view<Node> next       // valid: view edge
-    [Node] kids           // valid: dynamic array edge
+    [Node] kids            // valid: dynamic array edge
 }
 ```
 
-An owning `ptr<Node>` field would break the by-value cycle too, but it is
-rejected for lifetime reasons; use a view, an mview, a dynamic-array edge, or
-pool indices instead.
+Pointers cannot break a by-value cycle: a `view<Node>`, `mview<Node>`,
+or `ptr<Node>` field is rejected like any other pointer member, so it
+never counts as a cycle-breaking edge. Use a dynamic-array edge or a
+pool index instead.
 
 ## 27.6 Assignability and Passing by Value
 
@@ -149,7 +150,7 @@ Consequences:
 - **By-value returns.** A function may return an assignable struct type.
 - Diamond-shaped field graphs are fine: a struct with two fields of the same struct type is assignable as long as that type is assignable.
 
-Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able (pointers excluded), and `memcpy`-able when every field is `memcpy`-able (pointers included). See [Array Intrinsics](23-array-intrinsics.md).
+Arrays of structs follow the usual element rules: `[X, N]` is `memset`-able only when every field of `X` is `memset`-able, and `memcpy`-able when every field is `memcpy`-able. Structs cannot hold pointers. See [Array Intrinsics](23-array-intrinsics.md).
 
 Structs are not integers: arithmetic, bitwise, shift, and logical operators reject whole structs, and `if`/`while` conditions reject bare struct values; `stdout` has no overload for a whole struct (see [Statements](17-statements.md)). The exception is the overloadable comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) and assignment operators (`=`, `+=`, ...), which use `OPERATOR_*` methods (see [Operators](13-operators.md#1310-struct-operator-overloading)). Operate on fields for everything else: `stdout(s.x)`.
 
@@ -160,7 +161,6 @@ Member access uses dot syntax. Access chains compose with every storage form:
 ```franko
 s.field               // local struct
 $(p).field        // through a pointer
-$(a.next).field   // another hop through a ptr field: deref the link first
 xs[i].field           // element of a static or dynamic array
 ```
 
@@ -173,13 +173,13 @@ xs[i].field           // element of a static or dynamic array
 
 ## 27.8 Initialization Semantics
 
-- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; enum fields default to their enum's first variant; fields without defaults start with indeterminate values, like ordinary local variables, except pointer fields, which are null (see [Declarations](18-declarations.md)).
+- **Local declarations.** A local struct without an initializer is default-constructed: fields with defaults receive their default value; enum fields default to their enum's first variant; fields without defaults start with indeterminate values, like ordinary local variables (see [Declarations](18-declarations.md)). Structs cannot hold pointers.
 - **Declaration initialization.** `P b = a;` and `P c = f();` are valid for locals and copy the whole struct value as part of the declaration.
 - **Aggregate literals.** `P p = P { field = value, ... };` default-constructs a temporary, assigns the named fields in source order, then assigns the whole temporary to the declaration target. Empty and partial literals are legal. The struct must be value-assignable to be constructed this way, even when it declares `OPERATOR_MOV`. See [Aggregate Literals](30-aggregate-literals.md).
 - **Field-wise declaration initializers.** `P p { field = value, ... }` declares `p` and assigns each named field directly, without a temporary and without invoking `OPERATOR_MOV`. This form works for pointer-only structs.
-- **Global declarations.** Global structs are statically allocated and implicitly const. The struct must be value-assignable, so pointer-only structs cannot be global. Fields without explicit defaults start at zero (pointer fields start null, enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
+- **Global declarations.** Global structs are statically allocated and implicitly const. The struct must be value-assignable, so pointer-only structs cannot be global. Fields without explicit defaults start at zero (enum fields start at their enum's first variant); fields with defaults receive their default values. Global initialization happens before `main` runs.
 
-Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate, except pointer elements, which are null; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
+Tuples follow the same rules for their elements: local tuple elements without a value are indeterminate; global tuple storage is zero-initialized, and declaration initialization copies a whole tuple value.
 
 ## 27.9 Struct Globals
 
@@ -205,8 +205,8 @@ int32 scale = 2;
 - No operators on whole structs except overloadable comparisons and assignments: arithmetic, bitwise, shift, and logical operators reject them, and bare struct conditions are invalid; `stdout` has no struct overload — print individual fields instead. Comparisons and assignments use `OPERATOR_*` methods (see [Struct Operator Overloading](13-operators.md#1310-struct-operator-overloading)).
 - Aggregate literals construct assignable struct values as expressions; literal construction requires the struct to be value-assignable. Local field-wise declaration initializers initialize any struct, including pointer-only structs, one field at a time.
 - Field defaults are `constExpr` on primitive fields only.
-- An owning `ptr<T>` may not appear in a field, including recursively through arrays, tuples, or `view<T>`/`mview<T>` referents. Use `view<T>`/`mview<T>` or the pool allocator for node-like data; see [Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
-- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); a dynamic-array field breaks the cycle.
+- No pointer type (`ptr<T>`, `mview<T>`, `view<T>`) may appear in a field, including recursively through arrays, tuples, nested structs, or pointer referent aggregates. Use a dynamic array with a separate length or the pool allocator for node-like data; see [Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
+- A struct may not reach itself by value (through struct fields, tuple elements, or static array elements); a dynamic-array field or pool index breaks the cycle. Pointers cannot appear in fields and never break the cycle.
 - A struct or tuple with any non-assignable element is pointer-only: built-in whole-value assignment, by-value parameters, and by-value returns are rejected; use a pointer (`ptr<X>` for ownership/lifecycle, or `mview<X>`/`view<X>` for access), or declare `OPERATOR_MOV` for custom whole-value struct assignment.
 - Duplicate struct names and duplicate field names are rejected.
 - The complete list of current language restrictions is in [Unsupported or Restricted Features](36-unsupported-or-restricted-features.md).

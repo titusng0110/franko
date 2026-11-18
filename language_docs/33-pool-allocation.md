@@ -45,8 +45,10 @@ index selects belongs to the program.
 ## 33.1 Prefer Pool Indices to Linked Nodes
 
 For many programs, pool allocation is a safer and faster alternative to
-linked nodes built from pointers. Instead of a `ptr<Node> next` field
-(which is not allowed inside a struct), give each live object an index from a
+linked nodes built from pointers. Instead of a pointer `next` field
+(which is not allowed inside an aggregate: pointers of any permission
+are banned from struct fields, array elements, tuple elements, and
+nested aggregates, recursively), give each live object an index from a
 pool allocator, store object data in parallel payload arrays, and store links
 as `uint32` indices. The pool recycles indices deterministically, and its
 generational variants detect stale handles. The full API is in

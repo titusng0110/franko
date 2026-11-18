@@ -108,7 +108,7 @@ Dynamic array declaration alone does not allocate element storage.
 
 The array must be initialized before ordinary indexed use.
 
-An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays and pointers), `init` and `init_zero` default-construct every element. Inner arrays start in the uninitialized state (length `0`), ready for `init`, and pointer elements start null. Growing `resize` default-constructs the new tail elements, so pointer elements added by a resize are null too.
+An initialized dynamic array owns constructed elements: for element types that need construction (for example nested dynamic arrays), `init` and `init_zero` default-construct every element. Inner arrays start in the uninitialized state (length `0`), ready for `init`. Growing `resize` default-constructs the new tail elements. Arrays cannot hold pointers, so there are no pointer elements to initialize.
 
 ## 21.3 Array Access
 
@@ -169,5 +169,5 @@ elements through `memcpy` (see [Array Literals](22-array-literals.md)).
 
 Array lifecycle and buffer-invalidation rules are covered in
 [Dynamic-Array Lifecycle Checking](32-memory-safety-checking.md#3210-dynamic-array-lifecycle-checking).
-Owning pointers are forbidden in arrays and other aggregates; see
-[Owning Pointers Cannot Be Embedded](26-pointers.md#2613-owning-pointers-cannot-be-embedded).
+Pointers are forbidden in arrays and other aggregates, for every permission; see
+[Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).

@@ -6,7 +6,9 @@ import "franko/stdio"
 // Covers: a string literal materializes as a view<[byte, N]> over
 // a hoisted global byte array; identical literals share one
 // global; global string views; strings as function arguments;
-// strings in initializer lists of view-typed slots.
+// and strings assigned to local view slots. Views live only
+// in locals, parameters, and read-only globals — never in
+// aggregate storage and never as return values.
 // ============================================================
 
 view<[byte, 6]> GREETING = "global";
@@ -35,12 +37,11 @@ func main() -> int32 {
     view<[byte, 3]> c = "xyz";
     stdout(a == c);
 
-    // Strings in initializer lists of view-typed slots.
-    [view<[byte, 3]>, 2] pair;
-    pair[0] = "abc";
-    pair[1] = "xyz";
-    stdout($(pair[0])[1]);
-    stdout($(pair[1])[1]);
+    // Strings assigned to local view slots.
+    view<[byte, 3]> p0 = "abc";
+    view<[byte, 3]> p1 = "xyz";
+    stdout($(p0)[1]);
+    stdout($(p1)[1]);
 
     return 0;
 }

@@ -1,0 +1,8 @@
+func bridged() -> ptr<int32> {
+    int32 x = 0
+    return ptr(x)
+}
+
+func main() -> int32 {
+    return 0
+}

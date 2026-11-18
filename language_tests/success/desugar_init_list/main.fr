@@ -5,17 +5,20 @@ import "franko/stdio"
 // ============================================================
 // Covers: array literals as ordinary expressions. A literal has
 // type view<[T, N]> (N is the literal length); the element
-// type T is inferred from an assignment, return, or call-argument
+// type T is inferred from an assignment or call-argument
 // context. Literals decay to view<[T]>; array-typed targets
-// are rejected (copy with memcpy instead).
+// are rejected (copy with memcpy instead). Functions never
+// return pointers, so literal values are observed through
+// locals or primitive returns.
 // ============================================================
 
 func take(view<[int32]> v) -> int32 {
     return $(v)[0] + $(v)[2];
 }
 
-func mk() -> view<[int32, 3]> {
-    return [10, 20, 30];
+func mk_val() -> int32 {
+    view<[int32, 3]> tmp = [10, 20, 30];
+    return $(tmp)[2];
 }
 
 func main() -> int32 {
@@ -33,10 +36,9 @@ func main() -> int32 {
     stdout(buf[0]);
     stdout(buf[2]);
 
-    // Call-argument and return contexts.
+    // Call-argument and local/primitive-return contexts.
     stdout(take([100, 200, 300]));
-    view<[int32, 3]> w = mk();
-    stdout($(w)[2]);
+    stdout(mk_val());
 
     // Decay to a dynamic view.
     view<[int32]> d = [1, 2, 3, 4];

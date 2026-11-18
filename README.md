@@ -30,7 +30,7 @@ Its defining features are:
 - **Compile-time `#if` / `#else` splices.** Select statements or declarations
   at function, global, namespace, and struct scope. The selected branch is
   ordinary code; the other branch does not exist. No trait solver, SFINAE, or
-  template metaprogramming. There are built-in type predicates such as `#is_memcpy_safe`, `#is_value_assignable`, and `#is_comparable`.
+  template metaprogramming. There are built-in type predicates such as `#is_memcpy_safe`, `#is_passable_by_value`, and `#is_comparable`.
 - **Named and optional arguments.** Calls may use `f(name = value)`; parameters
   may declare compile-time defaults such as `func f(int32 x, int32 y = 0)`.
   Ordinary methods support the same syntax, with `self` implicit.

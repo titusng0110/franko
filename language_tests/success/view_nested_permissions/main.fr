@@ -4,37 +4,29 @@ import "franko/stdio"
 // LANGUAGE TEST: Permission Propagation Through Nested Types
 // ============================================================
 // Covers language reference section "Permission Propagation":
-// Rule 1 (value types are transitive: a view of nested arrays
-// locks the inner arrays too) and Rule 2 (permissions stop at
-// pointer boundaries: the pointer slots a container holds are
-// locked by the container's permission, but the memory behind
-// those pointers follows each pointer's own type).
+// value types are transitive (a view of nested arrays locks the
+// inner arrays too) and direct pointer permissions (view is
+// read-only, mview allows writes). No array holds a pointer.
 // ============================================================
 
 func main() -> int32 {
-    // Rule 2: a view of an array of mviews locks the slots, not
-    // the pointees.
+    // Direct permissions: view of an array is read-only, mview writable.
     [byte] a;
     a.init(2);
-    [mview<[byte]>] store;
-    store.init(1);
-    store[0] = mview(a);
+    a[0] = 5;
+    a[1] = 6;
+    view<[byte]> v = view(a);
+    stdout($(v).length());
 
-    view<[mview<[byte]>]> v = view(store);
-    $($(v)[0])[0] = 5;
-    stdout($(store[0]).length());
-
-    // mview can overwrite the pointer slots; the extracted views stay
-    // read-only (see failure/pointer_permissions/nested_inner_view_write).
     [byte] t;
     t.init(3);
-    [view<[byte]>] slots;
-    slots.init(1);
-    mview<[view<[byte]>]> m = mview(slots);
-    $(m)[0] = view(t);
-    stdout($(slots[0]).length());
+    mview<[byte]> m = mview(t);
+    $(m)[0] = 1;
+    $(m)[1] = 2;
+    $(m)[2] = 3;
+    stdout($(m).length());
 
-    // Rule 1: transitive locking of value-typed nesting.
+    // Transitive locking of value-typed nesting.
     [[byte, 2], 2] grid;
     grid[0].memset(1);
     grid[1].memset(2);
@@ -51,5 +43,7 @@ func main() -> int32 {
     stdout(grid[0][0]);
     stdout(grid[1][1]);
 
+    a.uninit();
+    t.uninit();
     return 0;
 }

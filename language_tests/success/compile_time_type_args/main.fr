@@ -33,7 +33,7 @@ func main() -> int32 {
     stdout(#what_type([int32, 4]))                     // [int32,4]
     stdout(#what_type((int32, uint8)))                 // (int32,uint8)
     stdout(#what_type(ptr<[int32]>))                   // ptr<[int32]>
-    stdout(#is_value_assignable(S))                    // 1
+    stdout(#is_passable_by_value(S))                    // 1
     stdout(#is_matchable(Cmp))                         // 1
     stdout(#is_comparable(Cmp))                        // 0
     stdout(#is_assignable(Cmp))                        // 1

@@ -1,3 +1,4 @@
-func b_text() -> view<[byte, 4]> {
-    return "same";
+func b_matches(view<[byte, 4]> v) -> uint8 {
+    view<[byte, 4]> local = "same";
+    return local == v;
 }

@@ -29,7 +29,6 @@ no element type of its own:
 - **assignment**: the target's element type (a `view<[T, ...]>`
   variable, or an array target whose element type guides the inference
   before the assignment is rejected — see 22.5);
-- **returns**: the function's return type;
 - **call arguments**: the parameter type (function, method, or array
   intrinsic parameters such as `memcpy`'s source).
 
@@ -56,15 +55,18 @@ view<[uint8, 3]> b = [0, 127, 256];   // invalid: 256 does not fit
 Every element must be a **compile-time constant expression** (integer
 literals and operators over them). The literal's constant elements are
 stored once per distinct content and element type and shared by all
-uses, so returning a literal or calling a function that returns one is
-always safe, including recursively:
+uses. A literal is a `view` over constant storage with static lifetime;
+functions and methods cannot return pointers, so a literal is consumed
+through assignment, `memcpy`, or call arguments instead of returns:
 
 ```franko
-func first() -> view<[int32, 3]> {
-    return [1, 2, 3];       // backed by shared constant storage
+view<[int32, 3]> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
+
+func take(view<[int32]> v) -> int32 {
+    return $(v)[0]
 }
 
-view<[int32, 3]> a = [1 + 1, 2 * 3, 1 << 3];   // constant expressions
+take([1, 2, 3])   // literal as a call argument
 ```
 
 Runtime values cannot appear in a literal:
@@ -172,7 +174,7 @@ A shorter literal copies a prefix; `memcpy` copies
 ## 22.6 Views of Literals
 
 The literal's own type is `view<[T, N]>`. The ordinary static→
-dynamic view decay (see [Pointers](26-pointers.md) 24.4) applies, so
+dynamic view decay (see [Pointers](26-pointers.md#2651-static-to-dynamic-array-pointer-views)) applies, so
 it is assignable wherever a `view<[T]>` is expected:
 
 ```franko
@@ -186,9 +188,10 @@ view<[int32]> d = [1, 2, 3, 4];  // decay in a declaration
 
 When the decay applies directly to a literal in one of these positions,
 the converted view refers to the literal's constant storage and keeps
-its length. No copy or new array object is created. Returning or
-keeping such a view is therefore always safe — including from recursive
-functions — because the literal's storage has static lifetime.
+its length. No copy or new array object is created. The storage itself
+has static lifetime, but functions and methods cannot return pointers,
+so a decayed literal view is consumed in place (assignment, `memcpy`,
+or call arguments) rather than returned.
 Permission rules are unchanged: a literal (read-only) cannot initialize
 an `mview` or `ptr` variable.
 
@@ -210,8 +213,9 @@ static at every level, and the fit must be exact when `?` is used.
 
 ## 22.8 Global Literals
 
-A pointer-typed global may be initialized with an array literal of
-constant elements, like a string literal:
+A `view` global may be initialized with an array literal of
+constant elements, like a string literal (`ptr` and `mview` globals are
+rejected):
 
 ```franko
 view<[int32, 4]> G = [1, 2, 3, 4];
@@ -234,10 +238,10 @@ as a read-only `view` global as above.
 Array literals in Franko are:
 
 - ordinary expressions of type `view<[T, N]>`;
-- element type `T` inferred from assignment, return, or call-argument
+- element type `T` inferred from assignment or call-argument
   contexts (integer primitives or enums);
 - compile-time constant expressions only, backed by shared constant
-  storage with static lifetime (recursion-safe, like string literals);
+  storage with static lifetime;
 - exactly as long as written; `[]` is the null view;
 - rectangular when nested, with inner dimensions static;
 - decayable to `view<[T]>` (outermost dimension only);

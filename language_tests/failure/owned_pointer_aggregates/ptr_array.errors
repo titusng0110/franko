@@ -1,3 +1,0 @@
-owning pointer type 'ptr<T>' cannot appear inside an
-nested dynamic array such as [[T]]
-pool allocator

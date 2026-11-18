@@ -112,17 +112,16 @@ public class ExpressionChecker {
     }
 
     private void visitAggregateLiteral(SastNode node) {
-        if (!types.isValueAssignableType(node.type)) {
+        if (!types.isPassableByValueType(node.type)) {
             diagnostics.error(
                     "Aggregate literal type "
                     + node.type.describe()
-                    + " is not value-assignable; only structs and tuples whose "
-                    + "fields/elements are all value-assignable can be constructed "
+                    + " is not passable by value; only structs and tuples whose "
+                    + "fields/elements are all passable by value with no pointer or array members can be constructed "
                     + "as values. Aggregate construction copies the value into "
                     + "its destination, so every field or element must itself "
-                    + "be a value type. Replace array or pointer-only fields "
-                    + "with value types, or build the aggregate through a "
-                    + "pointer."
+                    + "be a value type. Replace array members or pointers "
+                    + "with value types, or build the aggregate field-wise."
             );
         }
 
@@ -780,12 +779,23 @@ public class ExpressionChecker {
             return;
         }
 
-        types.ensureNoEmbeddedOwnedPointer(node.type, "Cast target");
-
         if (node.type.kind == SastTypeKind.PTR) {
+            SastType referent = node.type.referencedType;
+
+            if (referent != null
+                    && referent.kind != SastTypeKind.PTR
+                    && types.containsPointerInAggregateStorage(referent)) {
+                diagnostics.error("Cast target '"
+                        + types.describeSafe(node.type)
+                        + "' is invalid: pointers cannot appear in struct fields, static array elements, dynamic array elements, tuple elements, or nested aggregates, recursively. A pointer referent that is an aggregate must contain no pointers. Remove the pointer from the aggregate, or cast to a pointer whose referent has no pointer or array members.");
+                return;
+            }
+
             visitPermissionCast(node, node.type);
             return;
         }
+
+        types.ensureNoPointerInAggregateStorage(node.type, "Cast target");
 
         if (node.type.kind == SastTypeKind.ENUM) {
             if (node.expr.type.kind == SastTypeKind.ENUM) {

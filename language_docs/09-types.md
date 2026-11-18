@@ -50,6 +50,14 @@ Pointers come in three permission levels — `ptr<T>` (owner), `mview<T>`
 (mutable view), `view<T>` (read-only view) — one capability model for all of
 them. See [Pointers](26-pointers.md).
 
+A pointer referent may itself be a pointer to unlimited depth: pointer
+stacks such as `ptr<ptr<T>>` are ordinary values. Pointers are forbidden
+in struct fields, static array elements, dynamic array elements, tuple
+elements, nested aggregates in those positions, and aggregates that are
+pointer referents, recursively; all three permissions are banned. See
+[Stacked Pointers](26-pointers.md#263-stacked-pointers) and
+[Pointers Cannot Appear in Aggregates](26-pointers.md#264-pointers-cannot-appear-in-aggregates).
+
 A static array size may be written as the inferred-size marker `?` (for
 example `view<[int32, ?]>`) only in a local `view` declaration with an
 array-literal initializer. The size is inferred at compile time, so every type

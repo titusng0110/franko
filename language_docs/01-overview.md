@@ -26,9 +26,9 @@ Franko is a small statically typed language with:
 - struct methods with explicit `self` receivers (`ptr<X> self`, `mview<X> self`, `view<X> self`, see [Methods](28-methods.md));
 - `void` and non-`void` return types;
 - global variable declarations, which are always implicitly `const`,
-  read-only, and limited to value-assignable types;
+  read-only, and limited to passable-by-value types;
 - global function declarations;
-- `const` storage on locals and parameters for value-assignable types
+- `const` storage on locals and parameters for passable-by-value types
   (globals are implicitly const; see [Declarations](18-declarations.md));
 - assignment;
 - blocks;
@@ -70,7 +70,9 @@ Franko is a small statically typed language with:
   - target constants `#IS_LINUX`, `#IS_WINDOWS`, `#IS_MACOS`,
     `#IS_X86_64`, and `#IS_ARM64`;
   - type predicates such as `#has_default_value`, `#is_memcpy_safe`,
-    `#is_same_type`, and `#is_enum`, accepting either a type or a value;
+    `#is_same_type`, `#is_enum`, `#is_assignable`,
+    `#is_passable_by_value`, and `#is_returnable_by_value`, accepting
+    either a type or a value;
   - canonical type spelling with `#what_type`;
   - compile-time strings with `+` and comparison operators, plus
     `#panic` and `#warning`
@@ -82,8 +84,9 @@ Franko is a small statically typed language with:
 - standard modules including `franko/algorithm`, `franko/bit`,
   `franko/error`, `franko/stdio`, `franko/os`, `franko/pool`, `franko/limit`,
   `franko/simd`, `franko/string`, and `franko/time`;
-- compiler checks for pointer null state, dangling frame pointers, dynamic
-  array lifecycle, unused pointer permissions, and private identifier access
+- compiler checks for pointer null state, use-after-scope, dynamic
+  array lifecycle, pointer capability use, pointer return/store
+  restrictions, and private identifier access
   (see [Memory Safety Checking](32-memory-safety-checking.md) and
   [Naming Conventions](37-naming-conventions.md)).
 

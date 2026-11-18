@@ -122,11 +122,11 @@ Rules:
 
 `init` allocates uninitialized element storage. `init_zero` allocates zeroed element storage.
 
-Element types that need construction (for example nested dynamic arrays and pointers) are default-constructed by `init` and `init_zero`: inner arrays start in the uninitialized state (length `0`), ready for `init`, and pointer elements start null. Element types that are trivially default-constructible keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work.
+Element types that need construction (for example nested dynamic arrays) are default-constructed by `init` and `init_zero`: inner arrays start in the uninitialized state (length `0`), ready for `init`. Element types that are trivially default-constructible keep raw (`init`) or zeroed (`init_zero`) storage with no per-element work. Arrays cannot hold pointers.
 
 ## 23.3 `resize`
 
-Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements, so pointer elements added by the growth start null; shrinking destroys the dropped tail elements. Element types with a trivial default constructor skip construction, and trivially destructible element types skip destruction.
+Resizes an already-initialized dynamic array. Growing default-constructs the new tail elements; shrinking destroys the dropped tail elements. Element types with a trivial default constructor skip construction, and trivially destructible element types skip destruction. Arrays cannot hold pointers.
 
 Rules:
 
@@ -190,6 +190,8 @@ Current memset-safe types:
 [Compile-Time Reflection](35-compile-time-reflection.md)). It is
 deliberately distinct from `#has_default_value`: a struct with a field
 default is memset-safe and also has a defined default value.
+The pointer row describes direct pointer values; arrays cannot hold
+pointers, so a pointer never occurs as an array element.
 
 ## 23.7 `memcpy`
 
@@ -257,6 +259,9 @@ Current memcpy-safe types:
 | static arrays of memcpy-safe elements | yes |
 | structs whose fields are all memcpy-safe, recursively | yes |
 | dynamic arrays | no |
+
+The pointer row describes direct pointer values; arrays cannot hold
+pointers, so a pointer never occurs as an array element.
 
 ## 23.10 `length`
 

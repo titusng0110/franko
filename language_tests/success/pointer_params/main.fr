@@ -1,0 +1,41 @@
+import "franko/stdio"
+
+func add(int32 a, int32 b = 5) -> int32 {
+    return a + b
+}
+
+func sum_view(view<[int32]> xs, int32 extra = 0) -> int32 {
+    if (xs == null) {
+        return extra
+    }
+    return $(xs)[0] + extra
+}
+
+func take_readonly(view<ptr<int32>> p, int32 fallback = 0) -> int32 {
+    if (p == null) {
+        return fallback
+    }
+    ptr<int32> inner = $(p)
+    if (inner == null) {
+        return fallback
+    }
+    return $(inner)
+}
+
+func main() -> int32 {
+    stdout(add(1))
+    stdout(add(1, b = 2))
+
+    [int32, 3] arr
+    arr.memcpy([10, 20, 30])
+    stdout(sum_view(view(arr)))
+    stdout(sum_view(view(arr), extra = 5))
+
+    int32 x = 77
+    ptr<int32> inner = ptr(x)
+    view<ptr<int32>> rp = view(inner)
+    stdout(take_readonly(rp))
+    stdout(take_readonly(rp, fallback = 1))
+
+    return 0
+}

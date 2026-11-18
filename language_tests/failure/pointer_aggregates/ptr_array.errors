@@ -1,0 +1,1 @@
+pointers cannot appear in struct fields, static array elements, dynamic array elements, tuple elements
