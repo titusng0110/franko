@@ -363,9 +363,11 @@ simd::x86::crc32_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 coun
 
 Folds `data[src_start, src_start + count)` into the CRC-32C (Castagnoli,
 reflected polynomial `0x82F63B78`) checksum starting from `crc` and returns
-the updated value. A `crc` of `0` starts a new checksum. Processes eight
-bytes at a time with SSE4.2 and a scalar bitwise tail. This is a different
-polynomial than ARM `crc32b_u8`; only ARM `crc32cb_u8` matches it.
+the updated value. This is the raw hardware update: there is no pre- or
+post-inversion. To compute the common zlib/Ethernet-style CRC, start from
+`0xFFFFFFFF` and invert the final value. Processes eight bytes at a time
+with SSE4.2 and a scalar bitwise tail. This is a different polynomial than
+ARM `crc32b_u8`; only ARM `crc32cb_u8` matches it.
 
 ### `cvtepu8_epi16`
 
@@ -390,9 +392,7 @@ Reads `count` unsigned 32-bit accumulators from
 `a[a_start, ...)` (unsigned) and `b[b_start, ...)` (signed). For each
 output lane `i`, adds the dot product of the four unsigned `a` bytes with
 the four signed `b` bytes, wrapping on overflow. Processes eight lanes at
-a time with AVX2+VNNI, four lanes with AVX-VNNI, and a scalar tail. The
-accumulator is `uint32` here but `int32` under ARM `vusdotq_s32`; the bit
-pattern is identical.
+a time with AVX2+VNNI, four lanes with AVX-VNNI, and a scalar tail.
 
 ### `ptest_epi8`
 
@@ -681,11 +681,12 @@ every value above `15` as zero.
 simd::arm::vaeseq_u8(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
 ```
 
-Reads the target range in 16-byte blocks and applies one AES encryption round
-to each block using the 16-byte round key that starts at
-`round_key[src_start]`. Writes each transformed block back to the target
-range. Only complete 16-byte blocks are processed; a trailing group shorter
-than 16 bytes is left unchanged.
+Reads the target range in 16-byte blocks and executes the ARM `AESE`
+instruction on each block using the 16-byte round key that starts at
+`round_key[src_start]`: AddRoundKey, then SubBytes, then ShiftRows. Unlike
+x86 `aesenc_si256`, this does not perform MixColumns. Writes each transformed
+block back to the target range. Only complete 16-byte blocks are processed;
+a trailing group shorter than 16 bytes is left unchanged.
 
 Returns `0` on success. Returns a nonzero value and leaves the target
 unchanged when the ARM AES extension is unavailable at compile time. When
@@ -697,11 +698,12 @@ unchanged when the ARM AES extension is unavailable at compile time. When
 simd::arm::vaesdq_u8(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
 ```
 
-Reads the target range in 16-byte blocks and applies one AES decryption round
-to each block using the 16-byte round key that starts at
-`round_key[src_start]`. Writes each transformed block back to the target
-range. Only complete 16-byte blocks are processed; a trailing group shorter
-than 16 bytes is left unchanged.
+Reads the target range in 16-byte blocks and executes the ARM `AESD`
+instruction on each block using the 16-byte round key that starts at
+`round_key[src_start]`: AddRoundKey, then InvShiftRows, then InvSubBytes.
+Unlike x86 `aesdec_si256`, this does not perform InvMixColumns. Writes each
+transformed block back to the target range. Only complete 16-byte blocks are
+processed; a trailing group shorter than 16 bytes is left unchanged.
 
 Returns `0` on success. Returns a nonzero value and leaves the target
 unchanged when the ARM AES extension is unavailable at compile time. When
@@ -725,10 +727,12 @@ simd::arm::crc32b_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 cou
 
 Folds `data[src_start, src_start + count)` into the CRC-32 (ISO 3309,
 reflected polynomial `0xEDB88320`) checksum starting from `crc` and returns
-the updated value. A `crc` of `0` starts a new checksum. Processes eight
-bytes at a time with the ARM CRC extension and a scalar bitwise tail. This
-is a different polynomial than x86 `crc32_u8`; only ARM `crc32cb_u8`
-matches that one.
+the updated value. This is the raw `CRC32B` update: there is no pre- or
+post-inversion. With `crc == 0` the result is the hardware accumulator, not
+the zlib/Ethernet CRC; start from `0xFFFFFFFF` and invert the final value
+for that convention. Processes eight bytes at a time with the ARM CRC
+extension and a scalar bitwise tail. This is a different polynomial than
+x86 `crc32_u8`; only ARM `crc32cb_u8` matches that one.
 
 ### `crc32cb_u8`
 
@@ -751,20 +755,6 @@ Reads `count` bytes from `source[src_start, src_start + count)` and writes
 them zero-extended to `count` unsigned 16-bit lanes at
 `target[dst_start, dst_start + count)`. The previous contents of the target
 range are not read. Processes 16 bytes and a scalar tail.
-
-### `vusdotq_s32`
-
-```franko
-simd::arm::vusdotq_s32(mview<[int32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void
-```
-
-Reads `count` signed 32-bit accumulators from
-`acc[acc_start, acc_start + count)` and `4 * count` bytes from each of
-`a[a_start, ...)` (unsigned) and `b[b_start, ...)` (signed). For each
-output lane `i`, adds the dot product of the four unsigned `a` bytes with
-the four signed `b` bytes, wrapping on overflow. Requires the dot-product
-extension; otherwise runs a scalar tail. The accumulator is `int32` here
-but `uint32` under x86 `dpbusd_epi32`; the bit pattern is identical.
 
 ### `vcntq_u8`
 
@@ -834,9 +824,8 @@ bypasses the cache.
   with `vmaxvq_u8`, or a scalar early-exit loop.
 - `crc32_u8` (x86) is Castagnoli only. Its ARM match is `crc32cb_u8`,
   not `crc32b_u8`, which computes the ISO polynomial instead.
-- `dpbusd_epi32` (x86, `uint32` accumulator) and `vusdotq_s32` (ARM,
-  `int32` accumulator) compute the same unsigned-by-signed dot product;
-  only the accumulator's declared signedness differs.
+- `dpbusd_epi32` has no ARM counterpart here: its equivalent `USDOT`
+  instruction is part of `FEAT_I8MM`, which Apple M3 does not implement.
 - `clmulepi64_epi64` and `vmull_p64` share the interleaved low/high target
   layout: `target[2*i]` is the low word, `target[2*i + 1]` the high
   word, so the target range always holds `2 * count` lanes.
@@ -869,9 +858,10 @@ x86_64:
 ARM64:
 
 - All non-AES operations use baseline AArch64 NEON instructions, except
-  `vusdotq_s32` (dot-product extension), `vmull_p64` (cryptography
-  extension), and `crc32b_u8`/`crc32cb_u8` (CRC extension), which run
-  scalar fallbacks without them.
+  `vmull_p64` (cryptography extension) and `crc32b_u8`/`crc32cb_u8`
+  (CRC extension), which run scalar fallbacks without them. The surface
+  deliberately stops at the Apple M3 feature set: it exposes no I8MM
+  (`USDOT`/`SMMLA`) or SVE wrappers.
 - `vaeseq_u8` and `vaesdq_u8` use the ARM AES extension when available and
   otherwise return a nonzero error code.
 

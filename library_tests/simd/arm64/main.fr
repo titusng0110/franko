@@ -207,15 +207,6 @@ func main() -> int32 {
     stdout(widened[0])
     stdout(widened[15])
 
-    [int32, 4] dots
-    dots[0] = 0
-    dots[1] = 0
-    dots[2] = 0
-    dots[3] = 0
-    simd::arm::vusdotq_s32(mview(dots), view(a), view(signed_bytes), 0, 0, 0, 4)
-    stdout(dots[0])
-    stdout(dots[3])
-
     simd::arm::vcntq_u8(mview(out), view(a), 0, 0, 16)
     stdout(out[0])
     stdout(out[1])

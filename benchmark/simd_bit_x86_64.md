@@ -2,8 +2,9 @@
 
 **19 `franko/simd` x86 functions × 3 buffer sizes (64 / 512 / 4096 bytes) + 8 `franko/bit` functions · Intel i5-12600K (WSL2) · `-march=native` · 2026-11-19**
 
-This report measures the two Franko intrinsic modules against naive scalar
-Franko implementations:
+This is the x86_64 report; the ARM64 counterpart is
+`simd_bit_arm64.md`. It measures the two Franko intrinsic modules against
+naive scalar Franko implementations:
 
 - `franko/simd`, x86_64 namespace, excluding the AES round functions
   (`aesenc_si256`/`aesdec_si256` need AES-NI, which this build enables,
@@ -287,8 +288,8 @@ The harness picks the SIMD fixture by host architecture
 (`simd_x86_64_vs_naive.fr` on x86_64, `simd_arm64_vs_naive.fr` on
 arm64), builds both fixtures with `-Omax` (plus `-march=native` with
 `--native`), runs each five times, verifies that the module and naive
-checksums match, and prints the tables above (one per buffer size on
-x86_64). Use `--runs N` for more samples and `--cpu N` to pin on systems
+checksums match, and prints one table per buffer size on the SIMD
+fixture. Use `--runs N` for more samples and `--cpu N` to pin on systems
 that support CPU affinity. Without `--native`, the SSSE3/SSE4.1-gated
 rows (`blendv`, `alignr`, `abs`, `shuffle`) run their scalar fallbacks
 on the module side.

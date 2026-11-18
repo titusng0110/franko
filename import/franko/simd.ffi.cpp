@@ -13,8 +13,10 @@
 #endif
 // Target ceiling: x86-64 Alder Lake and newer (AVX2, VAES; no AVX-512
 // tiers — neither ceiling machine has it), ARM Apple M3 (ARMv8.6-A with
-// crypto, 128-bit NEON; no SVE). Older machines fall back to the 128-bit
-// and scalar paths in each block below.
+// AES/PMULL/CRC32/DotProd, 128-bit NEON; no I8MM, no SVE). The surface
+// only exposes instructions the M3 actually implements, so there is no
+// USDOT/I8MM wrapper. Older machines fall back to the 128-bit and scalar
+// paths in each block below.
 // @@end
 
 
@@ -3425,83 +3427,6 @@ FRANKO_INLINE void FUNC_vmovl_u8_b3d94c16(Franko_Fat_Pointer<uint16_t> PARAM_tar
     }
     for (; i < PARAM_count; ++i) {
         target[i] = source[i];
-    }
-}
-}
-}
-// @@end
-
-// @@simd::arm::vusdotq_s32
-namespace NS_simd {
-namespace NS_arm {
-FRANKO_INLINE void FUNC_vusdotq_s32_51e00e94(Franko_Fat_Pointer<int32_t> PARAM_acc, Franko_Fat_Pointer<uint8_t> PARAM_a, Franko_Fat_Pointer<int8_t> PARAM_b, uint32_t PARAM_acc_start, uint32_t PARAM_a_start, uint32_t PARAM_b_start, uint32_t PARAM_count)
-{
-    int32_t* acc = PARAM_acc.data;
-    uint32_t acc_length = PARAM_acc.count;
-    if (acc == nullptr && PARAM_count != 0) {
-        franko_panic("simd: null acc");
-    }
-    const uint8_t* a = PARAM_a.data;
-    uint32_t a_length = PARAM_a.count;
-    if (a == nullptr && PARAM_count != 0) {
-        franko_panic("simd: null a");
-    }
-    const int8_t* b = PARAM_b.data;
-    uint32_t b_length = PARAM_b.count;
-    if (b == nullptr && PARAM_count != 0) {
-        franko_panic("simd: null b");
-    }
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (PARAM_acc_start > acc_length || PARAM_count > acc_length - PARAM_acc_start) {
-        franko_panic("simd: acc range out of bounds");
-    }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (PARAM_a_start > a_length || PARAM_count > (a_length - PARAM_a_start) / 4) {
-        franko_panic("simd: a range out of bounds");
-    }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (PARAM_b_start > b_length || PARAM_count > (b_length - PARAM_b_start) / 4) {
-        franko_panic("simd: b range out of bounds");
-    }
-#endif
-    if (PARAM_count == 0) {
-        return;
-    }
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(acc) == static_cast<const void*>(a) && PARAM_acc_start != PARAM_a_start) {
-        franko_panic("simd: overlapping acc and a ranges");
-    }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(acc) == static_cast<const void*>(b) && PARAM_acc_start != PARAM_b_start) {
-        franko_panic("simd: overlapping acc and b ranges");
-    }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(a) == static_cast<const void*>(b) && PARAM_a_start != PARAM_b_start) {
-        franko_panic("simd: overlapping a and b ranges");
-    }
-#endif
-    acc += PARAM_acc_start;
-    a += PARAM_a_start;
-    b += PARAM_b_start;
-    uint32_t i = 0;
-#if defined(__ARM_FEATURE_DOTPROD)
-    for (; i + 4 <= PARAM_count; i += 4) {
-        const int32x4_t sum = vld1q_s32(acc + i);
-        const uint8x16_t x = vld1q_u8(a + 4 * i);
-        const int8x16_t y = vld1q_s8(b + 4 * i);
-        vst1q_s32(acc + i, vusdotq_s32(sum, x, y));
-    }
-#endif
-    for (; i < PARAM_count; ++i) {
-        int32_t sum = acc[i];
-        for (uint32_t k = 0; k < 4; ++k) {
-            sum = sum + static_cast<int32_t>(a[4 * i + k]) * static_cast<int32_t>(b[4 * i + k]);
-        }
-        acc[i] = sum;
     }
 }
 }

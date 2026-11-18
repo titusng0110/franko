@@ -227,10 +227,6 @@
     },
     {
       "namespace": "simd::arm",
-      "name": "vusdotq_s32"
-    },
-    {
-      "namespace": "simd::arm",
       "name": "vcntq_u8"
     },
     {

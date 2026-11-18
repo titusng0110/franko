@@ -228,10 +228,6 @@ namespace simd {
                 return
             }
 
-            #inline func vusdotq_s32(mview<[int32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void {
-                return
-            }
-
             #inline func vcntq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
