@@ -1,0 +1,3289 @@
+import "franko/stdio"
+import "franko/time"
+import "franko/simd"
+
+// x86_64 SIMD vs naive Franko.
+//
+// Each case calls the module function and the scalar reference on buffers
+// of 64, 512, or 4096 bytes (4,000,000 / 2,000,000 / 1,000,000 calls).
+// One input byte rotates per iteration and a rotating target byte is
+// checksummed so the optimizer cannot remove the work. Build with -Omax
+// and run on an x86_64 host.
+//
+// The naive functions are straightforward scalar Franko: single loads
+// hoisted into locals, canonical branches, no SIMD. They are deliberately
+// allowed to auto-vectorize; that is part of the measurement.
+//
+// Naive semantics match the bridge implementation (Intel intrinsic
+// semantics), including `andnot_si256` computing `~target & source` and
+// `shuffle_epi8` using the low four index bits when bit 7 is clear.
+
+// Copy helpers.
+func copy_bytes(mview<[byte]> dst, view<[byte]> src, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        $(dst)[i] = $(src)[i]
+        i = i + 1
+    }
+    return
+}
+
+func copy_i8(mview<[int8]> dst, view<[int8]> src, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        $(dst)[i] = $(src)[i]
+        i = i + 1
+    }
+    return
+}
+
+func copy_i16(mview<[int16]> dst, view<[int16]> src, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        $(dst)[i] = $(src)[i]
+        i = i + 1
+    }
+    return
+}
+
+func naive_xor_si256(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = a ^ b
+        i = i + 1
+    }
+    return
+}
+
+func naive_and_si256(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = a & b
+        i = i + 1
+    }
+    return
+}
+
+func naive_or_si256(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = a | b
+        i = i + 1
+    }
+    return
+}
+
+func naive_andnot_si256(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = (~a) & b
+        i = i + 1
+    }
+    return
+}
+
+func naive_adds_epu8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        uint32 sum = cast<uint32>($(target)[i]) + cast<uint32>($(source)[i])
+        if (sum > 255) {
+            $(target)[i] = 255
+        } else {
+            $(target)[i] = unsafe_cast<byte>(sum)
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_subs_epu8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        if (a > b) {
+            $(target)[i] = a - b
+        } else {
+            $(target)[i] = 0
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_max_epu8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        if (a < b) {
+            $(target)[i] = b
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_min_epu8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        if (a > b) {
+            $(target)[i] = b
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_add_epi8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = a + b
+        i = i + 1
+    }
+    return
+}
+
+func naive_sub_epi8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(target)[i]
+        byte b = $(source)[i]
+        $(target)[i] = a - b
+        i = i + 1
+    }
+    return
+}
+
+func naive_avg_epu8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        uint32 sum = cast<uint32>($(target)[i]) + cast<uint32>($(source)[i]) + 1
+        $(target)[i] = unsafe_cast<byte>(sum >> 1)
+        i = i + 1
+    }
+    return
+}
+
+func naive_blendv_epi8(mview<[byte]> target, view<[byte]> source, view<[byte]> mask, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        uint32 m = cast<uint32>($(mask)[i])
+        if ((m & 128) != 0) {
+            $(target)[i] = $(source)[i]
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_alignr_epi8(mview<[byte]> target, view<[byte]> source, uint32 count, uint32 shift) -> void {
+    if (shift >= 16) {
+        uint32 z = 0
+        while (z < count) {
+            $(target)[z] = 0
+            z = z + 1
+        }
+        return
+    }
+    uint32 base = 0
+    while (base < count) {
+        [byte, 16] block
+        uint32 j = 0
+        while (j < 16) {
+            block[j] = $(target)[base + j]
+            j = j + 1
+        }
+        j = 0
+        while (j < 16) {
+            uint32 offset = j + shift
+            if (offset < 16) {
+                $(target)[base + j] = $(source)[base + offset]
+            } else {
+                $(target)[base + j] = block[offset - 16]
+            }
+            j = j + 1
+        }
+        base = base + 16
+    }
+    return
+}
+
+func naive_unpacklo_epi8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 base = 0
+    while (base < count) {
+        [byte, 16] block
+        uint32 j = 0
+        while (j < 16) {
+            block[j] = $(target)[base + j]
+            j = j + 1
+        }
+        j = 0
+        while (j < 16) {
+            if ((j % 2) == 0) {
+                $(target)[base + j] = block[j / 2]
+            } else {
+                $(target)[base + j] = $(source)[base + (j / 2)]
+            }
+            j = j + 1
+        }
+        base = base + 16
+    }
+    return
+}
+
+func naive_unpackhi_epi8(mview<[byte]> target, view<[byte]> source, uint32 count) -> void {
+    uint32 base = 0
+    while (base < count) {
+        [byte, 16] block
+        uint32 j = 0
+        while (j < 16) {
+            block[j] = $(target)[base + j]
+            j = j + 1
+        }
+        j = 0
+        while (j < 16) {
+            if ((j % 2) == 0) {
+                $(target)[base + j] = block[8 + (j / 2)]
+            } else {
+                $(target)[base + j] = $(source)[base + 8 + (j / 2)]
+            }
+            j = j + 1
+        }
+        base = base + 16
+    }
+    return
+}
+
+func naive_packus_epi16(mview<[byte]> target, view<[int16]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        int32 value = cast<int32>($(source)[i])
+        if (value < 0) {
+            $(target)[i] = 0
+        } else if (value > 255) {
+            $(target)[i] = 255
+        } else {
+            $(target)[i] = unsafe_cast<byte>(value)
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_sad_epu8(view<[byte]> left, view<[byte]> right, uint32 count) -> uint64 {
+    uint64 total = 0
+    uint32 i = 0
+    while (i < count) {
+        byte a = $(left)[i]
+        byte b = $(right)[i]
+        if (a > b) {
+            total = total + cast<uint64>(a - b)
+        } else {
+            total = total + cast<uint64>(b - a)
+        }
+        i = i + 1
+    }
+    return total
+}
+
+func naive_abs_epi8(mview<[int8]> target, view<[int8]> source, uint32 count) -> void {
+    uint32 i = 0
+    while (i < count) {
+        int8 value = $(source)[i]
+        if (value < 0) {
+            $(target)[i] = 0 - value
+        } else {
+            $(target)[i] = value
+        }
+        i = i + 1
+    }
+    return
+}
+
+func naive_shuffle_epi8(mview<[byte]> target, view<[byte]> indices, uint32 count) -> void {
+    uint32 base = 0
+    while (base < count) {
+        [byte, 16] table
+        uint32 j = 0
+        while (j < 16) {
+            table[j] = $(target)[base + j]
+            j = j + 1
+        }
+        j = 0
+        while (j < 16) {
+            uint32 ctrl = cast<uint32>($(indices)[base + j])
+            if ((ctrl & 128) != 0) {
+                $(target)[base + j] = 0
+            } else {
+                $(target)[base + j] = table[ctrl & 15]
+            }
+            j = j + 1
+        }
+        base = base + 16
+    }
+    return
+}
+
+func bench_xor_si256_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::xor_si256(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_xor_si256(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_xor_si256_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::xor_si256(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_xor_si256(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_xor_si256_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::xor_si256(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_xor_si256(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_and_si256_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::and_si256(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_and_si256(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_and_si256_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::and_si256(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_and_si256(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_and_si256_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::and_si256(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_and_si256(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_or_si256_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::or_si256(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_or_si256(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_or_si256_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::or_si256(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_or_si256(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_or_si256_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::or_si256(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_or_si256(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_andnot_si256_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::andnot_si256(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_andnot_si256(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_andnot_si256_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::andnot_si256(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_andnot_si256(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_andnot_si256_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::andnot_si256(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_andnot_si256(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_adds_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::adds_epu8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_adds_epu8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_adds_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::adds_epu8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_adds_epu8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_adds_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::adds_epu8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_adds_epu8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_subs_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::subs_epu8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_subs_epu8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_subs_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::subs_epu8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_subs_epu8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_subs_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::subs_epu8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_subs_epu8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_max_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::max_epu8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_max_epu8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_max_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::max_epu8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_max_epu8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_max_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::max_epu8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_max_epu8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_min_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::min_epu8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_min_epu8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_min_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::min_epu8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_min_epu8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_min_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::min_epu8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_min_epu8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_add_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::add_epi8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_add_epi8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_add_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::add_epi8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_add_epi8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_add_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::add_epi8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_add_epi8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sub_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::sub_epi8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_sub_epi8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sub_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::sub_epi8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_sub_epi8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sub_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::sub_epi8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_sub_epi8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_avg_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::avg_epu8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_avg_epu8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_avg_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::avg_epu8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_avg_epu8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_avg_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::avg_epu8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_avg_epu8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_blendv_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    [byte, 64] master_mask
+    [byte, 64] mask
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        if (i == 15) {
+            mask[i] = 0x0F
+        } else if ((i % 2) == 0) {
+            mask[i] = 0xFF
+        } else {
+            mask[i] = 0x00
+        }
+        master_mask[i] = mask[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    copy_bytes(mview(mask), view(master_mask), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::blendv_epi8(mview(target), view(source), view(mask), 0, 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    copy_bytes(mview(mask), view(master_mask), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_blendv_epi8(mview(target), view(source), view(mask), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_alignr_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::alignr_epi8(mview(target), view(source), 0, 0, 64, 3)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_alignr_epi8(mview(target), view(source), 64, 3)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpacklo_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::unpacklo_epi8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_unpacklo_epi8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpackhi_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] master_source
+    [byte, 64] target
+    [byte, 64] source
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::unpackhi_epi8(mview(target), view(source), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(source), view(master_source), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 63] = unsafe_cast<byte>(r)
+        naive_unpackhi_epi8(mview(target), view(source), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_blendv_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    [byte, 512] master_mask
+    [byte, 512] mask
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        if (i == 15) {
+            mask[i] = 0x0F
+        } else if ((i % 2) == 0) {
+            mask[i] = 0xFF
+        } else {
+            mask[i] = 0x00
+        }
+        master_mask[i] = mask[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    copy_bytes(mview(mask), view(master_mask), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::blendv_epi8(mview(target), view(source), view(mask), 0, 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    copy_bytes(mview(mask), view(master_mask), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_blendv_epi8(mview(target), view(source), view(mask), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_alignr_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::alignr_epi8(mview(target), view(source), 0, 0, 512, 3)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_alignr_epi8(mview(target), view(source), 512, 3)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpacklo_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::unpacklo_epi8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_unpacklo_epi8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpackhi_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] master_source
+    [byte, 512] target
+    [byte, 512] source
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::unpackhi_epi8(mview(target), view(source), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(source), view(master_source), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 511] = unsafe_cast<byte>(r)
+        naive_unpackhi_epi8(mview(target), view(source), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_blendv_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    [byte, 4096] master_mask
+    [byte, 4096] mask
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        if (i == 15) {
+            mask[i] = 0x0F
+        } else if ((i % 2) == 0) {
+            mask[i] = 0xFF
+        } else {
+            mask[i] = 0x00
+        }
+        master_mask[i] = mask[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    copy_bytes(mview(mask), view(master_mask), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::blendv_epi8(mview(target), view(source), view(mask), 0, 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    copy_bytes(mview(mask), view(master_mask), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_blendv_epi8(mview(target), view(source), view(mask), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_alignr_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::alignr_epi8(mview(target), view(source), 0, 0, 4096, 3)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_alignr_epi8(mview(target), view(source), 4096, 3)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpacklo_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::unpacklo_epi8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_unpacklo_epi8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_unpackhi_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] master_source
+    [byte, 4096] target
+    [byte, 4096] source
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        master_source[i] = source[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::unpackhi_epi8(mview(target), view(source), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(source), view(master_source), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source[r & 4095] = unsafe_cast<byte>(r)
+        naive_unpackhi_epi8(mview(target), view(source), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_packus_epi16_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] target
+    [int16, 64] master_source_i16
+    [int16, 64] source_i16
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source_i16[i] = unsafe_cast<int16>(unsafe_cast<int32>(i) * 300 - 5000)
+        master_source_i16[i] = source_i16[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_i16(mview(source_i16), view(master_source_i16), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i16[r & 63] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::packus_epi16(mview(target), view(source_i16), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_i16(mview(source_i16), view(master_source_i16), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i16[r & 63] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        naive_packus_epi16(mview(target), view(source_i16), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sad_epu8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master_left
+    [byte, 64] master_right
+    [byte, 64] left
+    [byte, 64] right
+    uint32 i = 0
+    while (i < 64) {
+        master_left[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        left[i] = master_left[i]
+        master_right[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        right[i] = master_right[i]
+        i = i + 1
+    }
+    copy_bytes(mview(left), view(master_left), 64)
+    copy_bytes(mview(right), view(master_right), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        left[r & 63] = unsafe_cast<byte>(r)
+        simd_checksum = simd_checksum + unsafe_cast<int64>(simd::x86::sad_epu8(view(left), view(right), 0, 0, 64))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(left), view(master_left), 64)
+    copy_bytes(mview(right), view(master_right), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        left[r & 63] = unsafe_cast<byte>(r)
+        naive_checksum = naive_checksum + unsafe_cast<int64>(naive_sad_epu8(view(left), view(right), 64))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_abs_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [int8, 64] master_i8
+    [int8, 64] master_source_i8
+    [int8, 64] target_i8
+    [int8, 64] source_i8
+    uint32 i = 0
+    while (i < 64) {
+        master_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 4 - 128)
+        target_i8[i] = master_i8[i]
+        source_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 3 - 96)
+        master_source_i8[i] = source_i8[i]
+        i = i + 1
+    }
+    copy_i8(mview(target_i8), view(master_i8), 64)
+    copy_i8(mview(source_i8), view(master_source_i8), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i8[r & 63] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::abs_epi8(mview(target_i8), view(source_i8), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target_i8[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_i8(mview(target_i8), view(master_i8), 64)
+    copy_i8(mview(source_i8), view(master_source_i8), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i8[r & 63] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        naive_abs_epi8(mview(target_i8), view(source_i8), 64)
+        naive_checksum = naive_checksum + cast<int64>(target_i8[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_shuffle_epi8_64(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 64] master
+    [byte, 64] target
+    [byte, 64] master_indices
+    [byte, 64] indices
+    uint32 i = 0
+    while (i < 64) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        indices[i] = unsafe_cast<byte>((i * 5 + 3) & 255)
+        master_indices[i] = indices[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(indices), view(master_indices), 64)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        indices[r & 63] = unsafe_cast<byte>(r)
+        simd::x86::shuffle_epi8(mview(target), view(indices), 0, 0, 64)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 64)
+    copy_bytes(mview(indices), view(master_indices), 64)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        indices[r & 63] = unsafe_cast<byte>(r)
+        naive_shuffle_epi8(mview(target), view(indices), 64)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 63])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_packus_epi16_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] target
+    [int16, 512] master_source_i16
+    [int16, 512] source_i16
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source_i16[i] = unsafe_cast<int16>(unsafe_cast<int32>(i) * 300 - 5000)
+        master_source_i16[i] = source_i16[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_i16(mview(source_i16), view(master_source_i16), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i16[r & 511] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::packus_epi16(mview(target), view(source_i16), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_i16(mview(source_i16), view(master_source_i16), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i16[r & 511] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        naive_packus_epi16(mview(target), view(source_i16), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sad_epu8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master_left
+    [byte, 512] master_right
+    [byte, 512] left
+    [byte, 512] right
+    uint32 i = 0
+    while (i < 512) {
+        master_left[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        left[i] = master_left[i]
+        master_right[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        right[i] = master_right[i]
+        i = i + 1
+    }
+    copy_bytes(mview(left), view(master_left), 512)
+    copy_bytes(mview(right), view(master_right), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        left[r & 511] = unsafe_cast<byte>(r)
+        simd_checksum = simd_checksum + unsafe_cast<int64>(simd::x86::sad_epu8(view(left), view(right), 0, 0, 512))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(left), view(master_left), 512)
+    copy_bytes(mview(right), view(master_right), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        left[r & 511] = unsafe_cast<byte>(r)
+        naive_checksum = naive_checksum + unsafe_cast<int64>(naive_sad_epu8(view(left), view(right), 512))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_abs_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [int8, 512] master_i8
+    [int8, 512] master_source_i8
+    [int8, 512] target_i8
+    [int8, 512] source_i8
+    uint32 i = 0
+    while (i < 512) {
+        master_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 4 - 128)
+        target_i8[i] = master_i8[i]
+        source_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 3 - 96)
+        master_source_i8[i] = source_i8[i]
+        i = i + 1
+    }
+    copy_i8(mview(target_i8), view(master_i8), 512)
+    copy_i8(mview(source_i8), view(master_source_i8), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i8[r & 511] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::abs_epi8(mview(target_i8), view(source_i8), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target_i8[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_i8(mview(target_i8), view(master_i8), 512)
+    copy_i8(mview(source_i8), view(master_source_i8), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i8[r & 511] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        naive_abs_epi8(mview(target_i8), view(source_i8), 512)
+        naive_checksum = naive_checksum + cast<int64>(target_i8[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_shuffle_epi8_512(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 512] master
+    [byte, 512] target
+    [byte, 512] master_indices
+    [byte, 512] indices
+    uint32 i = 0
+    while (i < 512) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        indices[i] = unsafe_cast<byte>((i * 5 + 3) & 255)
+        master_indices[i] = indices[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(indices), view(master_indices), 512)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        indices[r & 511] = unsafe_cast<byte>(r)
+        simd::x86::shuffle_epi8(mview(target), view(indices), 0, 0, 512)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 512)
+    copy_bytes(mview(indices), view(master_indices), 512)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        indices[r & 511] = unsafe_cast<byte>(r)
+        naive_shuffle_epi8(mview(target), view(indices), 512)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 511])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_packus_epi16_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] target
+    [int16, 4096] master_source_i16
+    [int16, 4096] source_i16
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        source_i16[i] = unsafe_cast<int16>(unsafe_cast<int32>(i) * 300 - 5000)
+        master_source_i16[i] = source_i16[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_i16(mview(source_i16), view(master_source_i16), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i16[r & 4095] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::packus_epi16(mview(target), view(source_i16), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_i16(mview(source_i16), view(master_source_i16), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i16[r & 4095] = unsafe_cast<int16>(unsafe_cast<int32>(r & 255) - 128)
+        naive_packus_epi16(mview(target), view(source_i16), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_sad_epu8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master_left
+    [byte, 4096] master_right
+    [byte, 4096] left
+    [byte, 4096] right
+    uint32 i = 0
+    while (i < 4096) {
+        master_left[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        left[i] = master_left[i]
+        master_right[i] = unsafe_cast<byte>((i * 29 + 11) & 255)
+        right[i] = master_right[i]
+        i = i + 1
+    }
+    copy_bytes(mview(left), view(master_left), 4096)
+    copy_bytes(mview(right), view(master_right), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        left[r & 4095] = unsafe_cast<byte>(r)
+        simd_checksum = simd_checksum + unsafe_cast<int64>(simd::x86::sad_epu8(view(left), view(right), 0, 0, 4096))
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(left), view(master_left), 4096)
+    copy_bytes(mview(right), view(master_right), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        left[r & 4095] = unsafe_cast<byte>(r)
+        naive_checksum = naive_checksum + unsafe_cast<int64>(naive_sad_epu8(view(left), view(right), 4096))
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_abs_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [int8, 4096] master_i8
+    [int8, 4096] master_source_i8
+    [int8, 4096] target_i8
+    [int8, 4096] source_i8
+    uint32 i = 0
+    while (i < 4096) {
+        master_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 4 - 128)
+        target_i8[i] = master_i8[i]
+        source_i8[i] = unsafe_cast<int8>(unsafe_cast<int32>(i) * 3 - 96)
+        master_source_i8[i] = source_i8[i]
+        i = i + 1
+    }
+    copy_i8(mview(target_i8), view(master_i8), 4096)
+    copy_i8(mview(source_i8), view(master_source_i8), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        source_i8[r & 4095] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        simd::x86::abs_epi8(mview(target_i8), view(source_i8), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target_i8[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_i8(mview(target_i8), view(master_i8), 4096)
+    copy_i8(mview(source_i8), view(master_source_i8), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        source_i8[r & 4095] = unsafe_cast<int8>(unsafe_cast<int32>(r & 255) - 128)
+        naive_abs_epi8(mview(target_i8), view(source_i8), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target_i8[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func bench_shuffle_epi8_4096(uint32 reps) -> (int64, int64, int64, int64) {
+    [byte, 4096] master
+    [byte, 4096] target
+    [byte, 4096] master_indices
+    [byte, 4096] indices
+    uint32 i = 0
+    while (i < 4096) {
+        master[i] = unsafe_cast<byte>((i * 13 + 7) & 255)
+        target[i] = master[i]
+        indices[i] = unsafe_cast<byte>((i * 5 + 3) & 255)
+        master_indices[i] = indices[i]
+        i = i + 1
+    }
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(indices), view(master_indices), 4096)
+    int64 simd_checksum = 0
+    int64 start = std::mono_time()
+    uint32 r = 0
+    while (r < reps) {
+        indices[r & 4095] = unsafe_cast<byte>(r)
+        simd::x86::shuffle_epi8(mview(target), view(indices), 0, 0, 4096)
+        simd_checksum = simd_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 simd_ns = std::mono_time() - start
+
+    copy_bytes(mview(target), view(master), 4096)
+    copy_bytes(mview(indices), view(master_indices), 4096)
+    int64 naive_checksum = 0
+    start = std::mono_time()
+    r = 0
+    while (r < reps) {
+        indices[r & 4095] = unsafe_cast<byte>(r)
+        naive_shuffle_epi8(mview(target), view(indices), 4096)
+        naive_checksum = naive_checksum + cast<int64>(target[r & 4095])
+        r = r + 1
+    }
+    int64 naive_ns = std::mono_time() - start
+
+    return (int64, int64, int64, int64) { simd_ns, naive_ns, simd_checksum, naive_checksum }
+}
+
+func main() -> int32 {
+    uint32 reps64 = 4000000
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) xor_si256_64_r = bench_xor_si256_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) and_si256_64_r = bench_and_si256_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) or_si256_64_r = bench_or_si256_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) andnot_si256_64_r = bench_andnot_si256_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) adds_epu8_64_r = bench_adds_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) subs_epu8_64_r = bench_subs_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) max_epu8_64_r = bench_max_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) min_epu8_64_r = bench_min_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) add_epi8_64_r = bench_add_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sub_epi8_64_r = bench_sub_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) avg_epu8_64_r = bench_avg_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) blendv_epi8_64_r = bench_blendv_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) alignr_epi8_64_r = bench_alignr_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpacklo_epi8_64_r = bench_unpacklo_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpackhi_epi8_64_r = bench_unpackhi_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) packus_epi16_64_r = bench_packus_epi16_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sad_epu8_64_r = bench_sad_epu8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) abs_epi8_64_r = bench_abs_epi8_64(reps64)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) shuffle_epi8_64_r = bench_shuffle_epi8_64(reps64)
+    uint32 reps512 = 2000000
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) xor_si256_512_r = bench_xor_si256_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) and_si256_512_r = bench_and_si256_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) or_si256_512_r = bench_or_si256_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) andnot_si256_512_r = bench_andnot_si256_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) adds_epu8_512_r = bench_adds_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) subs_epu8_512_r = bench_subs_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) max_epu8_512_r = bench_max_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) min_epu8_512_r = bench_min_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) add_epi8_512_r = bench_add_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sub_epi8_512_r = bench_sub_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) avg_epu8_512_r = bench_avg_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) blendv_epi8_512_r = bench_blendv_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) alignr_epi8_512_r = bench_alignr_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpacklo_epi8_512_r = bench_unpacklo_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpackhi_epi8_512_r = bench_unpackhi_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) packus_epi16_512_r = bench_packus_epi16_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sad_epu8_512_r = bench_sad_epu8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) abs_epi8_512_r = bench_abs_epi8_512(reps512)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) shuffle_epi8_512_r = bench_shuffle_epi8_512(reps512)
+    uint32 reps4096 = 1000000
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) xor_si256_4096_r = bench_xor_si256_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) and_si256_4096_r = bench_and_si256_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) or_si256_4096_r = bench_or_si256_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) andnot_si256_4096_r = bench_andnot_si256_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) adds_epu8_4096_r = bench_adds_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) subs_epu8_4096_r = bench_subs_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) max_epu8_4096_r = bench_max_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) min_epu8_4096_r = bench_min_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) add_epi8_4096_r = bench_add_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sub_epi8_4096_r = bench_sub_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) avg_epu8_4096_r = bench_avg_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) blendv_epi8_4096_r = bench_blendv_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) alignr_epi8_4096_r = bench_alignr_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpacklo_epi8_4096_r = bench_unpacklo_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) unpackhi_epi8_4096_r = bench_unpackhi_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) packus_epi16_4096_r = bench_packus_epi16_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) sad_epu8_4096_r = bench_sad_epu8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) abs_epi8_4096_r = bench_abs_epi8_4096(reps4096)
+    (int64 simd_ns, int64 naive_ns, int64 simd_checksum, int64 naive_checksum) shuffle_epi8_4096_r = bench_shuffle_epi8_4096(reps4096)
+    int64 simd_total = 0
+    int64 naive_total = 0
+    simd_total = simd_total + xor_si256_64_r.simd_checksum
+    naive_total = naive_total + xor_si256_64_r.naive_checksum
+    stdout("xor_si256@64 ", end = null)
+    stdout(xor_si256_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(xor_si256_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + and_si256_64_r.simd_checksum
+    naive_total = naive_total + and_si256_64_r.naive_checksum
+    stdout("and_si256@64 ", end = null)
+    stdout(and_si256_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(and_si256_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + or_si256_64_r.simd_checksum
+    naive_total = naive_total + or_si256_64_r.naive_checksum
+    stdout("or_si256@64 ", end = null)
+    stdout(or_si256_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(or_si256_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + andnot_si256_64_r.simd_checksum
+    naive_total = naive_total + andnot_si256_64_r.naive_checksum
+    stdout("andnot_si256@64 ", end = null)
+    stdout(andnot_si256_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(andnot_si256_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + adds_epu8_64_r.simd_checksum
+    naive_total = naive_total + adds_epu8_64_r.naive_checksum
+    stdout("adds_epu8@64 ", end = null)
+    stdout(adds_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(adds_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + subs_epu8_64_r.simd_checksum
+    naive_total = naive_total + subs_epu8_64_r.naive_checksum
+    stdout("subs_epu8@64 ", end = null)
+    stdout(subs_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(subs_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + max_epu8_64_r.simd_checksum
+    naive_total = naive_total + max_epu8_64_r.naive_checksum
+    stdout("max_epu8@64 ", end = null)
+    stdout(max_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(max_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + min_epu8_64_r.simd_checksum
+    naive_total = naive_total + min_epu8_64_r.naive_checksum
+    stdout("min_epu8@64 ", end = null)
+    stdout(min_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(min_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + add_epi8_64_r.simd_checksum
+    naive_total = naive_total + add_epi8_64_r.naive_checksum
+    stdout("add_epi8@64 ", end = null)
+    stdout(add_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(add_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + sub_epi8_64_r.simd_checksum
+    naive_total = naive_total + sub_epi8_64_r.naive_checksum
+    stdout("sub_epi8@64 ", end = null)
+    stdout(sub_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sub_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + avg_epu8_64_r.simd_checksum
+    naive_total = naive_total + avg_epu8_64_r.naive_checksum
+    stdout("avg_epu8@64 ", end = null)
+    stdout(avg_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(avg_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + blendv_epi8_64_r.simd_checksum
+    naive_total = naive_total + blendv_epi8_64_r.naive_checksum
+    stdout("blendv_epi8@64 ", end = null)
+    stdout(blendv_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(blendv_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + alignr_epi8_64_r.simd_checksum
+    naive_total = naive_total + alignr_epi8_64_r.naive_checksum
+    stdout("alignr_epi8@64 ", end = null)
+    stdout(alignr_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(alignr_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + unpacklo_epi8_64_r.simd_checksum
+    naive_total = naive_total + unpacklo_epi8_64_r.naive_checksum
+    stdout("unpacklo_epi8@64 ", end = null)
+    stdout(unpacklo_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpacklo_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + unpackhi_epi8_64_r.simd_checksum
+    naive_total = naive_total + unpackhi_epi8_64_r.naive_checksum
+    stdout("unpackhi_epi8@64 ", end = null)
+    stdout(unpackhi_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpackhi_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + packus_epi16_64_r.simd_checksum
+    naive_total = naive_total + packus_epi16_64_r.naive_checksum
+    stdout("packus_epi16@64 ", end = null)
+    stdout(packus_epi16_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(packus_epi16_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + sad_epu8_64_r.simd_checksum
+    naive_total = naive_total + sad_epu8_64_r.naive_checksum
+    stdout("sad_epu8@64 ", end = null)
+    stdout(sad_epu8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sad_epu8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + abs_epi8_64_r.simd_checksum
+    naive_total = naive_total + abs_epi8_64_r.naive_checksum
+    stdout("abs_epi8@64 ", end = null)
+    stdout(abs_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(abs_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + shuffle_epi8_64_r.simd_checksum
+    naive_total = naive_total + shuffle_epi8_64_r.naive_checksum
+    stdout("shuffle_epi8@64 ", end = null)
+    stdout(shuffle_epi8_64_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(shuffle_epi8_64_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps64))
+    simd_total = simd_total + xor_si256_512_r.simd_checksum
+    naive_total = naive_total + xor_si256_512_r.naive_checksum
+    stdout("xor_si256@512 ", end = null)
+    stdout(xor_si256_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(xor_si256_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + and_si256_512_r.simd_checksum
+    naive_total = naive_total + and_si256_512_r.naive_checksum
+    stdout("and_si256@512 ", end = null)
+    stdout(and_si256_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(and_si256_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + or_si256_512_r.simd_checksum
+    naive_total = naive_total + or_si256_512_r.naive_checksum
+    stdout("or_si256@512 ", end = null)
+    stdout(or_si256_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(or_si256_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + andnot_si256_512_r.simd_checksum
+    naive_total = naive_total + andnot_si256_512_r.naive_checksum
+    stdout("andnot_si256@512 ", end = null)
+    stdout(andnot_si256_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(andnot_si256_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + adds_epu8_512_r.simd_checksum
+    naive_total = naive_total + adds_epu8_512_r.naive_checksum
+    stdout("adds_epu8@512 ", end = null)
+    stdout(adds_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(adds_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + subs_epu8_512_r.simd_checksum
+    naive_total = naive_total + subs_epu8_512_r.naive_checksum
+    stdout("subs_epu8@512 ", end = null)
+    stdout(subs_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(subs_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + max_epu8_512_r.simd_checksum
+    naive_total = naive_total + max_epu8_512_r.naive_checksum
+    stdout("max_epu8@512 ", end = null)
+    stdout(max_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(max_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + min_epu8_512_r.simd_checksum
+    naive_total = naive_total + min_epu8_512_r.naive_checksum
+    stdout("min_epu8@512 ", end = null)
+    stdout(min_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(min_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + add_epi8_512_r.simd_checksum
+    naive_total = naive_total + add_epi8_512_r.naive_checksum
+    stdout("add_epi8@512 ", end = null)
+    stdout(add_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(add_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + sub_epi8_512_r.simd_checksum
+    naive_total = naive_total + sub_epi8_512_r.naive_checksum
+    stdout("sub_epi8@512 ", end = null)
+    stdout(sub_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sub_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + avg_epu8_512_r.simd_checksum
+    naive_total = naive_total + avg_epu8_512_r.naive_checksum
+    stdout("avg_epu8@512 ", end = null)
+    stdout(avg_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(avg_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + blendv_epi8_512_r.simd_checksum
+    naive_total = naive_total + blendv_epi8_512_r.naive_checksum
+    stdout("blendv_epi8@512 ", end = null)
+    stdout(blendv_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(blendv_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + alignr_epi8_512_r.simd_checksum
+    naive_total = naive_total + alignr_epi8_512_r.naive_checksum
+    stdout("alignr_epi8@512 ", end = null)
+    stdout(alignr_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(alignr_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + unpacklo_epi8_512_r.simd_checksum
+    naive_total = naive_total + unpacklo_epi8_512_r.naive_checksum
+    stdout("unpacklo_epi8@512 ", end = null)
+    stdout(unpacklo_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpacklo_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + unpackhi_epi8_512_r.simd_checksum
+    naive_total = naive_total + unpackhi_epi8_512_r.naive_checksum
+    stdout("unpackhi_epi8@512 ", end = null)
+    stdout(unpackhi_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpackhi_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + packus_epi16_512_r.simd_checksum
+    naive_total = naive_total + packus_epi16_512_r.naive_checksum
+    stdout("packus_epi16@512 ", end = null)
+    stdout(packus_epi16_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(packus_epi16_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + sad_epu8_512_r.simd_checksum
+    naive_total = naive_total + sad_epu8_512_r.naive_checksum
+    stdout("sad_epu8@512 ", end = null)
+    stdout(sad_epu8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sad_epu8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + abs_epi8_512_r.simd_checksum
+    naive_total = naive_total + abs_epi8_512_r.naive_checksum
+    stdout("abs_epi8@512 ", end = null)
+    stdout(abs_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(abs_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + shuffle_epi8_512_r.simd_checksum
+    naive_total = naive_total + shuffle_epi8_512_r.naive_checksum
+    stdout("shuffle_epi8@512 ", end = null)
+    stdout(shuffle_epi8_512_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(shuffle_epi8_512_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps512))
+    simd_total = simd_total + xor_si256_4096_r.simd_checksum
+    naive_total = naive_total + xor_si256_4096_r.naive_checksum
+    stdout("xor_si256@4096 ", end = null)
+    stdout(xor_si256_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(xor_si256_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + and_si256_4096_r.simd_checksum
+    naive_total = naive_total + and_si256_4096_r.naive_checksum
+    stdout("and_si256@4096 ", end = null)
+    stdout(and_si256_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(and_si256_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + or_si256_4096_r.simd_checksum
+    naive_total = naive_total + or_si256_4096_r.naive_checksum
+    stdout("or_si256@4096 ", end = null)
+    stdout(or_si256_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(or_si256_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + andnot_si256_4096_r.simd_checksum
+    naive_total = naive_total + andnot_si256_4096_r.naive_checksum
+    stdout("andnot_si256@4096 ", end = null)
+    stdout(andnot_si256_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(andnot_si256_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + adds_epu8_4096_r.simd_checksum
+    naive_total = naive_total + adds_epu8_4096_r.naive_checksum
+    stdout("adds_epu8@4096 ", end = null)
+    stdout(adds_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(adds_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + subs_epu8_4096_r.simd_checksum
+    naive_total = naive_total + subs_epu8_4096_r.naive_checksum
+    stdout("subs_epu8@4096 ", end = null)
+    stdout(subs_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(subs_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + max_epu8_4096_r.simd_checksum
+    naive_total = naive_total + max_epu8_4096_r.naive_checksum
+    stdout("max_epu8@4096 ", end = null)
+    stdout(max_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(max_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + min_epu8_4096_r.simd_checksum
+    naive_total = naive_total + min_epu8_4096_r.naive_checksum
+    stdout("min_epu8@4096 ", end = null)
+    stdout(min_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(min_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + add_epi8_4096_r.simd_checksum
+    naive_total = naive_total + add_epi8_4096_r.naive_checksum
+    stdout("add_epi8@4096 ", end = null)
+    stdout(add_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(add_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + sub_epi8_4096_r.simd_checksum
+    naive_total = naive_total + sub_epi8_4096_r.naive_checksum
+    stdout("sub_epi8@4096 ", end = null)
+    stdout(sub_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sub_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + avg_epu8_4096_r.simd_checksum
+    naive_total = naive_total + avg_epu8_4096_r.naive_checksum
+    stdout("avg_epu8@4096 ", end = null)
+    stdout(avg_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(avg_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + blendv_epi8_4096_r.simd_checksum
+    naive_total = naive_total + blendv_epi8_4096_r.naive_checksum
+    stdout("blendv_epi8@4096 ", end = null)
+    stdout(blendv_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(blendv_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + alignr_epi8_4096_r.simd_checksum
+    naive_total = naive_total + alignr_epi8_4096_r.naive_checksum
+    stdout("alignr_epi8@4096 ", end = null)
+    stdout(alignr_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(alignr_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + unpacklo_epi8_4096_r.simd_checksum
+    naive_total = naive_total + unpacklo_epi8_4096_r.naive_checksum
+    stdout("unpacklo_epi8@4096 ", end = null)
+    stdout(unpacklo_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpacklo_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + unpackhi_epi8_4096_r.simd_checksum
+    naive_total = naive_total + unpackhi_epi8_4096_r.naive_checksum
+    stdout("unpackhi_epi8@4096 ", end = null)
+    stdout(unpackhi_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(unpackhi_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + packus_epi16_4096_r.simd_checksum
+    naive_total = naive_total + packus_epi16_4096_r.naive_checksum
+    stdout("packus_epi16@4096 ", end = null)
+    stdout(packus_epi16_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(packus_epi16_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + sad_epu8_4096_r.simd_checksum
+    naive_total = naive_total + sad_epu8_4096_r.naive_checksum
+    stdout("sad_epu8@4096 ", end = null)
+    stdout(sad_epu8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(sad_epu8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + abs_epi8_4096_r.simd_checksum
+    naive_total = naive_total + abs_epi8_4096_r.naive_checksum
+    stdout("abs_epi8@4096 ", end = null)
+    stdout(abs_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(abs_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    simd_total = simd_total + shuffle_epi8_4096_r.simd_checksum
+    naive_total = naive_total + shuffle_epi8_4096_r.naive_checksum
+    stdout("shuffle_epi8@4096 ", end = null)
+    stdout(shuffle_epi8_4096_r.simd_ns, end = null)
+    stdout(" ", end = null)
+    stdout(shuffle_epi8_4096_r.naive_ns, end = null)
+    stdout(" ", end = null)
+    stdout(cast<int64>(reps4096))
+    stdout("simd_checksum ", end = null)
+    stdout(simd_total, end = null)
+    stdout(" ", end = null)
+    stdout("naive_checksum ", end = null)
+    stdout(naive_total)
+    return 0
+}

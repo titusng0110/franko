@@ -189,5 +189,52 @@ func main() -> int32 {
     stdout(tail_out[16])
     stdout(tail_out[18])
     stdout(tail_out[19])
+
+    copy_bytes(mview(out), view(b), 16)
+    simd::arm::vceqq_u8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[15])
+    copy_bytes(mview(out), view(a), 16)
+    simd::arm::vceqq_u8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+
+    stdout(simd::arm::crc32b_u8(0, view(a), 0, 16))
+    stdout(simd::arm::crc32cb_u8(0, view(a), 0, 16))
+    stdout(simd::arm::crc32b_u8(0, view(a), 0, 0))
+
+    [uint16, 16] widened
+    simd::arm::vmovl_u8(mview(widened), view(a), 0, 0, 16)
+    stdout(widened[0])
+    stdout(widened[15])
+
+    [int32, 4] dots
+    dots[0] = 0
+    dots[1] = 0
+    dots[2] = 0
+    dots[3] = 0
+    simd::arm::vusdotq_s32(mview(dots), view(a), view(signed_bytes), 0, 0, 0, 4)
+    stdout(dots[0])
+    stdout(dots[3])
+
+    simd::arm::vcntq_u8(mview(out), view(a), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[1])
+
+    [uint64, 4] clmul_out
+    [uint64, 2] clmul_a
+    [uint64, 2] clmul_b
+    clmul_a[0] = 1
+    clmul_a[1] = 0xFFFFFFFFFFFFFFFF
+    clmul_b[0] = 0x1234
+    clmul_b[1] = 2
+    simd::arm::vmull_p64(mview(clmul_out), view(clmul_a), view(clmul_b), 0, 0, 0, 2)
+    stdout(clmul_out[0])
+    stdout(clmul_out[1])
+    stdout(clmul_out[2])
+    stdout(clmul_out[3])
+
+    simd::arm::vst1q_u8(mview(out), view(b), 0, 0, 16)
+    stdout(out[0])
+    stdout(out[15])
     return 0
 }

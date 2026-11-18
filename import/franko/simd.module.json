@@ -7,19 +7,19 @@
   "functions": [
     {
       "namespace": "simd::x86",
-      "name": "xor_si128"
+      "name": "xor_si256"
     },
     {
       "namespace": "simd::x86",
-      "name": "and_si128"
+      "name": "and_si256"
     },
     {
       "namespace": "simd::x86",
-      "name": "or_si128"
+      "name": "or_si256"
     },
     {
       "namespace": "simd::x86",
-      "name": "andnot_si128"
+      "name": "andnot_si256"
     },
     {
       "namespace": "simd::x86",
@@ -83,11 +83,43 @@
     },
     {
       "namespace": "simd::x86",
-      "name": "aesenc_si128"
+      "name": "aesenc_si256"
     },
     {
       "namespace": "simd::x86",
-      "name": "aesdec_si128"
+      "name": "aesdec_si256"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "cmpeq_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "movemask_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "crc32_u8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "cvtepu8_epi16"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "dpbusd_epi32"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "ptest_epi8"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "clmulepi64_epi64"
+    },
+    {
+      "namespace": "simd::x86",
+      "name": "stream_si256"
     },
     {
       "namespace": "simd::arm",
@@ -176,6 +208,38 @@
     {
       "namespace": "simd::arm",
       "name": "vaesdq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vceqq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "crc32b_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "crc32cb_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vmovl_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vusdotq_s32"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vcntq_u8"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vmull_p64"
+    },
+    {
+      "namespace": "simd::arm",
+      "name": "vst1q_u8"
     }
   ]
 }

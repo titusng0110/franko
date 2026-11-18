@@ -5,19 +5,19 @@ namespace simd {
     #if (#IS_X86_64) {
         namespace x86 {
 
-            #inline func xor_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+            #inline func xor_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 
-            #inline func and_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+            #inline func and_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 
-            #inline func or_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+            #inline func or_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 
-            #inline func andnot_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+            #inline func andnot_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
                 return
             }
 
@@ -81,12 +81,44 @@ namespace simd {
                 return
             }
 
-            #inline func aesenc_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+            #inline func aesenc_si256(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
                 return 0
             }
 
-            #inline func aesdec_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
+            #inline func aesdec_si256(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
                 return 0
+            }
+
+            #inline func cmpeq_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func movemask_epi8(view<[byte]> source, uint32 src_start, uint32 count) -> uint64 {
+                return 0
+            }
+
+            #inline func crc32_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32 {
+                return 0
+            }
+
+            #inline func cvtepu8_epi16(mview<[uint16]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func dpbusd_epi32(mview<[uint32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func ptest_epi8(view<[byte]> a, view<[byte]> b, uint32 a_start, uint32 b_start, uint32 count) -> uint32 {
+                return 0
+            }
+
+            #inline func clmulepi64_epi64(mview<[uint64]> target, view<[uint64]> a, view<[uint64]> b, uint32 dst_start, uint32 a_start, uint32 b_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func stream_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
             }
         }
     } #else #if (#IS_ARM64) {
@@ -178,6 +210,38 @@ namespace simd {
 
             #inline func vaesdq_u8(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32 {
                 return 0
+            }
+
+            #inline func vceqq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func crc32b_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32 {
+                return 0
+            }
+
+            #inline func crc32cb_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32 {
+                return 0
+            }
+
+            #inline func vmovl_u8(mview<[uint16]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vusdotq_s32(mview<[int32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vcntq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vmull_p64(mview<[uint64]> target, view<[uint64]> a, view<[uint64]> b, uint32 dst_start, uint32 a_start, uint32 b_start, uint32 count) -> void {
+                return
+            }
+
+            #inline func vst1q_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void {
+                return
             }
         }
     } #else {

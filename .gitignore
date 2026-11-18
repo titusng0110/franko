@@ -48,6 +48,7 @@ benchmark/**/*.cpp
 !benchmark/redblack_cpp_pool.cpp
 benchmark/**/*.out
 benchmark/**/*.exe
+benchmark/**/*.inc
 benchmark/**/*.bin
 benchmark/**/*.actual
 benchmark/**/*.compile.log

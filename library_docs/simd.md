@@ -75,38 +75,44 @@ arrays are still rejected in every build mode.
 
 ## x86_64
 
-### `xor_si128`
+With AVX2, every operation below processes 32-byte vectors first, then
+falls through to the documented 16-byte vectors and scalar tail. Without
+AVX2 it processes 16-byte vectors and a scalar tail; the SSSE3/SSE4.1/AES
+rows state their own scalar fallbacks. A trailing partial group is handled
+by the scalar tail unless the description says otherwise.
+
+### `xor_si256`
 
 ```franko
-simd::x86::xor_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+simd::x86::xor_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 ```
 
 Reads `target[dst_start, dst_start + count)` and
 `source[src_start, src_start + count)`. Writes the bitwise XOR of each byte
 pair back to the target range. Processes 16-byte vectors and a scalar tail.
 
-### `and_si128`
+### `and_si256`
 
 ```franko
-simd::x86::and_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+simd::x86::and_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 ```
 
 Reads both byte ranges. Writes `target[i] & source[i]` back to the target
 range. Processes 16-byte vectors and a scalar tail.
 
-### `or_si128`
+### `or_si256`
 
 ```franko
-simd::x86::or_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+simd::x86::or_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 ```
 
 Reads both byte ranges. Writes `target[i] | source[i]` back to the target
 range. Processes 16-byte vectors and a scalar tail.
 
-### `andnot_si128`
+### `andnot_si256`
 
 ```franko
-simd::x86::andnot_si128(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+simd::x86::andnot_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
 ```
 
 Reads both byte ranges. Writes `target[i] & ~source[i]` back to the target
@@ -293,10 +299,10 @@ of the control byte. Writes the result back to the target range.
 Only complete 16-byte blocks are processed. A trailing group shorter than
 16 bytes is left unchanged.
 
-### `aesenc_si128`
+### `aesenc_si256`
 
 ```franko
-simd::x86::aesenc_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
+simd::x86::aesenc_si256(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
 ```
 
 Reads the target range in 16-byte blocks and applies one AES encryption round
@@ -309,10 +315,10 @@ Returns `0` on success. Returns a nonzero value and leaves the target
 unchanged when AES-NI is unavailable at compile time. When `count` is
 nonzero, the round-key range must contain at least 16 bytes.
 
-### `aesdec_si128`
+### `aesdec_si256`
 
 ```franko
-simd::x86::aesdec_si128(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
+simd::x86::aesdec_si256(mview<[byte]> target, view<[byte]> round_key, uint32 dst_start, uint32 src_start, uint32 count) -> int32
 ```
 
 Reads the target range in 16-byte blocks and applies one AES decryption round
@@ -324,6 +330,111 @@ than 16 bytes is left unchanged.
 Returns `0` on success. Returns a nonzero value and leaves the target
 unchanged when AES-NI is unavailable at compile time. When `count` is
 nonzero, the round-key range must contain at least 16 bytes.
+
+### `cmpeq_epi8`
+
+```franko
+simd::x86::cmpeq_epi8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Reads both byte ranges. Writes `0xFF` back to the target range where the
+bytes are equal and `0x00` where they differ. Processes 32-byte vectors
+with AVX2, otherwise 16-byte vectors, and a scalar tail.
+
+### `movemask_epi8`
+
+```franko
+simd::x86::movemask_epi8(view<[byte]> source, uint32 src_start, uint32 count) -> uint64
+```
+
+Reads `source[src_start, src_start + count)` and compresses the most
+significant bit of each byte into a bitmask: result bit `i` is the MSB of
+byte `i`. The typical input is a `cmpeq_epi8` mask buffer. Requires
+`count <= 64`; larger counts abort. Processes 32-byte vectors with AVX2,
+otherwise 16-byte vectors, and scalar bit tests. ARM64 has no
+single-instruction equivalent; there is no ARM function here. See the
+cross-architecture notes for a composition recipe.
+
+### `crc32_u8`
+
+```franko
+simd::x86::crc32_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32
+```
+
+Folds `data[src_start, src_start + count)` into the CRC-32C (Castagnoli,
+reflected polynomial `0x82F63B78`) checksum starting from `crc` and returns
+the updated value. A `crc` of `0` starts a new checksum. Processes eight
+bytes at a time with SSE4.2 and a scalar bitwise tail. This is a different
+polynomial than ARM `crc32b_u8`; only ARM `crc32cb_u8` matches it.
+
+### `cvtepu8_epi16`
+
+```franko
+simd::x86::cvtepu8_epi16(mview<[uint16]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Reads `count` bytes from `source[src_start, src_start + count)` and writes
+them zero-extended to `count` unsigned 16-bit lanes at
+`target[dst_start, dst_start + count)`. The previous contents of the target
+range are not read. Processes 16 lanes at a time with AVX2, eight lanes
+with SSE4.1, and a scalar tail.
+
+### `dpbusd_epi32`
+
+```franko
+simd::x86::dpbusd_epi32(mview<[uint32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void
+```
+
+Reads `count` unsigned 32-bit accumulators from
+`acc[acc_start, acc_start + count)` and `4 * count` bytes from each of
+`a[a_start, ...)` (unsigned) and `b[b_start, ...)` (signed). For each
+output lane `i`, adds the dot product of the four unsigned `a` bytes with
+the four signed `b` bytes, wrapping on overflow. Processes eight lanes at
+a time with AVX2+VNNI, four lanes with AVX-VNNI, and a scalar tail. The
+accumulator is `uint32` here but `int32` under ARM `vusdotq_s32`; the bit
+pattern is identical.
+
+### `ptest_epi8`
+
+```franko
+simd::x86::ptest_epi8(view<[byte]> a, view<[byte]> b, uint32 a_start, uint32 b_start, uint32 count) -> uint32
+```
+
+Reads both byte ranges and returns `1` when every byte position has
+`(a[i] & b[i]) == 0`, otherwise returns `0` at the first intersecting
+chunk. Processes 32-byte vectors with AVX2, otherwise 16-byte vectors
+with SSE4.1, and a scalar tail with early exit. ARM64 has no
+single-instruction equivalent; there is no ARM function here.
+
+### `clmulepi64_epi64`
+
+```franko
+simd::x86::clmulepi64_epi64(mview<[uint64]> target, view<[uint64]> a, view<[uint64]> b, uint32 dst_start, uint32 a_start, uint32 b_start, uint32 count) -> void
+```
+
+Reads `count` unsigned 64-bit lanes from each of `a` and `b` and writes the
+128-bit carryless product of each pair to
+`target[dst_start, dst_start + 2 * count)` as interleaved low/high words:
+`target[2*i]` is the low word, `target[2*i + 1]` the high word. The target
+range must therefore hold `2 * count` lanes. Processes two products at a
+time with VPCLMULQDQ and AVX2, one product with PCLMULQDQ, and a scalar
+shift-and-xor tail.
+
+### `stream_si256`
+
+```franko
+simd::x86::stream_si256(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Copies `source[src_start, src_start + count)` to
+`target[dst_start, dst_start + count)` with non-temporal (streaming) stores,
+which avoid polluting the cache and suit buffers larger than the last-level
+cache. A short unaligned lead-in uses regular stores so the streaming loop
+stays 32-byte (AVX2) or 16-byte aligned. There is no completion fence:
+single-threaded use observes the copy normally, but cross-thread visibility
+needs an explicit fence outside this module. ARM has no single-register
+non-temporal SIMD store; ARM `vst1q_u8` below is a regular vector copy with
+identical observable results.
 
 ## ARM64
 
@@ -596,6 +707,102 @@ Returns `0` on success. Returns a nonzero value and leaves the target
 unchanged when the ARM AES extension is unavailable at compile time. When
 `count` is nonzero, the round-key range must contain at least 16 bytes.
 
+### `vceqq_u8`
+
+```franko
+simd::arm::vceqq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Reads both byte ranges. Writes `0xFF` back to the target range where the
+bytes are equal and `0x00` where they differ. Processes 16-byte vectors and
+a scalar tail.
+
+### `crc32b_u8`
+
+```franko
+simd::arm::crc32b_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32
+```
+
+Folds `data[src_start, src_start + count)` into the CRC-32 (ISO 3309,
+reflected polynomial `0xEDB88320`) checksum starting from `crc` and returns
+the updated value. A `crc` of `0` starts a new checksum. Processes eight
+bytes at a time with the ARM CRC extension and a scalar bitwise tail. This
+is a different polynomial than x86 `crc32_u8`; only ARM `crc32cb_u8`
+matches that one.
+
+### `crc32cb_u8`
+
+```franko
+simd::arm::crc32cb_u8(uint32 crc, view<[byte]> data, uint32 src_start, uint32 count) -> uint32
+```
+
+Same shape as `crc32b_u8` but computes CRC-32C (Castagnoli, reflected
+polynomial `0x82F63B78`), matching x86 `crc32_u8` byte for byte. Processes
+eight bytes at a time with the ARM CRC extension and a scalar bitwise
+tail.
+
+### `vmovl_u8`
+
+```franko
+simd::arm::vmovl_u8(mview<[uint16]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Reads `count` bytes from `source[src_start, src_start + count)` and writes
+them zero-extended to `count` unsigned 16-bit lanes at
+`target[dst_start, dst_start + count)`. The previous contents of the target
+range are not read. Processes 16 bytes and a scalar tail.
+
+### `vusdotq_s32`
+
+```franko
+simd::arm::vusdotq_s32(mview<[int32]> acc, view<[byte]> a, view<[int8]> b, uint32 acc_start, uint32 a_start, uint32 b_start, uint32 count) -> void
+```
+
+Reads `count` signed 32-bit accumulators from
+`acc[acc_start, acc_start + count)` and `4 * count` bytes from each of
+`a[a_start, ...)` (unsigned) and `b[b_start, ...)` (signed). For each
+output lane `i`, adds the dot product of the four unsigned `a` bytes with
+the four signed `b` bytes, wrapping on overflow. Requires the dot-product
+extension; otherwise runs a scalar tail. The accumulator is `int32` here
+but `uint32` under x86 `dpbusd_epi32`; the bit pattern is identical.
+
+### `vcntq_u8`
+
+```franko
+simd::arm::vcntq_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Reads `count` bytes and writes each byte's population count (`0..8`) to the
+target range. The previous contents of the target range are not read.
+Processes 16-byte vectors and a scalar tail. There is no x86 equivalent;
+x86 code should use a scalar popcount loop.
+
+### `vmull_p64`
+
+```franko
+simd::arm::vmull_p64(mview<[uint64]> target, view<[uint64]> a, view<[uint64]> b, uint32 dst_start, uint32 a_start, uint32 b_start, uint32 count) -> void
+```
+
+Reads `count` unsigned 64-bit lanes from each of `a` and `b` and writes the
+128-bit carryless product of each pair to
+`target[dst_start, dst_start + 2 * count)` as interleaved low/high words:
+`target[2*i]` is the low word, `target[2*i + 1]` the high word. The target
+range must therefore hold `2 * count` lanes. Requires the cryptography
+extension; otherwise runs a scalar shift-and-xor tail.
+
+### `vst1q_u8`
+
+```franko
+simd::arm::vst1q_u8(mview<[byte]> target, view<[byte]> source, uint32 dst_start, uint32 src_start, uint32 count) -> void
+```
+
+Copies `source[src_start, src_start + count)` to
+`target[dst_start, dst_start + count)` with regular 16-byte vector stores
+and a scalar tail. This is the ARM counterpart of x86 `stream_si256`,
+which uses non-temporal stores: ARM has no single-register non-temporal
+SIMD store, so the observable copy is identical while only the x86 side
+bypasses the cache.
+
 ## Cross-architecture notes
 
 - `blendv_epi8` uses bit 7 of each mask byte to select the source byte.
@@ -620,24 +827,51 @@ unchanged when the ARM AES extension is unavailable at compile time. When
   to `uint16`, then use `vpaddlq_u16`.
 - `packus_epi16`, `vqmovun_s16`, `abs_epi8`, `vabsq_s8`, and `vpaddlq_u16`
   write the target range without reading its previous contents.
+- `movemask_epi8` and `ptest_epi8` exist only on x86: ARM64 has no
+  single-instruction MSB compressor or intersection test. To port a
+  `cmpeq`/`movemask` search loop, compare with `vceqq_u8` and scan the
+  mask bytes with a scalar MSB test. To port `ptest`, use `vandq_u8`
+  with `vmaxvq_u8`, or a scalar early-exit loop.
+- `crc32_u8` (x86) is Castagnoli only. Its ARM match is `crc32cb_u8`,
+  not `crc32b_u8`, which computes the ISO polynomial instead.
+- `dpbusd_epi32` (x86, `uint32` accumulator) and `vusdotq_s32` (ARM,
+  `int32` accumulator) compute the same unsigned-by-signed dot product;
+  only the accumulator's declared signedness differs.
+- `clmulepi64_epi64` and `vmull_p64` share the interleaved low/high target
+  layout: `target[2*i]` is the low word, `target[2*i + 1]` the high
+  word, so the target range always holds `2 * count` lanes.
 
 ## Instruction requirements and fallbacks
 
 x86_64:
 
-- `xor_si128`, `and_si128`, `or_si128`, `andnot_si128`, `adds_epu8`,
+- `xor_si256`, `and_si256`, `or_si256`, `andnot_si256`, `adds_epu8`,
   `subs_epu8`, `max_epu8`, `min_epu8`, `add_epi8`, `sub_epi8`, `avg_epu8`,
-  `unpacklo_epi8`, `unpackhi_epi8`, `packus_epi16`, and `sad_epu8` use SSE2.
+  `unpacklo_epi8`, `unpackhi_epi8`, `packus_epi16`, `sad_epu8`,
+  `cmpeq_epi8`, `stream_si256`, and `movemask_epi8` use SSE2, with an
+  additional AVX2 32-byte tier where one exists.
+- `crc32_u8`, `cvtepu8_epi16`, and `ptest_epi8` use
+  SSE4.1 when available, with an AVX2 tier where one exists, and otherwise
+  run their scalar fallbacks.
 - `blendv_epi8` uses SSE4.1 when available and otherwise runs its scalar
   fallback.
 - `alignr_epi8`, `abs_epi8`, and `shuffle_epi8` use SSSE3 when available and
   otherwise run their scalar fallbacks.
-- `aesenc_si128` and `aesdec_si128` use AES-NI when available and otherwise
-  return a nonzero error code.
+- `dpbusd_epi32` uses AVX-VNNI (plus AVX2 for its 32-byte tier) when
+  available and otherwise runs its scalar fallback.
+- `clmulepi64_epi64` uses VPCLMULQDQ with AVX2 (four products per iteration, shuffled into place with lane stores), then PCLMULQDQ, and otherwise
+  runs its scalar shift-and-xor fallback.
+- `aesenc_si256` and `aesdec_si256` use VAES with AVX2, then AES-NI, and
+  otherwise return a nonzero error code.
+- `movemask_epi8` requires `count <= 64` in every build; larger counts
+  abort instead of truncating.
 
 ARM64:
 
-- All non-AES operations use baseline AArch64 NEON instructions.
+- All non-AES operations use baseline AArch64 NEON instructions, except
+  `vusdotq_s32` (dot-product extension), `vmull_p64` (cryptography
+  extension), and `crc32b_u8`/`crc32cb_u8` (CRC extension), which run
+  scalar fallbacks without them.
 - `vaeseq_u8` and `vaesdq_u8` use the ARM AES extension when available and
   otherwise return a nonzero error code.
 
