@@ -2954,84 +2954,124 @@ FRANKO_INLINE void FUNC_cvtepu8_epi16_b3d94c16(Franko_Fat_Pointer<uint16_t> PARA
 // @@simd::x86::dpbusd_epi32
 namespace NS_simd {
 namespace NS_x86 {
-FRANKO_INLINE void FUNC_dpbusd_epi32_7a76aa9d(Franko_Fat_Pointer<uint32_t> PARAM_acc, Franko_Fat_Pointer<uint8_t> PARAM_a, Franko_Fat_Pointer<int8_t> PARAM_b, uint32_t PARAM_acc_start, uint32_t PARAM_a_start, uint32_t PARAM_b_start, uint32_t PARAM_count)
+FRANKO_INLINE void FUNC_dpbusd_epi32_7a76aa9d(
+    Franko_Fat_Pointer<uint32_t> PARAM_acc,
+    Franko_Fat_Pointer<uint8_t>  PARAM_a,
+    Franko_Fat_Pointer<int8_t>   PARAM_b,
+    uint32_t PARAM_acc_start,
+    uint32_t PARAM_a_start,
+    uint32_t PARAM_b_start,
+    uint32_t PARAM_count)
 {
     uint32_t* acc = PARAM_acc.data;
     uint32_t acc_length = PARAM_acc.count;
     if (acc == nullptr && PARAM_count != 0) {
         franko_panic("simd: null acc");
     }
+
     const uint8_t* a = PARAM_a.data;
     uint32_t a_length = PARAM_a.count;
     if (a == nullptr && PARAM_count != 0) {
         franko_panic("simd: null a");
     }
+
     const int8_t* b = PARAM_b.data;
     uint32_t b_length = PARAM_b.count;
     if (b == nullptr && PARAM_count != 0) {
         franko_panic("simd: null b");
     }
+
 #if !FRANKO_BOUNDS_UNCHECKED
     if (PARAM_acc_start > acc_length || PARAM_count > acc_length - PARAM_acc_start) {
         franko_panic("simd: acc range out of bounds");
     }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
     if (PARAM_a_start > a_length || PARAM_count > (a_length - PARAM_a_start) / 4) {
         franko_panic("simd: a range out of bounds");
     }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
     if (PARAM_b_start > b_length || PARAM_count > (b_length - PARAM_b_start) / 4) {
         franko_panic("simd: b range out of bounds");
     }
 #endif
+
     if (PARAM_count == 0) {
         return;
     }
+
 #if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(acc) == static_cast<const void*>(a) && PARAM_acc_start != PARAM_a_start) {
+    if (static_cast<const void*>(acc) == static_cast<const void*>(a) && (PARAM_acc_start * 4 != PARAM_a_start)) {
         franko_panic("simd: overlapping acc and a ranges");
     }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(acc) == static_cast<const void*>(b) && PARAM_acc_start != PARAM_b_start) {
+    if (static_cast<const void*>(acc) == static_cast<const void*>(b) && (PARAM_acc_start * 4 != PARAM_b_start)) {
         franko_panic("simd: overlapping acc and b ranges");
     }
-#endif
-#if !FRANKO_BOUNDS_UNCHECKED
-    if (static_cast<const void*>(a) == static_cast<const void*>(b) && PARAM_a_start != PARAM_b_start) {
+    if (static_cast<const void*>(a) == static_cast<const void*>(b) && (PARAM_a_start != PARAM_b_start)) {
         franko_panic("simd: overlapping a and b ranges");
     }
 #endif
+
     acc += PARAM_acc_start;
-    a += PARAM_a_start;
-    b += PARAM_b_start;
+    a   += PARAM_a_start;
+    b   += PARAM_b_start;
     uint32_t i = 0;
+
+    // =========================================================================
+    // 256-BIT LOOP (8 lanes at a time)
+    // =========================================================================
+
 #if defined(__AVX2__) && defined(__AVXVNNI__)
+    // Tier 1: AVX2 + VNNI
     for (; i + 8 <= PARAM_count; i += 8) {
         const __m256i sum = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(acc + i));
-        const __m256i x = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a + 4 * i));
-        const __m256i y = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b + 4 * i));
+        const __m256i x   = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a + 4 * i));
+        const __m256i y   = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b + 4 * i));
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(acc + i), _mm256_dpbusd_epi32(sum, x, y));
     }
-#endif
-#if defined(__AVXVNNI__)
-    for (; i + 4 <= PARAM_count; i += 4) {
-        const __m128i sum = _mm_loadu_si128(reinterpret_cast<const __m128i*>(acc + i));
-        const __m128i x = _mm_loadu_si128(reinterpret_cast<const __m128i*>(a + 4 * i));
-        const __m128i y = _mm_loadu_si128(reinterpret_cast<const __m128i*>(b + 4 * i));
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(acc + i), _mm_dpbusd_epi32(sum, x, y));
+
+#elif defined(__AVX2__)
+    // Tier 2: AVX2 Only
+    const __m256i ones256 = _mm256_set1_epi16(1);
+    for (; i + 8 <= PARAM_count; i += 8) {
+        const __m256i sum = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(acc + i));
+        const __m256i x   = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a + 4 * i));
+        const __m256i y   = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b + 4 * i));
+
+        const __m256i dot16 = _mm256_maddubs_epi16(x, y);
+        const __m256i dot32 = _mm256_madd_epi16(dot16, ones256);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(acc + i), _mm256_add_epi32(sum, dot32));
     }
 #endif
+
+    // =========================================================================
+    // 128-BIT LOOP (4 lanes at a time)
+    // Tier 3: AVX Only (Sandy/Ivy Bridge) & 4-lane cleanup for Tiers 1 and 2
+    // =========================================================================
+
+#if defined(__AVX__)
+    const __m128i ones128 = _mm_set1_epi16(1);
+    for (; i + 4 <= PARAM_count; i += 4) {
+        const __m128i sum = _mm_loadu_si128(reinterpret_cast<const __m128i*>(acc + i));
+        const __m128i x   = _mm_loadu_si128(reinterpret_cast<const __m128i*>(a + 4 * i));
+        const __m128i y   = _mm_loadu_si128(reinterpret_cast<const __m128i*>(b + 4 * i));
+
+        const __m128i dot16 = _mm_maddubs_epi16(x, y);
+        const __m128i dot32 = _mm_madd_epi16(dot16, ones128);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(acc + i), _mm_add_epi32(sum, dot32));
+    }
+#endif
+
+    // =========================================================================
+    // SCALAR LOOP
+    // Tier 4: Remaining 0..3 lanes, or pre-AVX fallback
+    // =========================================================================
+
     for (; i < PARAM_count; ++i) {
-        uint32_t sum = acc[i];
+        int32_t sum = static_cast<int32_t>(acc[i]);
         for (uint32_t k = 0; k < 4; ++k) {
-            const uint32_t x = a[4 * i + k];
-            const int32_t y = b[4 * i + k];
-            sum = sum + static_cast<uint32_t>(x * static_cast<uint32_t>(y));
+            const int32_t x = static_cast<int32_t>(a[4 * i + k]);
+            const int32_t y = static_cast<int32_t>(b[4 * i + k]);
+            sum += x * y;
         }
-        acc[i] = sum;
+        acc[i] = static_cast<uint32_t>(sum);
     }
 }
 }
